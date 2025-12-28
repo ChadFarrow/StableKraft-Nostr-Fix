@@ -1,0 +1,2232 @@
+{
+  "generatedAt": "2025-12-20T21:56:50.763Z",
+  "summary": {
+    "duplicateSets": 316,
+    "tracksToRemove": 326,
+    "referencesToUpdate": 29
+  },
+  "recommendations": [
+    {
+      "keep": "ollie-d0bebcfa-e20b-4b1b-b797-bd7ac95e646f-track-0-1760491138725",
+      "remove": [
+        "a96e7155-dd37-428b-a772-2c2e269228fd",
+        "ollie-d0bebcfa-e20b-4b1b-b797-bd7ac95e646f-a96e7155-dd37-428b-a772-2c2e269228fd"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "longy-katherines-wheel-track-2",
+      "remove": [
+        "10b82d0f-f893-49c1-b1e2-55e97fe32465-dac3e9e8-953a-41ff-a764-79522629a715",
+        "dac3e9e8-953a-41ff-a764-79522629a715"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "underwater-single-1758315935992-y2ghmucnd",
+      "remove": [
+        "cmg3yic7m0002uvu67rto4osr",
+        "b2a87a4c-86f0-5194-9eb3-dcba42ce0695-fdf2f3ef-891e-4685-a6ab-7e6d7217a8cc"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg3yic7n0008uvu6ool7g8ak",
+      "remove": [
+        "b2a87a4c-86f0-5194-9eb3-dcba42ce0695-1d09435b-96bf-4348-aff1-514d600eccfe",
+        "514d7a21-041e-5e5f-b7d6-71aa7c7584db-fcd4be7d-4cff-471c-945f-ee07d7fbcd59"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "wavlake-album-2-track-1-1760491142702",
+      "remove": [
+        "80dd2ea5-7c7b-4a5a-a7ef-9d325e4d9589",
+        "wavlake-album-2-80dd2ea5-7c7b-4a5a-a7ef-9d325e4d9589"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "come-back-to-me-1758314716401-p9mwbawd2",
+      "remove": [
+        "cmg3yic7n0006uvu6iarbmza1",
+        "92c011a6-f616-4ab7-b320-87c7d4b5fa1a"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "longy-katherines-wheel-track-1",
+      "remove": [
+        "10b82d0f-f893-49c1-b1e2-55e97fe32465-42bdf099-9dfb-4400-871f-f6a10fd298e7",
+        "42bdf099-9dfb-4400-871f-f6a10fd298e7"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "possible-1758315935563-6oqge9jza",
+      "remove": [
+        "cmg3yic7m0003uvu6dagohfy5",
+        "b2a87a4c-86f0-5194-9eb3-dcba42ce0695-6e6f52bb-7ead-4749-953f-188dea2ee015"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "ben-doerfel-1758314709976-kqv8drgy1",
+      "remove": [
+        "cmg3yic7m0005uvu6btiekujq",
+        "b2a87a4c-86f0-5194-9eb3-dcba42ce0695-12711f57-2d41-4794-8cb9-154ecebb7cf7"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "wavlake-album-2-track-0-1760491142702",
+      "remove": [
+        "d029b907-2704-40c5-aae5-9a26bb8447cd",
+        "wavlake-album-2-d029b907-2704-40c5-aae5-9a26bb8447cd"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-5-track-18-1760491135189",
+      "remove": [
+        "b237002b-e957-570f-80ad-4e3c3c2ec186-04196f5e-8fdf-4fa6-9fc3-c3e1df8223de"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "508bfb27-3623-513c-9eda-0b512a2abc82-046355ab-c72b-467a-91ee-ab4249a41011",
+      "remove": [
+        "0a5232a4-5ee4-40cf-a901-48a558609212-046355ab-c72b-467a-91ee-ab4249a41011"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg421umr008oql0foehpa9l5",
+      "remove": [
+        "6de6858c-1f3a-4110-902b-6b34c24d3fc7-bf5dcf03-bde1-4da8-a84b-5f3076e7dd85"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "take-the-lead-1758469470001-fcf02550-a439-4c52-9d54-fd7ca91271b2",
+      "remove": [
+        "b337bd2b-46c5-4bd0-a57f-f93bca81ebea-fcf02550-a439-4c52-9d54-fd7ca91271b2"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "72968aa3-ccee-50c9-b41a-805a9044ecc0-ca5b8d1d-e9cd-42fc-a52e-bf9e222f7a2d",
+      "remove": [
+        "f9b51157-4174-4e98-a568-e9ea49a79877-ca5b8d1d-e9cd-42fc-a52e-bf9e222f7a2d"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-dba9fea5-3fe6-4c22-8bc0-2200b01806e8",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-dba9fea5-3fe6-4c22-8bc0-2200b01806e8"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40gp3200qluvu6lpofmdvy",
+      "remove": [
+        "6af55f8b-6bc3-496e-88ac-2ad29df88f8b-e598c437-cd29-48f9-94af-9ea1cf115580"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "508bfb27-3623-513c-9eda-0b512a2abc82-b2ca5af8-d12a-4bb7-9245-98192e2aae7f",
+      "remove": [
+        "0a5232a4-5ee4-40cf-a901-48a558609212-b2ca5af8-d12a-4bb7-9245-98192e2aae7f"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg3z0hzf00bmuvu6h4qtk47i",
+      "remove": [
+        "f111327c-4c10-470a-99eb-2ae66c2c7637-82f09b52-8b85-4e85-bb74-5b78766559b7"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "0ee7cd8e-277e-532e-a772-7e70e15e1eaf-b75345b2-f2ca-49d8-b5b4-1db22df39aff",
+      "remove": [
+        "1911b2f3-5bfc-4857-b8f7-6bd20e57ac6a-b75345b2-f2ca-49d8-b5b4-1db22df39aff"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "befcdf32-8d45-5c35-a895-b28ddd475296-ca29855d-7c04-424a-958e-7af040ae676c",
+      "remove": [
+        "209339e5-4dc0-4715-8d3d-2b9bcdd74547-ca29855d-7c04-424a-958e-7af040ae676c"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "72924f59-8f37-5e20-aa4e-640f18881ff9-25022951-243e-4505-ad61-961c01ad0073",
+      "remove": [
+        "0cd5ca38-068b-4925-860b-eb926295c22d-25022951-243e-4505-ad61-961c01ad0073"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "508bfb27-3623-513c-9eda-0b512a2abc82-e91fd03c-1dd4-48ad-b04d-4a6247a3d6e1",
+      "remove": [
+        "0a5232a4-5ee4-40cf-a901-48a558609212-e91fd03c-1dd4-48ad-b04d-4a6247a3d6e1"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-5-track-11-1760491135189",
+      "remove": [
+        "b237002b-e957-570f-80ad-4e3c3c2ec186-b6264837-e31a-4b16-955b-1fba077abc9f"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-7-1758315971907-xrqa3p76e",
+      "remove": [
+        "4c5616d9-5eb1-40ec-89d8-29865735c4ff"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "0ee7cd8e-277e-532e-a772-7e70e15e1eaf-97a43261-0126-40de-ad9c-b0c4d0c399a3",
+      "remove": [
+        "1911b2f3-5bfc-4857-b8f7-6bd20e57ac6a-97a43261-0126-40de-ad9c-b0c4d0c399a3"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "the-cooper-friendly-feel-good-group-on-my-way-track-7",
+      "remove": [
+        "c7428a4e-3999-4eb7-a026-9b4d76db8179"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "52ac9f14-a8bc-59b4-92b1-986671ac535a-d702385f-8b5d-4bc0-8129-cd118887807e",
+      "remove": [
+        "3eefed0a-9183-4267-820b-4b6f53bcd1ec-d702385f-8b5d-4bc0-8129-cd118887807e"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmftv3r0x007zgsm77cfbsqmh",
+      "remove": [
+        "0934bb2d-210c-4988-8055-9cd54c9817f7-fe393a12-8545-440d-b88b-64e6568936fc"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "370c2f8f-3c5a-5cf5-a589-a2bf00bc74e2-8b648490-d11f-4b7f-ae79-279a810a7515",
+      "remove": [
+        "80cff0e9-a6f0-4be5-8f6a-8b6e3d19f3af-8b648490-d11f-4b7f-ae79-279a810a7515"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg42054i005mql0fd1xsl66d",
+      "remove": [
+        "dc045360-1282-4628-8cc7-367cec5758d7-b9aec543-a316-4117-89a6-d61cae1c7448"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "508bfb27-3623-513c-9eda-0b512a2abc82-34c2bd1e-f4eb-4ba1-a94e-f3fd8f851503",
+      "remove": [
+        "0a5232a4-5ee4-40cf-a901-48a558609212-34c2bd1e-f4eb-4ba1-a94e-f3fd8f851503"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "empty-passenger-seat-track-4-1760491136967",
+      "remove": [
+        "910fabab-aa66-5659-88ec-1dcc6eb52d6b-7e7b0937-e472-4c46-b532-15cb5bb0b579"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "befcdf32-8d45-5c35-a895-b28ddd475296-a1abfa7e-7f1c-4465-91f6-01fddc431879",
+      "remove": [
+        "209339e5-4dc0-4715-8d3d-2b9bcdd74547-a1abfa7e-7f1c-4465-91f6-01fddc431879"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-5be3bf3d-4921-417b-a7df-2b0c5514a5d8",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-5be3bf3d-4921-417b-a7df-2b0c5514a5d8"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "0ee7cd8e-277e-532e-a772-7e70e15e1eaf-cf2bf7a6-e6c5-4128-b95a-c6ed0e68de9f",
+      "remove": [
+        "1911b2f3-5bfc-4857-b8f7-6bd20e57ac6a-cf2bf7a6-e6c5-4128-b95a-c6ed0e68de9f"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "c89d5c31-0766-573e-a29d-97dd226f43e7-fe9e7645-1718-41c4-b999-267690987165",
+      "remove": [
+        "1388c772-210c-48d6-91de-33b16c5163c5-fe9e7645-1718-41c4-b999-267690987165"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40g9hn00p4uvu62aqrm254",
+      "remove": [
+        "c46ccc66-8e60-4457-80df-bb0f0ee377ec-c8260efe-baad-4270-b88c-892b74c52318"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "22452875-fc1f-5125-947e-2a149553afed-4ddfc1d1-8bb8-4b7b-b3a9-991b897e7018",
+      "remove": [
+        "a91a6799-0049-41e8-ae48-2c8f8776993a-4ddfc1d1-8bb8-4b7b-b3a9-991b897e7018"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "fc157bb7-6fbd-5ab1-8de2-7c5e7b6ab16e-de4d157c-3c56-484a-887a-6e30e96185c5",
+      "remove": [
+        "c37c6109-4ccb-46c2-9be2-07c35f49fc81-de4d157c-3c56-484a-887a-6e30e96185c5"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-4-track-0-1760491134281",
+      "remove": [
+        "debdbfef-516e-5ba8-9210-c0cc6fdb3aac-a438595c-db68-4e6b-925f-c524b759b2f1"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "music-from-the-doerfelverse-1758314705233-1b88aredc",
+      "remove": [
+        "b2a87a4c-86f0-5194-9eb3-dcba42ce0695-f3339e9b-f258-4378-a708-cc030d90b21d"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg42186q006wql0fkrupqgkt",
+      "remove": [
+        "9aec3cfc-1ebd-4bc4-b401-0d8399808b46-ad29075e-6cba-4244-b8fd-5b9aac2e0907"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg421q280081ql0f4ikx45q5",
+      "remove": [
+        "75fe0580-e725-4581-8e59-c09052ca39c3-66e930d6-ddf2-4577-8d56-4b08b07bad64"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg421q28007yql0f85ay3ncw",
+      "remove": [
+        "75fe0580-e725-4581-8e59-c09052ca39c3-e39fcaff-3cce-4a32-a359-b1d047fd1084"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-a5efece6-6dd8-4696-a3c3-ccd66ee14da4",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-a5efece6-6dd8-4696-a3c3-ccd66ee14da4"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "mellow-cassette-radio-brigade-1758315942031-ol5pgl8hf",
+      "remove": [
+        "736a4805-f77a-47d2-8007-186c578ed29a"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-5-track-14-1760491135189",
+      "remove": [
+        "b237002b-e957-570f-80ad-4e3c3c2ec186-42272a51-f199-44f2-938f-a92e3e940062"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cb7e7b12-7267-560f-88ae-9f467b44125d-3281988d-df55-4bd3-95f9-dfcea4456f42",
+      "remove": [
+        "c5abe52b-bdab-4b65-9021-11664a8ae652-3281988d-df55-4bd3-95f9-dfcea4456f42"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "53bf88e3-486c-537f-b531-c03e28e8bd71-08d00452-3c16-44e9-9c8d-fc5464cd6e1f",
+      "remove": [
+        "2cf957e6-38d4-495e-aa32-12fbc19a6f2f-08d00452-3c16-44e9-9c8d-fc5464cd6e1f"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-5-track-3-1760491135189",
+      "remove": [
+        "b237002b-e957-570f-80ad-4e3c3c2ec186-12d9b131-1c20-4314-bdde-a1c17b09cbd6"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "1d35cd0f-61bc-5f92-a106-80e2db1ca280-f28b2c1d-66a6-4f9e-a5ee-ddcc1ac35a4d",
+      "remove": [
+        "aa979224-3bb8-4475-9112-0e8d61e09624-f28b2c1d-66a6-4f9e-a5ee-ddcc1ac35a4d"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-e1a60677-ca6d-48be-8883-a64341e94333",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-e1a60677-ca6d-48be-8883-a64341e94333"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40fox400oquvu6x29mi6jy",
+      "remove": [
+        "bbe8674f-c398-4d47-b413-cddd64ba86b1-faa80ea9-8c6b-4085-8941-766673fca476"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "53bf88e3-486c-537f-b531-c03e28e8bd71-9eaa10fe-32a8-46de-bc06-ff36c0f82a28",
+      "remove": [
+        "2cf957e6-38d4-495e-aa32-12fbc19a6f2f-9eaa10fe-32a8-46de-bc06-ff36c0f82a28"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg421q280084ql0f8b036jik",
+      "remove": [
+        "75fe0580-e725-4581-8e59-c09052ca39c3-860dad27-1490-48e2-9a50-a930ff0e5119"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg41zuzj005jql0fubiikjat",
+      "remove": [
+        "4ee0a85c-41d5-4baa-b648-6d67579beeab-61c68508-1ee1-439d-8f13-8b3d6fad3914"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40gg6m00qauvu689cq6cyn",
+      "remove": [
+        "7bacc6cf-472d-46a9-a322-902debc7228f-df2011ad-6bfb-4997-8a14-a4239d064940"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40fh0k00o6uvu6yvx1wvd9",
+      "remove": [
+        "17e847cb-1f80-4a27-a1e0-ef3bab783dce-50d35948-2b9e-468b-86da-991fe23b18d7"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "mellow-cassette-radio-brigade-1758315942023-a36aq6bug",
+      "remove": [
+        "18ef7a70-2e39-4c64-ba78-26e6383e1816"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "98a9a32b-7f81-4748-b26b-dfd4fad8aaac",
+      "remove": [
+        "cc058294-98af-5bf8-8512-9cc8e584f26a-98a9a32b-7f81-4748-b26b-dfd4fad8aaac"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "ollie-3cc3847a-8d5f-4086-9501-c1500165da07-8f0a54e4-9835-4ec1-a9ef-fe65a8c11db9",
+      "remove": [
+        "8f0a54e4-9835-4ec1-a9ef-fe65a8c11db9"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "45874e17-fdfb-5693-a817-5e584da20e5b-e646b30a-2007-4086-b35b-58570c33c159",
+      "remove": [
+        "699644a5-a5b4-4c2d-ad70-e90977e60c34-e646b30a-2007-4086-b35b-58570c33c159"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-52d3c4ac-8654-4555-888a-5299125fd951",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-52d3c4ac-8654-4555-888a-5299125fd951"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmgocy8ly0026uvw3s3gvju88",
+      "remove": [
+        "096d7ff4-f140-459b-8f9d-f79ae28b4409"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "the-cooper-friendly-feel-good-group-on-my-way-track-1",
+      "remove": [
+        "efd3574b-e36e-4610-84f1-389c56e81d10"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg420dwn005wql0ff1wks4jo",
+      "remove": [
+        "e954a4c4-69d2-4ac3-8b86-fe5469f6c9df-177cd7a5-b07c-4dee-a19d-a2ca25b72005"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "e2c041df-4a80-54b5-883b-c2bebe22517f-b54a4bc8-fe4d-4d0f-bf65-ddae29b501cf",
+      "remove": [
+        "574cf81e-98f1-4499-9d1b-65d82085b824-b54a4bc8-fe4d-4d0f-bf65-ddae29b501cf"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-3d780a48-4c0a-4544-b90d-025ac0bc5244",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-3d780a48-4c0a-4544-b90d-025ac0bc5244"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "428bb912-0f0d-5a2e-b3bb-b01afc3773f8-86422995-6d94-4f4f-a9a3-bd0ad3ea4feb",
+      "remove": [
+        "2c031ef7-5017-42f6-8326-6db81f321a5b-86422995-6d94-4f4f-a9a3-bd0ad3ea4feb"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "take-the-lead-1758469470001-123305e4-5101-423c-b240-14bd609238c4",
+      "remove": [
+        "b337bd2b-46c5-4bd0-a57f-f93bca81ebea-123305e4-5101-423c-b240-14bd609238c4"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-4-track-2-1760491134281",
+      "remove": [
+        "debdbfef-516e-5ba8-9210-c0cc6fdb3aac-f6b10ca6-8119-4b55-82f2-ec2b60e63fce"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "music-from-the-doerfelverse-1758314705236-3auvha23n",
+      "remove": [
+        "b2a87a4c-86f0-5194-9eb3-dcba42ce0695-071ca667-2c6d-4681-a26c-c465cc4c797a"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "27bc3c57-6b47-5029-873d-9876c7ba2f1e-ad6c83a9-34d1-5f27-ab2b-eb615f936561",
+      "remove": [
+        "LwiwH7S08gTYTtdvxhYY-ad6c83a9-34d1-5f27-ab2b-eb615f936561"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg420dwn005tql0fj511y1v7",
+      "remove": [
+        "e954a4c4-69d2-4ac3-8b86-fe5469f6c9df-5d865b45-e091-458e-ac82-a443ed274a40"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "fc157bb7-6fbd-5ab1-8de2-7c5e7b6ab16e-cc46cfc9-ff98-4aa9-96cc-baf5f657fce6",
+      "remove": [
+        "c37c6109-4ccb-46c2-9be2-07c35f49fc81-cc46cfc9-ff98-4aa9-96cc-baf5f657fce6"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "e5d108c9-2871-51b8-b181-aefb0766378d-6c180b5c-9290-4f4d-9292-30f51ef7dcbd",
+      "remove": [
+        "e0751779-ac38-4731-9c3d-7243cfa882c0-6c180b5c-9290-4f4d-9292-30f51ef7dcbd"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40g9hn00p0uvu62ubvfooi",
+      "remove": [
+        "c46ccc66-8e60-4457-80df-bb0f0ee377ec-ec175a18-e325-4a40-b34f-64e24802feb4"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "0ee7cd8e-277e-532e-a772-7e70e15e1eaf-d4071337-65e6-4c09-af11-be9b98ed6c46",
+      "remove": [
+        "1911b2f3-5bfc-4857-b8f7-6bd20e57ac6a-d4071337-65e6-4c09-af11-be9b98ed6c46"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmfug7ptb0159uvaefedyb4ct",
+      "remove": [
+        "e6f99a2b-ebb6-59b2-ac7a-48dd54b107f6-bd0ee122-2854-4281-87b8-91323a31075c"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg422103008qql0fy4eehau6",
+      "remove": [
+        "ac6af3f6-b9d8-4489-a066-720cda201cf1-1a7797b8-1ff5-46c8-aea0-f4bb9dde1d6a"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "7f762d4c-d702-5e9f-b0fa-2fdfeffa976d-cbcec354-5efa-44ac-824a-2087ed0ae50c",
+      "remove": [
+        "e43280cd-3b26-4f07-9b09-f84390b3b4ae-cbcec354-5efa-44ac-824a-2087ed0ae50c"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "music-from-the-doerfelverse-1758314705291-z6o6bbpof",
+      "remove": [
+        "b2a87a4c-86f0-5194-9eb3-dcba42ce0695-d1eee9eb-6ee6-4f6e-9a6c-089d486248e0"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-5-track-19-1760491135189",
+      "remove": [
+        "b237002b-e957-570f-80ad-4e3c3c2ec186-051e2725-daf3-407a-9875-e0698416def6"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "6913130-7f302f03-52e1-410b-9648-fd7003cc70a5",
+      "remove": [
+        "8443dc27-4cec-495d-89aa-1a1ba1b52177-7f302f03-52e1-410b-9648-fd7003cc70a5"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg41zuy3005iql0fwpg4hohg",
+      "remove": [
+        "ad40401b-def9-4c89-b2e5-f47b67254d65-08352fbb-a781-4dfb-910c-47753ec1c324"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "1d35cd0f-61bc-5f92-a106-80e2db1ca280-45a20e03-3d94-49e6-b76c-6ba35a13db4d",
+      "remove": [
+        "aa979224-3bb8-4475-9112-0e8d61e09624-45a20e03-3d94-49e6-b76c-6ba35a13db4d"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40groe00rsuvu6s1fevahc",
+      "remove": [
+        "eadf495a-dae1-40fc-9f19-92ede085fb2b-687a6345-e57e-40f4-8d9c-fe8531d1e02d"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "1d35cd0f-61bc-5f92-a106-80e2db1ca280-66c445f7-0c50-48d2-8f55-0734de9e0239",
+      "remove": [
+        "aa979224-3bb8-4475-9112-0e8d61e09624-66c445f7-0c50-48d2-8f55-0734de9e0239"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "the-cooper-friendly-feel-good-group-on-my-way-track-2",
+      "remove": [
+        "8185f476-7bd9-4f74-a76b-7e79366e5945"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "the-cooper-friendly-feel-good-group-on-my-way-track-6",
+      "remove": [
+        "4eec9e5d-181b-48ce-8eed-e17df00d2ae5"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40groe00rouvu6f3zyc6jm",
+      "remove": [
+        "eadf495a-dae1-40fc-9f19-92ede085fb2b-295899c9-579e-44a3-b08a-c4a4e7807d51"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "empty-passenger-seat-track-5-1760491136967",
+      "remove": [
+        "910fabab-aa66-5659-88ec-1dcc6eb52d6b-c8ec175f-dd5d-4a01-8e3a-e85c1591698f"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmfug7zdd015ruvaey7lbd18j",
+      "remove": [
+        "cmg3yic7n0009uvu62x585dzj"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-d61b5f09-cdaa-42d1-aba5-65a9aabc41a1",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-d61b5f09-cdaa-42d1-aba5-65a9aabc41a1"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "take-the-lead-1758469470001-0399be2f-232d-4f7c-b0a8-a359468bad26",
+      "remove": [
+        "b337bd2b-46c5-4bd0-a57f-f93bca81ebea-0399be2f-232d-4f7c-b0a8-a359468bad26"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-a9c0bd41-424b-4f61-8cbf-efa8000c1df6",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-a9c0bd41-424b-4f61-8cbf-efa8000c1df6"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-5-track-8-1760491135189",
+      "remove": [
+        "b237002b-e957-570f-80ad-4e3c3c2ec186-ac54fc6e-6eea-426e-bbca-fa08ecf37251"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "befcdf32-8d45-5c35-a895-b28ddd475296-81c6ddd2-8846-4bb3-aaff-565acc4977dc",
+      "remove": [
+        "209339e5-4dc0-4715-8d3d-2b9bcdd74547-81c6ddd2-8846-4bb3-aaff-565acc4977dc"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "take-the-lead-1758469470001-f6057edc-cb16-462c-af78-0852e62a3c7f",
+      "remove": [
+        "b337bd2b-46c5-4bd0-a57f-f93bca81ebea-f6057edc-cb16-462c-af78-0852e62a3c7f"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg421q28007tql0fzh6lftis",
+      "remove": [
+        "75fe0580-e725-4581-8e59-c09052ca39c3-4634db0d-b996-4752-b23c-4e4829b81ea4"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "508bfb27-3623-513c-9eda-0b512a2abc82-6f13ac37-5a69-42ce-a247-23d927241d6f",
+      "remove": [
+        "0a5232a4-5ee4-40cf-a901-48a558609212-6f13ac37-5a69-42ce-a247-23d927241d6f"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-5c585935-143e-4f70-b24b-95d1ff0f6268",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-5c585935-143e-4f70-b24b-95d1ff0f6268"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "music-from-the-doerfelverse-1758314705240-1t5114lvz",
+      "remove": [
+        "b2a87a4c-86f0-5194-9eb3-dcba42ce0695-3298db5c-2753-4d45-8d8f-e4dc3878d748"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-e30059b0-55bc-4786-b22c-66df6909cf24",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-e30059b0-55bc-4786-b22c-66df6909cf24"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "0ee7cd8e-277e-532e-a772-7e70e15e1eaf-581fee3a-3d00-486a-b0a1-a0ce32ac1820",
+      "remove": [
+        "1911b2f3-5bfc-4857-b8f7-6bd20e57ac6a-581fee3a-3d00-486a-b0a1-a0ce32ac1820"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-4b3383ad-b8a0-43be-ac0f-c584d7c75dc4",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-4b3383ad-b8a0-43be-ac0f-c584d7c75dc4"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "e0ccbc88-c677-5989-a40f-2712039f2e3f-c505d6b8-73b5-4b52-9b27-94dd3411832c",
+      "remove": [
+        "02d08198-29b2-4ca9-ad61-149ff25a4875-c505d6b8-73b5-4b52-9b27-94dd3411832c"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "dbec0da2-f2a0-43e1-b76c-8779ebf595a8-e604da49-e46f-4850-8e0a-7b9c62e1312b",
+      "remove": [
+        "e604da49-e46f-4850-8e0a-7b9c62e1312b"
+      ],
+      "reason": "is active"
+    },
+    {
+      "keep": "cmg40gp3200qouvu6pxmzb3lo",
+      "remove": [
+        "6af55f8b-6bc3-496e-88ac-2ad29df88f8b-84047a69-b038-4505-b55a-75412ae46043"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40groe00rnuvu6sfld4lm8",
+      "remove": [
+        "eadf495a-dae1-40fc-9f19-92ede085fb2b-39c39575-a4ec-4132-a0e5-e546214e6987"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-1e2332a4-1836-48fa-88a3-6db16d4beb4f",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-1e2332a4-1836-48fa-88a3-6db16d4beb4f"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "befcdf32-8d45-5c35-a895-b28ddd475296-eb456a06-5400-47d2-b892-99501c3f8abb",
+      "remove": [
+        "209339e5-4dc0-4715-8d3d-2b9bcdd74547-eb456a06-5400-47d2-b892-99501c3f8abb"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-3f45bb38-a7af-42d3-a025-fb289dce3508",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-3f45bb38-a7af-42d3-a025-fb289dce3508"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "25f1fcbf-d7d6-57c9-9e0d-f33bca68ea2a-553ce45c-b550-4c10-89a1-e03ca2a4d057",
+      "remove": [
+        "4a17fcb3-e376-4db4-8eda-390f98921ebe-553ce45c-b550-4c10-89a1-e03ca2a4d057"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40g9hn00p1uvu6rd7q33q0",
+      "remove": [
+        "c46ccc66-8e60-4457-80df-bb0f0ee377ec-049404e0-b001-42df-953d-e109672dcb56"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "suzanne-santo-worried-track-1",
+      "remove": [
+        "aCFEYwJijoBbZSUP32JA-405be9f7-684f-54b8-9035-009111f1933f"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg421q28007vql0ff5cgy9av",
+      "remove": [
+        "75fe0580-e725-4581-8e59-c09052ca39c3-33228745-c984-4f06-8f1c-412aafeaaab9"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg42186l006uql0fml89uhlc",
+      "remove": [
+        "35347192-76d2-4144-a2b9-ea845f790c3d-4624ad07-b85e-49b9-a8c6-261132b3be8b"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "mellow-cassette-radio-brigade-1758315942004-34f0vmytx",
+      "remove": [
+        "4432ce16-974e-4e2a-b758-83ad9fc7acd9"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-8-1758315973129-b20qc605w",
+      "remove": [
+        "e1c2e15d-656c-41de-a52c-6771292a7312"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-5-track-17-1760491135189",
+      "remove": [
+        "b237002b-e957-570f-80ad-4e3c3c2ec186-11627fe3-6af0-4d76-b607-b68be05bd4eb"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "take-the-lead-1758469470001-16576253-2911-4d68-8b26-4954425017e8",
+      "remove": [
+        "b337bd2b-46c5-4bd0-a57f-f93bca81ebea-16576253-2911-4d68-8b26-4954425017e8"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "empty-passenger-seat-track-8-1760491136967",
+      "remove": [
+        "910fabab-aa66-5659-88ec-1dcc6eb52d6b-b07bb6c2-00be-4a4d-96d5-79477d754d21"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "take-the-lead-1758469470001-833fe4d4-598b-456a-9029-833669203a33",
+      "remove": [
+        "b337bd2b-46c5-4bd0-a57f-f93bca81ebea-833fe4d4-598b-456a-9029-833669203a33"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "e2c041df-4a80-54b5-883b-c2bebe22517f-330a93ed-bef1-4a19-91e3-5e9725b6e2af",
+      "remove": [
+        "574cf81e-98f1-4499-9d1b-65d82085b824-330a93ed-bef1-4a19-91e3-5e9725b6e2af"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg42186m006vql0ftoszys0w",
+      "remove": [
+        "35347192-76d2-4144-a2b9-ea845f790c3d-0c85e7c7-cdd5-4a02-b847-be16bc3dc228"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmgod56jx002wuvw3x3f969ny",
+      "remove": [
+        "c80f69df-4517-4b65-b2b7-a5ecab5a67dd"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmgod4xyk002uuvw3jnm0uwih",
+      "remove": [
+        "40fb6d0b-2d3c-4436-bbcf-7ecef9ace5ca"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "take-the-lead-1758469470001-3a5a784f-642f-41ab-b552-8c710415b8c6",
+      "remove": [
+        "b337bd2b-46c5-4bd0-a57f-f93bca81ebea-3a5a784f-642f-41ab-b552-8c710415b8c6"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg3yzr7f0096uvu6w2y0gw7g",
+      "remove": [
+        "0d32102a-9975-4180-b63d-09fb8f676464-d8ea8ac9-46c9-4f40-9637-ed9a3bf59886"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-6293837e-ed6b-47ad-b7b8-95fa9b37e261",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-6293837e-ed6b-47ad-b7b8-95fa9b37e261"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-5-track-10-1760491135189",
+      "remove": [
+        "b237002b-e957-570f-80ad-4e3c3c2ec186-a7548aea-0363-44ba-9450-12c4534e491b"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "0ee7cd8e-277e-532e-a772-7e70e15e1eaf-d84f2658-a08c-43ff-8cd8-8c926d81c3a1",
+      "remove": [
+        "1911b2f3-5bfc-4857-b8f7-6bd20e57ac6a-d84f2658-a08c-43ff-8cd8-8c926d81c3a1"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "the-cooper-friendly-feel-good-group-on-my-way-track-8",
+      "remove": [
+        "d6b0e3e8-f43d-4f11-b20f-3abb86871005"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-80e205c4-eb74-4ffa-9ee1-d5f1cac36fe7",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-80e205c4-eb74-4ffa-9ee1-d5f1cac36fe7"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-b732f482-097c-48bf-866a-06f54cec8cf1",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-b732f482-097c-48bf-866a-06f54cec8cf1"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "7f762d4c-d702-5e9f-b0fa-2fdfeffa976d-d38e74f2-5df3-40e0-8c05-5f018ee5de6e",
+      "remove": [
+        "e43280cd-3b26-4f07-9b09-f84390b3b4ae-d38e74f2-5df3-40e0-8c05-5f018ee5de6e"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-8dd4e244-8661-4eb4-a09a-c6c9a189e220",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-8dd4e244-8661-4eb4-a09a-c6c9a189e220"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "take-the-lead-1758469470001-e0376678-59a3-4d07-a667-1b0228c58d99",
+      "remove": [
+        "b337bd2b-46c5-4bd0-a57f-f93bca81ebea-e0376678-59a3-4d07-a667-1b0228c58d99"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg42186l006tql0f4nmdf0hp",
+      "remove": [
+        "35347192-76d2-4144-a2b9-ea845f790c3d-578cb4b3-aefb-4c82-a6e1-9892dce77dde"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "0168c073-223a-5127-8ceb-2b43e06aa302-0742e911-2e2c-4391-b816-02c0faa21beb",
+      "remove": [
+        "06ee77a0-8723-4c13-aeda-1307c3feaef2-0742e911-2e2c-4391-b816-02c0faa21beb"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-ab8a221f-1c37-49fd-b8a6-3e632ce2daf5",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-ab8a221f-1c37-49fd-b8a6-3e632ce2daf5"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg421q28007zql0fwe5dd5wv",
+      "remove": [
+        "75fe0580-e725-4581-8e59-c09052ca39c3-51361294-99b4-4144-93a0-ec1cc01f0ddb"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg421lye0070ql0fgeuys81r",
+      "remove": [
+        "dd469809-dfa0-4462-8c40-00fe518131c0-d4cb70ac-e1ec-4e09-a79c-2deb02c59754"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-4-track-4-1760491134282",
+      "remove": [
+        "debdbfef-516e-5ba8-9210-c0cc6fdb3aac-ee291605-b4cb-41d3-a343-44c7f897c8f2"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg42109q0067ql0fxf4bpib0",
+      "remove": [
+        "87a7ebee-2bce-47f5-90eb-950702e3e7a3-7a955805-29d3-4765-94ec-6a84386d8c4f"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-fc75b534-3767-4dc9-86ae-34999ff3c5e8",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-fc75b534-3767-4dc9-86ae-34999ff3c5e8"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "105198e7-c419-4bf3-b099-c968a0821f6f-d772e395-4071-4676-8567-d81c1089b99b",
+      "remove": [
+        "d772e395-4071-4676-8567-d81c1089b99b"
+      ],
+      "reason": "is active"
+    },
+    {
+      "keep": "1d35cd0f-61bc-5f92-a106-80e2db1ca280-4ea8c9b8-a85c-45b2-abdb-3f4f008faa17",
+      "remove": [
+        "aa979224-3bb8-4475-9112-0e8d61e09624-4ea8c9b8-a85c-45b2-abdb-3f4f008faa17"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "9f3fa1c5-9cf4-54bb-bff5-113a23f7eee2-0a7c4518-642d-4a3f-86df-2da91e3af8fe",
+      "remove": [
+        "86934fbd-cef8-46fc-9e47-5b441bc65e01-0a7c4518-642d-4a3f-86df-2da91e3af8fe"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "6f9a16c9-24ac-5569-a713-ea5ef75ebfcf-e12a33e8-576a-47c2-aa06-a1c0b494185d",
+      "remove": [
+        "42e3308e-98d4-4525-8b03-9ac20c51813c-e12a33e8-576a-47c2-aa06-a1c0b494185d"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmfzu5l7s03degsidwdpmtuft",
+      "remove": [
+        "cmg3yhcay0000uvu6cmku6eoq"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "0ee7cd8e-277e-532e-a772-7e70e15e1eaf-2e118f82-baf0-4cee-8ca7-ad6daf210ad8",
+      "remove": [
+        "1911b2f3-5bfc-4857-b8f7-6bd20e57ac6a-2e118f82-baf0-4cee-8ca7-ad6daf210ad8"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "empty-passenger-seat-track-6-1760491136967",
+      "remove": [
+        "910fabab-aa66-5659-88ec-1dcc6eb52d6b-3fc1434a-5a6c-4ad5-a23a-abbb9a1ff2f5"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "1d35cd0f-61bc-5f92-a106-80e2db1ca280-a0dd6275-40b1-444c-9b42-e6348f26ff3c",
+      "remove": [
+        "aa979224-3bb8-4475-9112-0e8d61e09624-a0dd6275-40b1-444c-9b42-e6348f26ff3c"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-9-track-2-1760491133423",
+      "remove": [
+        "iroh-album-9-c438596a-ef5d-42f2-8d8a-baf308a6674d"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "hello-stranger-feat-helen-tess-1758469477982-e92721f0-4291-4b50-a621-f658d875e640",
+      "remove": [
+        "c5b7d7f5-bf48-41c7-b0cc-8139e300185e-e92721f0-4291-4b50-a621-f658d875e640"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "panzee-panzee-track-4",
+      "remove": [
+        "331e1f83-e194-4bdc-91bd-acfc6f543783"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg42111o0068ql0fk97kt82j",
+      "remove": [
+        "19803acd-4989-4482-86f7-030ad1533dd8-f0d2fb39-7cca-403c-97e8-bdfb288ac004"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "8e57173c-0dda-59d7-aeff-db1fb196ae77-8d9ee740-55d9-4eb8-a52d-b9c090e24c60",
+      "remove": [
+        "49fdff1d-7c8e-4908-9a75-2edc4ba60fef-8d9ee740-55d9-4eb8-a52d-b9c090e24c60"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmgocwjc30016uvw3m3o4tdbw",
+      "remove": [
+        "ec082902-dda6-4593-bb0f-5c300ba97044"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "0ee7cd8e-277e-532e-a772-7e70e15e1eaf-c56e4dd5-c572-4c33-bd53-f6c9bf9563a3",
+      "remove": [
+        "1911b2f3-5bfc-4857-b8f7-6bd20e57ac6a-c56e4dd5-c572-4c33-bd53-f6c9bf9563a3"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-4-track-3-1760491134282",
+      "remove": [
+        "debdbfef-516e-5ba8-9210-c0cc6fdb3aac-bc59cdf1-022d-4896-9add-94a1b84a79de"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "music-from-the-doerfelverse-1758314705335-1o1ful3lu",
+      "remove": [
+        "b2a87a4c-86f0-5194-9eb3-dcba42ce0695-8e89115c-f375-406b-82d7-f9d7a55e75fd"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40groe00rpuvu6lumbwesc",
+      "remove": [
+        "eadf495a-dae1-40fc-9f19-92ede085fb2b-aef31998-3de6-4bfb-86d8-9657117456c4"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-9-track-4-1760491133423",
+      "remove": [
+        "iroh-album-9-0d4b8a6a-2b11-40c1-ac18-a20e08f76a71"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-4d030999-67c7-42e1-9299-1c4638cdad3f",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-4d030999-67c7-42e1-9299-1c4638cdad3f"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40g9hn00p5uvu6cxnmf5u4",
+      "remove": [
+        "c46ccc66-8e60-4457-80df-bb0f0ee377ec-3cb788de-729e-434b-a8d5-953eddde7514"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "60815bd3-adbd-5800-a127-3512ccae14a7-9f1f5f6a-0a05-5564-9f75-494f59ad8e93",
+      "remove": [
+        "lAH6A6WHNE39mR4ffv4o-9f1f5f6a-0a05-5564-9f75-494f59ad8e93"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "75078ec0-e0ab-5873-ad66-3908a0eebf30-9b209440-401a-495f-bb4b-9561a4fb398b",
+      "remove": [
+        "071f543d-b247-4fc0-8f3a-7b97cab929ca-9b209440-401a-495f-bb4b-9561a4fb398b"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg42185z006qql0f2z83s3wc",
+      "remove": [
+        "24c81bb7-f768-47cb-af77-c0971ef2fa15-54122d3e-b197-4c54-8f0c-a108266464f9"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "508bfb27-3623-513c-9eda-0b512a2abc82-f75e5a26-c6f7-4d25-a9f1-eadc047576bb",
+      "remove": [
+        "0a5232a4-5ee4-40cf-a901-48a558609212-f75e5a26-c6f7-4d25-a9f1-eadc047576bb"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-03c14f15-f51a-490c-9521-dfa966d2dd69",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-03c14f15-f51a-490c-9521-dfa966d2dd69"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "think-ep-1758315935937-4uatakm30",
+      "remove": [
+        "cmg3yic7m0004uvu65szfn7sk"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "9073b2e4-a0df-5051-9046-ad11ea231557-02a59f72-0a14-4c3d-83a7-11a1d5a47b76",
+      "remove": [
+        "b30cc5bd-2ae1-4af1-b043-afe55fc95fca-02a59f72-0a14-4c3d-83a7-11a1d5a47b76"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg421q280082ql0frf0yq3e6",
+      "remove": [
+        "75fe0580-e725-4581-8e59-c09052ca39c3-21ebb060-bf05-4e65-a2ca-90a32677efc0"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40g9hn00p3uvu61dv2rimf",
+      "remove": [
+        "c46ccc66-8e60-4457-80df-bb0f0ee377ec-6a847901-55cc-4b75-920f-82bf9da29148"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "e59899e9-e87a-5d84-85b8-496d9f84925d-a5ad2bf0-7294-4963-b12f-3ebf54cd5448",
+      "remove": [
+        "f22e5427-5815-4540-b24d-09e97fb881b6-a5ad2bf0-7294-4963-b12f-3ebf54cd5448"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40gp3200qmuvu6c5lgzcnv",
+      "remove": [
+        "6af55f8b-6bc3-496e-88ac-2ad29df88f8b-75a011b7-0290-41b7-853b-30adadeaa39f"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "1d35cd0f-61bc-5f92-a106-80e2db1ca280-6b961bbe-c60d-4765-ae0a-69862ca95bb9",
+      "remove": [
+        "aa979224-3bb8-4475-9112-0e8d61e09624-6b961bbe-c60d-4765-ae0a-69862ca95bb9"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "the-cooper-friendly-feel-good-group-on-my-way-track-3",
+      "remove": [
+        "23bd73d8-e445-4d59-9244-66391fc5cb3f"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "64253f63-9ad6-570c-8f76-455fb7ac2a42-cd90267a-bbfd-4065-9f45-372b9ec6b170",
+      "remove": [
+        "5781d087-66d8-4c54-88de-0141405e3022-cd90267a-bbfd-4065-9f45-372b9ec6b170"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg421umr008pql0fibd6fx1x",
+      "remove": [
+        "6de6858c-1f3a-4110-902b-6b34c24d3fc7-fb1ba6a2-b02f-49c6-b482-d7b4d6ed3c2a"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40gp3200qnuvu6jep1s3zy",
+      "remove": [
+        "6af55f8b-6bc3-496e-88ac-2ad29df88f8b-5d2a2f95-48e8-41cc-a968-31b6ed78866c"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-2d53397a-4f59-4663-a87f-3bba81233744",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-2d53397a-4f59-4663-a87f-3bba81233744"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "ollie-3a925dda-cc31-4bb6-b285-3a09ed2e5307-3b5a6c99-e34d-4fae-8e82-59120f88ee1f",
+      "remove": [
+        "3b5a6c99-e34d-4fae-8e82-59120f88ee1f"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "empty-passenger-seat-track-2-1760491136967",
+      "remove": [
+        "910fabab-aa66-5659-88ec-1dcc6eb52d6b-57304017-2d67-483f-9df4-a87a225f3082"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "4ea5686d-199f-5076-892b-bf50c2f904ae-2e769548-9ffd-4ffd-92b6-4221d4913138",
+      "remove": [
+        "b06d6fd3-f867-4ad4-89d1-a47909eb5fef-2e769548-9ffd-4ffd-92b6-4221d4913138"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-5-track-0-1760491135189",
+      "remove": [
+        "b237002b-e957-570f-80ad-4e3c3c2ec186-a6976fc8-b181-4c6d-bbc5-f50f0e65542c"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40groe00rquvu6gm2ql0bb",
+      "remove": [
+        "eadf495a-dae1-40fc-9f19-92ede085fb2b-395325d0-04cd-49b6-b3a8-60ca03dd3c5d"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "e0ccbc88-c677-5989-a40f-2712039f2e3f-bf58a7f1-9860-4cee-8594-1e8f079c790f",
+      "remove": [
+        "02d08198-29b2-4ca9-ad61-149ff25a4875-bf58a7f1-9860-4cee-8594-1e8f079c790f"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-99d6f584-5030-45d1-8eb3-905b253394df",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-99d6f584-5030-45d1-8eb3-905b253394df"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "mellow-cassette-radio-brigade-1758315941996-024y7iclu",
+      "remove": [
+        "c5071214-ba27-4327-ae0b-4769fc9cac06"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "empty-passenger-seat-track-10-1760491136967",
+      "remove": [
+        "910fabab-aa66-5659-88ec-1dcc6eb52d6b-7e0c8084-f972-4d29-84b6-577bb5ed2bde"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg421umr008nql0fr5phgwyv",
+      "remove": [
+        "6de6858c-1f3a-4110-902b-6b34c24d3fc7-0b3d4372-2579-40b4-ad46-f021ec237721"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "ff26fd4d-612e-5a3e-803e-109a07487762-8b1b29e1-7cbe-44dc-9eb5-fff90f3dbc98",
+      "remove": [
+        "0f885996-444d-4f80-bf52-3749287e8162-8b1b29e1-7cbe-44dc-9eb5-fff90f3dbc98"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "panzee-panzee-track-2",
+      "remove": [
+        "eaaadd50-50e1-4f9c-9083-b0f228f52499"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-6494351a-a813-4845-9993-72a76f82e307",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-6494351a-a813-4845-9993-72a76f82e307"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-9-track-3-1760491133423",
+      "remove": [
+        "iroh-album-9-31dbe3e4-0376-4bb4-bde9-627ad71eaf06"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40g9hn00p2uvu6h3qgw31b",
+      "remove": [
+        "c46ccc66-8e60-4457-80df-bb0f0ee377ec-a36a45e9-0f2f-447c-8946-e14997c59d0f"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "1d35cd0f-61bc-5f92-a106-80e2db1ca280-62099e68-a5a5-45d5-ab88-b7974718e4f5",
+      "remove": [
+        "aa979224-3bb8-4475-9112-0e8d61e09624-62099e68-a5a5-45d5-ab88-b7974718e4f5"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "take-the-lead-1758469470001-27faa2ea-300b-48da-b722-1d5ef6aa132d",
+      "remove": [
+        "b337bd2b-46c5-4bd0-a57f-f93bca81ebea-27faa2ea-300b-48da-b722-1d5ef6aa132d"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-8aeee60e-fc51-4696-8200-285a641701fb",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-8aeee60e-fc51-4696-8200-285a641701fb"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-5e973da0-222e-4e40-bc75-fb1d1b076dd0",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-5e973da0-222e-4e40-bc75-fb1d1b076dd0"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "508bfb27-3623-513c-9eda-0b512a2abc82-a0c6eb98-2bee-4d6b-add4-10ebd3fcb778",
+      "remove": [
+        "0a5232a4-5ee4-40cf-a901-48a558609212-a0c6eb98-2bee-4d6b-add4-10ebd3fcb778"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "370c2f8f-3c5a-5cf5-a589-a2bf00bc74e2-0310ca50-707a-4ab0-9ad2-d8c25b244514",
+      "remove": [
+        "80cff0e9-a6f0-4be5-8f6a-8b6e3d19f3af-0310ca50-707a-4ab0-9ad2-d8c25b244514"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg421q28007xql0fcf9q3l94",
+      "remove": [
+        "75fe0580-e725-4581-8e59-c09052ca39c3-f9288f7a-67c7-4e72-b933-ec48df3dc10f"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "music-from-the-doerfelverse-1758314705253-gdjj99899",
+      "remove": [
+        "cmg3yifnh000auvu675cov2cg"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "ollie-c5cc9864-c687-4c6d-937d-0aa5f103a8d2-track-0-1760491137843",
+      "remove": [
+        "e15431dd-80e9-554f-a47b-a5377d7e9bb1-e1fb9fff-2669-4690-b935-fcd4f9190c75"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-bacd3c69-d2c8-44c8-a635-318d900d6043",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-bacd3c69-d2c8-44c8-a635-318d900d6043"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg41ys3w0036ql0fo0fuayzy",
+      "remove": [
+        "ed5ba51a-7b87-4a67-81a4-71f64b71c5f3-d2126f79-eb38-44da-8da0-6c69341f7bff"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-814882c3-c118-4718-983e-f8d31bbc934f",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-814882c3-c118-4718-983e-f8d31bbc934f"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "local-zero-catacomb-track-1",
+      "remove": [
+        "gwHF787p8qI7YJZ9i3zm-31cb107e-e699-4821-a1a0-91f8ecb9b413"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-5bcdaaef-8ede-458f-bbdc-d3383f62f1e4",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-5bcdaaef-8ede-458f-bbdc-d3383f62f1e4"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "370c2f8f-3c5a-5cf5-a589-a2bf00bc74e2-fd0ecc70-f7f1-49ee-a01f-4fb9e9de1ec1",
+      "remove": [
+        "80cff0e9-a6f0-4be5-8f6a-8b6e3d19f3af-fd0ecc70-f7f1-49ee-a01f-4fb9e9de1ec1"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "0ee7cd8e-277e-532e-a772-7e70e15e1eaf-fddcce2b-7224-43c1-9136-e97e17e6e379",
+      "remove": [
+        "1911b2f3-5bfc-4857-b8f7-6bd20e57ac6a-fddcce2b-7224-43c1-9136-e97e17e6e379"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "ollie-ed653567-a662-4ed9-bc0d-387f8e19b6f3-1758316005423-3wwg13cla",
+      "remove": [
+        "256a8681-d89d-4abe-a8f2-beb233e7c483"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "the-cooper-friendly-feel-good-group-on-my-way-track-4",
+      "remove": [
+        "147ecb98-c8e9-41f5-bdf3-89c6eb07be6c"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "e9a8cb88-42a0-4a02-93dc-02ddd51f1b73-6d36cdcf-872e-40fc-972c-67d9deff490b",
+      "remove": [
+        "6d36cdcf-872e-40fc-972c-67d9deff490b"
+      ],
+      "reason": "is active"
+    },
+    {
+      "keep": "iroh-album-3-track-0-1760491140038",
+      "remove": [
+        "iroh-album-3-2495d025-5f72-4819-a1b5-96d20de01097"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "mellow-cassette-radio-brigade-1758315941991-tdsh2vddi",
+      "remove": [
+        "469fb1ea-6b9e-4df4-96d3-0b61e9b1b5ca"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-91e2a371-fc45-4106-9217-e28473ac88cf",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-91e2a371-fc45-4106-9217-e28473ac88cf"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "508bfb27-3623-513c-9eda-0b512a2abc82-e5293ccd-6b4d-406e-8880-e0c07ad9cbb3",
+      "remove": [
+        "0a5232a4-5ee4-40cf-a901-48a558609212-e5293ccd-6b4d-406e-8880-e0c07ad9cbb3"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "0ee7cd8e-277e-532e-a772-7e70e15e1eaf-cec500e1-3cca-4153-bbe5-bf55aaf664a0",
+      "remove": [
+        "1911b2f3-5bfc-4857-b8f7-6bd20e57ac6a-cec500e1-3cca-4153-bbe5-bf55aaf664a0"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "114ede6e-9bbb-5e40-ad25-0cb714a48a4c-23627d05-7f8c-47c1-acd8-7a81cb7e3340",
+      "remove": [
+        "2379d06f-4430-4d9f-972a-2b98387ce472-23627d05-7f8c-47c1-acd8-7a81cb7e3340"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "empty-passenger-seat-track-9-1760491136967",
+      "remove": [
+        "910fabab-aa66-5659-88ec-1dcc6eb52d6b-cad1581a-98b2-4fcd-8824-83af14e8e6e9"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-5-track-7-1760491135189",
+      "remove": [
+        "b237002b-e957-570f-80ad-4e3c3c2ec186-74e60ca2-ca3e-4268-b433-86c963b8c2a1"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg421umr008mql0fdmih92xa",
+      "remove": [
+        "6de6858c-1f3a-4110-902b-6b34c24d3fc7-3d117954-0010-493a-af65-ac835f387f59"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "52ac9f14-a8bc-59b4-92b1-986671ac535a-76a0d219-a635-4e57-b4cd-9bc4058538b9",
+      "remove": [
+        "3eefed0a-9183-4267-820b-4b6f53bcd1ec-76a0d219-a635-4e57-b4cd-9bc4058538b9"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "aac951ff-5eff-51b0-acc2-8d0c04900bd3-ff66bca3-726c-4542-a058-736b53c3fa9f",
+      "remove": [
+        "2056e632-b7b0-48b2-852d-8ace59095be1-ff66bca3-726c-4542-a058-736b53c3fa9f"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "take-the-lead-1758469470001-b22d20d9-307a-44d3-b037-f40770b1b5a7",
+      "remove": [
+        "b337bd2b-46c5-4bd0-a57f-f93bca81ebea-b22d20d9-307a-44d3-b037-f40770b1b5a7"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg3z0hzf00bluvu69n018tj7",
+      "remove": [
+        "f111327c-4c10-470a-99eb-2ae66c2c7637-68e91f04-e17f-46f6-be2d-4d925bbfd513"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "105198e7-c419-4bf3-b099-c968a0821f6f-01188ca1-67bd-40b2-9c21-f15d52806a4a",
+      "remove": [
+        "01188ca1-67bd-40b2-9c21-f15d52806a4a"
+      ],
+      "reason": "is active"
+    },
+    {
+      "keep": "cmg42186l006sql0fc4usii50",
+      "remove": [
+        "35347192-76d2-4144-a2b9-ea845f790c3d-a4a299ba-0191-495b-960f-2fa44426a571"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-1a20c568-4e00-44cb-96cb-692048c88970",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-1a20c568-4e00-44cb-96cb-692048c88970"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "the-cooper-friendly-feel-good-group-on-my-way-track-5",
+      "remove": [
+        "4edd697e-e720-425f-a0f7-941a3813b200"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-b48ce29a-a947-49a0-8db8-d4e3b49a5300",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-b48ce29a-a947-49a0-8db8-d4e3b49a5300"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40groe00rtuvu6szv10wpv",
+      "remove": [
+        "eadf495a-dae1-40fc-9f19-92ede085fb2b-0756246a-15d3-4992-bb5f-6d21e5e0bcc7"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "empty-passenger-seat-track-3-1760491136967",
+      "remove": [
+        "910fabab-aa66-5659-88ec-1dcc6eb52d6b-5e866f89-f124-48c2-a985-b03107cd9ba9"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "6613019-255ec38c-6e8c-4d18-ad79-296519cf2a3c",
+      "remove": [
+        "e0e7c31e-0e19-4b89-8bca-141a61c24a5d-255ec38c-6e8c-4d18-ad79-296519cf2a3c"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-5-track-16-1760491135189",
+      "remove": [
+        "b237002b-e957-570f-80ad-4e3c3c2ec186-bd4f7999-9369-4338-a4f9-d43ec3e2a49a"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40groe00rruvu6xwakjwem",
+      "remove": [
+        "eadf495a-dae1-40fc-9f19-92ede085fb2b-5a0425a4-4089-48cf-99d9-93cc0f55a589"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-b7a910e8-4daa-45e1-86e6-15f94d51bdfb",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-b7a910e8-4daa-45e1-86e6-15f94d51bdfb"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-4-track-1-1760491134281",
+      "remove": [
+        "debdbfef-516e-5ba8-9210-c0cc6fdb3aac-24bc2346-0b40-4816-9434-400684844707"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "empty-passenger-seat-track-1-1760491136967",
+      "remove": [
+        "910fabab-aa66-5659-88ec-1dcc6eb52d6b-df118be8-e1f3-46cb-8cfb-362376577a6c"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "0ee7cd8e-277e-532e-a772-7e70e15e1eaf-eb58c266-139d-43bb-8219-ab4283b0977e",
+      "remove": [
+        "1911b2f3-5bfc-4857-b8f7-6bd20e57ac6a-eb58c266-139d-43bb-8219-ab4283b0977e"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "508bfb27-3623-513c-9eda-0b512a2abc82-7be6037a-1d3d-4d42-bb40-24e30576e29b",
+      "remove": [
+        "0a5232a4-5ee4-40cf-a901-48a558609212-7be6037a-1d3d-4d42-bb40-24e30576e29b"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "mellow-cassette-radio-brigade-1758315942038-9p2lzgccr",
+      "remove": [
+        "85d91ec7-8b8c-4e03-aeef-b03f30e2a4ed"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "empty-passenger-seat-track-7-1760491136967",
+      "remove": [
+        "910fabab-aa66-5659-88ec-1dcc6eb52d6b-d2e8e9cc-6f5d-44e6-8144-b7500545fb2d"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "75078ec0-e0ab-5873-ad66-3908a0eebf30-5f365d87-f277-4ba3-9b71-b4dd55423ff8",
+      "remove": [
+        "071f543d-b247-4fc0-8f3a-7b97cab929ca-5f365d87-f277-4ba3-9b71-b4dd55423ff8"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg41y6lb0029ql0fuubm0dp4",
+      "remove": [
+        "c6ea2ec3-c047-40d1-9978-2261f4ac5e81-8595ef06-ee89-4d06-9abd-abeed3a098b4"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "508bfb27-3623-513c-9eda-0b512a2abc82-54db8b56-6dc8-457f-9231-e5b382f81e02",
+      "remove": [
+        "0a5232a4-5ee4-40cf-a901-48a558609212-54db8b56-6dc8-457f-9231-e5b382f81e02"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "empty-passenger-seat-track-11-1760491136967",
+      "remove": [
+        "910fabab-aa66-5659-88ec-1dcc6eb52d6b-50d2520f-96f5-4ce3-b291-c3eff8823588"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "e0ccbc88-c677-5989-a40f-2712039f2e3f-62ce14e9-3b89-4816-b9c5-fb1dad58c616",
+      "remove": [
+        "02d08198-29b2-4ca9-ad61-149ff25a4875-62ce14e9-3b89-4816-b9c5-fb1dad58c616"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg421q28007uql0ffq1ebw97",
+      "remove": [
+        "75fe0580-e725-4581-8e59-c09052ca39c3-37ccdd0b-ad98-41dd-b932-d69372edd731"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-5-track-13-1760491135189",
+      "remove": [
+        "b237002b-e957-570f-80ad-4e3c3c2ec186-c07aca31-9b49-4f82-a321-013186418eb2"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "1d35cd0f-61bc-5f92-a106-80e2db1ca280-23070dbb-cb5c-433e-9d37-b891a0765cc5",
+      "remove": [
+        "aa979224-3bb8-4475-9112-0e8d61e09624-23070dbb-cb5c-433e-9d37-b891a0765cc5"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "7f762d4c-d702-5e9f-b0fa-2fdfeffa976d-e832d77c-6794-4845-b684-c7e516d94bf7",
+      "remove": [
+        "e43280cd-3b26-4f07-9b09-f84390b3b4ae-e832d77c-6794-4845-b684-c7e516d94bf7"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "take-the-lead-1758469470001-14aed09b-4f0f-405e-9f41-c70df1bf20a4",
+      "remove": [
+        "b337bd2b-46c5-4bd0-a57f-f93bca81ebea-14aed09b-4f0f-405e-9f41-c70df1bf20a4"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40g2tp00ovuvu6rksc4ndi",
+      "remove": [
+        "1b586d8f-e502-4afa-a32b-0a073424bf8b-545b6d2f-1d3f-411e-8eda-2792ce65e0f5"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg420dwn005vql0f37jlw80m",
+      "remove": [
+        "e954a4c4-69d2-4ac3-8b86-fe5469f6c9df-b8709353-4c30-4aa6-86d2-ce744c85e59b"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "370c2f8f-3c5a-5cf5-a589-a2bf00bc74e2-913f5904-c14d-4b34-b8cf-408a7ccac3ae",
+      "remove": [
+        "80cff0e9-a6f0-4be5-8f6a-8b6e3d19f3af-913f5904-c14d-4b34-b8cf-408a7ccac3ae"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40g9hn00p6uvu6fa0tcnqe",
+      "remove": [
+        "c46ccc66-8e60-4457-80df-bb0f0ee377ec-d68157fd-44f7-4fce-b59c-184092882cb6"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "508bfb27-3623-513c-9eda-0b512a2abc82-a9bc2c02-a90b-403f-92db-794d40d2b7ca",
+      "remove": [
+        "0a5232a4-5ee4-40cf-a901-48a558609212-a9bc2c02-a90b-403f-92db-794d40d2b7ca"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "4da9ed1a-5c3e-57c9-958f-3ed36880a26a-8cc4281d-b82b-4631-800c-36becae784d8",
+      "remove": [
+        "9a378ad7-7de6-4cc6-90e4-0ce2d8c0c6b2-8cc4281d-b82b-4631-800c-36becae784d8"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-5-track-5-1760491135189",
+      "remove": [
+        "b237002b-e957-570f-80ad-4e3c3c2ec186-3228d8c2-491c-48d0-8b08-2300e73c184f"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "0ee7cd8e-277e-532e-a772-7e70e15e1eaf-38e0552e-a3a4-4c13-b009-7f65d256d5a9",
+      "remove": [
+        "1911b2f3-5bfc-4857-b8f7-6bd20e57ac6a-38e0552e-a3a4-4c13-b009-7f65d256d5a9"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "0ee7cd8e-277e-532e-a772-7e70e15e1eaf-37cc3af9-9610-4a53-8d4a-dced4a5fa8e7",
+      "remove": [
+        "1911b2f3-5bfc-4857-b8f7-6bd20e57ac6a-37cc3af9-9610-4a53-8d4a-dced4a5fa8e7"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-5-track-12-1760491135189",
+      "remove": [
+        "b237002b-e957-570f-80ad-4e3c3c2ec186-7bb1c17b-f92f-4197-9956-9fdef3000bf6"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40groe00rmuvu6u3nwqsrs",
+      "remove": [
+        "eadf495a-dae1-40fc-9f19-92ede085fb2b-6e060eb8-187e-4152-a5dd-b07112565f60"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-9-track-0-1760491133423",
+      "remove": [
+        "iroh-album-9-d808c27e-27c5-4a3a-8df1-f2b9d65ee421"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "27678b50-1730-5768-9ba7-fe9763a1ee4d-36e950ef-20f7-4684-9182-4df2bf897e89",
+      "remove": [
+        "fd9165e4-6720-4409-bf19-f1e5a504132f-36e950ef-20f7-4684-9182-4df2bf897e89"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "aac951ff-5eff-51b0-acc2-8d0c04900bd3-15aafcd6-1c93-4429-aebd-b0ea4466bf24",
+      "remove": [
+        "2056e632-b7b0-48b2-852d-8ace59095be1-15aafcd6-1c93-4429-aebd-b0ea4466bf24"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-9-track-1-1760491133423",
+      "remove": [
+        "iroh-album-9-1c43b75f-b003-4482-9f37-a606792b4f3c"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-3c91a5b6-c35d-4943-bff8-505f2aa6977a",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-3c91a5b6-c35d-4943-bff8-505f2aa6977a"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "105198e7-c419-4bf3-b099-c968a0821f6f-58d2ed7a-1628-4984-9fc3-58ecd4d37af3",
+      "remove": [
+        "58d2ed7a-1628-4984-9fc3-58ecd4d37af3"
+      ],
+      "reason": "is active"
+    },
+    {
+      "keep": "105198e7-c419-4bf3-b099-c968a0821f6f-ab4c0d95-39b0-41b1-a224-11791d4d49e5",
+      "remove": [
+        "ab4c0d95-39b0-41b1-a224-11791d4d49e5"
+      ],
+      "reason": "is active"
+    },
+    {
+      "keep": "iroh-album-5-track-9-1760491135189",
+      "remove": [
+        "b237002b-e957-570f-80ad-4e3c3c2ec186-e461a1bb-d8b6-4aad-ba9d-7ba3bc81ed73"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-091238a5-eaf1-4f7f-bc6b-808819a2028d",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-091238a5-eaf1-4f7f-bc6b-808819a2028d"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40drc500lsuvu6n8hrklkv",
+      "remove": [
+        "e75a44d8-7f44-4712-b968-99eb801ea780-8bdb08cb-07f3-47f0-b645-8b43fb819ed1"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg420dwn005uql0fc4qu8dse",
+      "remove": [
+        "e954a4c4-69d2-4ac3-8b86-fe5469f6c9df-6af03468-ced3-4cef-830f-a64ede0f8f8a"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "0ee7cd8e-277e-532e-a772-7e70e15e1eaf-0bc6b683-9ced-4729-9d4b-d5c3d4a3071d",
+      "remove": [
+        "1911b2f3-5bfc-4857-b8f7-6bd20e57ac6a-0bc6b683-9ced-4729-9d4b-d5c3d4a3071d"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "empty-passenger-seat-track-0-1760491136967",
+      "remove": [
+        "910fabab-aa66-5659-88ec-1dcc6eb52d6b-3928208d-2bf1-4255-aa0d-6ab287e913ac"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "105198e7-c419-4bf3-b099-c968a0821f6f-d771fac0-8073-4f85-8ab6-1aab2514ca7e",
+      "remove": [
+        "d771fac0-8073-4f85-8ab6-1aab2514ca7e"
+      ],
+      "reason": "is active"
+    },
+    {
+      "keep": "befcdf32-8d45-5c35-a895-b28ddd475296-e9bd8cae-40b0-41bd-9528-12e607300bf7",
+      "remove": [
+        "209339e5-4dc0-4715-8d3d-2b9bcdd74547-e9bd8cae-40b0-41bd-9528-12e607300bf7"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "9045fc1d-aa01-4ded-8111-3b90c9481e09",
+      "remove": [
+        "4bb09378-7a12-4053-b655-b15afa23df46"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-5-track-6-1760491135189",
+      "remove": [
+        "b237002b-e957-570f-80ad-4e3c3c2ec186-2f5755c8-64d6-4e51-8ace-6795455f7e50"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "370c2f8f-3c5a-5cf5-a589-a2bf00bc74e2-78ff76e5-84b6-49a7-adda-2c0385a7b027",
+      "remove": [
+        "80cff0e9-a6f0-4be5-8f6a-8b6e3d19f3af-78ff76e5-84b6-49a7-adda-2c0385a7b027"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "take-the-lead-1758469470001-bbe5db05-921d-4fe6-8449-ef362e69edda",
+      "remove": [
+        "b337bd2b-46c5-4bd0-a57f-f93bca81ebea-bbe5db05-921d-4fe6-8449-ef362e69edda"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg421q280080ql0fx2ja7btb",
+      "remove": [
+        "75fe0580-e725-4581-8e59-c09052ca39c3-f469edfa-107e-4660-829e-6e24b81e0dee"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-b6324aa4-dfc4-437e-b702-f6ace69908bd",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-b6324aa4-dfc4-437e-b702-f6ace69908bd"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "they-dont-know-1758315935849-4nkjj1bj9",
+      "remove": [
+        "cmg3yic7n0007uvu6tki78dj1"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg421q280083ql0fqjv34q5s",
+      "remove": [
+        "75fe0580-e725-4581-8e59-c09052ca39c3-3754edd6-2be3-492f-b27f-69dd787e0f7d"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "a66fa2fd-f534-5700-801a-0a5d3024e19c-e5344f7a-ab8a-419b-8580-675816c8bf1c",
+      "remove": [
+        "5d782123-6e7e-4714-8203-d153d1a7ea4b-e5344f7a-ab8a-419b-8580-675816c8bf1c"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40gqfm00qpuvu6quiomdfz",
+      "remove": [
+        "ad487bb8-190c-42b6-b942-b78743085e3c-82f7e3d9-fb3c-4386-93c9-aaca8aecbe75"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "704d0994-a102-4d6b-9c54-d22364e2e68d-bac1b854-ec02-4a5d-ae15-fb980b3fc4b7",
+      "remove": [
+        "bac1b854-ec02-4a5d-ae15-fb980b3fc4b7"
+      ],
+      "reason": "is active"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-b36b338f-cd17-4c0f-b02c-268ae100ad99",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-b36b338f-cd17-4c0f-b02c-268ae100ad99"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "105198e7-c419-4bf3-b099-c968a0821f6f-2c8d2d23-5e0d-4a18-a1ee-300b6544dcf5",
+      "remove": [
+        "2c8d2d23-5e0d-4a18-a1ee-300b6544dcf5"
+      ],
+      "reason": "is active"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-dc80822d-13da-4a79-85f0-22e22a376156",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-dc80822d-13da-4a79-85f0-22e22a376156"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-54bd39fe-3280-413f-b06b-b7ac75759a36",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-54bd39fe-3280-413f-b06b-b7ac75759a36"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "105198e7-c419-4bf3-b099-c968a0821f6f-51d85982-0379-4f99-9c23-39fe82b101d2",
+      "remove": [
+        "51d85982-0379-4f99-9c23-39fe82b101d2"
+      ],
+      "reason": "is active"
+    },
+    {
+      "keep": "iroh-album-5-track-1-1760491135189",
+      "remove": [
+        "b237002b-e957-570f-80ad-4e3c3c2ec186-a8248ef5-3fcd-428b-b338-f5fc0ec0b2dd"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-5-track-15-1760491135189",
+      "remove": [
+        "b237002b-e957-570f-80ad-4e3c3c2ec186-52cca69c-fb83-4d58-b7e0-e5cd8f57ad12"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "508bfb27-3623-513c-9eda-0b512a2abc82-8824766a-e713-4d2d-a628-a3fe70cd835f",
+      "remove": [
+        "0a5232a4-5ee4-40cf-a901-48a558609212-8824766a-e713-4d2d-a628-a3fe70cd835f"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "denim-cobra-leather-diamond-track-1",
+      "remove": [
+        "882462d7-58a0-441c-937c-d5966a74d126"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-b89f3b2c-d92e-48ea-9126-be1a9fc46d57",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-b89f3b2c-d92e-48ea-9126-be1a9fc46d57"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "073e0152-9894-558d-9e33-f44f7ecaf13a-f686b2e0-c1cc-4717-8fe2-29c2e789586b",
+      "remove": [
+        "f9e8bd42-d9e4-4077-a405-ac4b1f2e0670-f686b2e0-c1cc-4717-8fe2-29c2e789586b"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg421umr008lql0fixafofki",
+      "remove": [
+        "6de6858c-1f3a-4110-902b-6b34c24d3fc7-2a156d75-c68c-4d4e-88ad-b72b393a9c22"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-5-track-4-1760491135189",
+      "remove": [
+        "b237002b-e957-570f-80ad-4e3c3c2ec186-3e82cea2-c2b4-4f05-b9bb-c0c5e365c1e6"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "cmg40g9il00p7uvu64vof4ily",
+      "remove": [
+        "2dadca78-3561-47af-b643-29ffe208188b-45ededbd-6741-47ef-a87e-b72114f350c3"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "5f073fbd-f8f3-5488-8ab1-701aee7bbeeb-850eced6-44fb-4a49-8e9a-3b6e718f19d0",
+      "remove": [
+        "9e426280-9993-4c62-8c6f-e43111e28a5f-850eced6-44fb-4a49-8e9a-3b6e718f19d0"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "a18151d7-c61b-5a74-ab15-f3133c126e1c-6480cea8-cf6a-46b4-8367-dafbeebd5699",
+      "remove": [
+        "56944276-ced5-4874-8ff0-34947884ad2f-6480cea8-cf6a-46b4-8367-dafbeebd5699"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "iroh-album-5-track-2-1760491135189",
+      "remove": [
+        "b237002b-e957-570f-80ad-4e3c3c2ec186-6365cceb-f4cc-4080-b7f0-3c6943056477"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "0ee7cd8e-277e-532e-a772-7e70e15e1eaf-5dc8c627-fce2-4c84-bd52-c5a47114236e",
+      "remove": [
+        "1911b2f3-5bfc-4857-b8f7-6bd20e57ac6a-5dc8c627-fce2-4c84-bd52-c5a47114236e"
+      ],
+      "reason": "has v4v data"
+    },
+    {
+      "keep": "af147c78-475f-5d7f-8c65-c4928e263acc-20300bab-e09e-4b88-8249-c463e2c34fff",
+      "remove": [
+        "c07c2f05-769f-479e-8bfc-a7688f4261f8-20300bab-e09e-4b88-8249-c463e2c34fff"
+      ],
+      "reason": "has v4v data"
+    }
+  ]
+}
