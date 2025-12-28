@@ -2511,12 +2511,24 @@ export class NIP46Client {
         }
         
         const isRelayConnected = relayManager.isConnected(relayUrl);
-        if (!isRelayConnected) {
-          console.log('⚠️ NIP-46: Relay appears disconnected, reconnecting...', {
+
+        // Check if connection is stale (no events received in last 60 seconds)
+        // This handles iOS Safari killing WebSocket connections when backgrounded
+        const CONNECTION_STALE_THRESHOLD_MS = 60000; // 60 seconds
+        const timeSinceLastEvent = this.lastEventTime > 0 ? Date.now() - this.lastEventTime : Infinity;
+        const isConnectionStale = timeSinceLastEvent > CONNECTION_STALE_THRESHOLD_MS;
+
+        if (!isRelayConnected || isConnectionStale) {
+          console.log('⚠️ NIP-46: Relay needs reconnection:', {
             relayUrl: relayUrl,
-            checkedUrl: relayUrl,
+            isRelayConnected,
+            isConnectionStale,
+            timeSinceLastEvent: timeSinceLastEvent === Infinity ? 'never' : `${Math.floor(timeSinceLastEvent / 1000)}s`,
+            reason: !isRelayConnected ? 'relay disconnected' : 'connection stale (iOS background?)',
           });
           await this.startRelayConnection(relayUrl);
+          // Update lastEventTime after successful reconnection
+          this.lastEventTime = Date.now();
         }
       }
     } catch (reconnectErr) {
