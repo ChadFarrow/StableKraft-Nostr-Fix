@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useNostr } from '@/contexts/NostrContext';
 import { NIP46Client } from '@/lib/nostr/nip46-client';
@@ -38,6 +38,11 @@ export default function LoginModal({ onClose }: LoginModalProps) {
   const [isNip55Available, setIsNip55Available] = useState(false);
   const [pastedConnectionUri, setPastedConnectionUri] = useState<string>('');
   const [showPasteUri, setShowPasteUri] = useState(false);
+
+  // New state for auto-initializing Amber connection
+  const [amberConnectionInitialized, setAmberConnectionInitialized] = useState(false);
+  const [amberConnectionError, setAmberConnectionError] = useState<string | null>(null);
+  const [isInitializingAmber, setIsInitializingAmber] = useState(false);
 
   // Ensure we're mounted before rendering portal
   useEffect(() => {
@@ -257,6 +262,207 @@ export default function LoginModal({ onClose }: LoginModalProps) {
     }
   }, [onClose]);
 
+  // Cleanup function for Amber connection
+  const cleanupAmberConnection = useCallback(async () => {
+    if (nip46ClientRef.current) {
+      try {
+        await nip46ClientRef.current.disconnect();
+      } catch (err) {
+        console.warn('Failed to disconnect NIP-46 client:', err);
+      }
+      nip46ClientRef.current = null;
+    }
+    setNip46Client(null);
+    setShowNip46Connect(false);
+    setNip46ConnectionToken('');
+    setNip46SignerUrl('');
+    setAmberConnectionInitialized(false);
+    setAmberConnectionError(null);
+    setIsInitializingAmber(false);
+  }, []);
+
+  // Initialize Amber connection - extracted from handleNip46Connect for auto-init
+  const initializeAmberConnection = useCallback(async () => {
+    // Check if localStorage is available and persistent
+    try {
+      const testKey = '_nip46_storage_test';
+      localStorage.setItem(testKey, 'test');
+      const retrieved = localStorage.getItem(testKey);
+      localStorage.removeItem(testKey);
+
+      if (retrieved !== 'test') {
+        throw new Error('localStorage is not working properly. You may be in incognito/private mode.');
+      }
+    } catch (err) {
+      throw new Error('localStorage is blocked. You may be in incognito/private mode.');
+    }
+
+    // Check for existing valid connection and try to auto-reconnect
+    const { hasValidConnection, loadNIP46Connection, clearNIP46Connection } = await import('@/lib/nostr/nip46-storage');
+    const { getUnifiedSigner } = await import('@/lib/nostr/signer');
+
+    if (hasValidConnection()) {
+      console.log('🔄 NIP-46: Found existing connection, attempting auto-reconnect...');
+
+      // Get current user pubkey for validation
+      let currentUserPubkey: string | undefined;
+      try {
+        const storedUser = localStorage.getItem('nostr_user');
+        if (storedUser) {
+          const userData = JSON.parse(storedUser);
+          currentUserPubkey = userData.nostrPubkey;
+        }
+      } catch (err) {
+        console.warn('⚠️ Failed to get current user pubkey:', err);
+      }
+
+      // Load the stored connection (with user pubkey validation)
+      const storedConnection = loadNIP46Connection(currentUserPubkey);
+      if (storedConnection && storedConnection.pubkey) {
+        // Validate connection matches current user
+        if (currentUserPubkey && storedConnection.pubkey !== currentUserPubkey) {
+          throw new Error('Stored connection is for a different user. Please reconnect.');
+        }
+        // Create client and restore connection
+        const client = new NIP46Client();
+
+        // Manually set the connection data from storage
+        (client as any).connection = storedConnection;
+
+        setNip46Client(client);
+        nip46ClientRef.current = client;
+
+        // Register with unified signer
+        const signer = getUnifiedSigner();
+        await signer.setNIP46Signer(client);
+
+        console.log('✅ NIP-46: Auto-reconnect successful');
+
+        // Set state to show we're ready (but don't show QR - we'll auto-login)
+        setShowNip46Connect(true);
+        return;
+      }
+    }
+
+    // Clear any existing connections to start fresh
+    clearNIP46Connection();
+
+    // Disconnect any active NIP-46 signer in UnifiedSigner
+    const signer = getUnifiedSigner();
+    try {
+      await signer.disconnectNIP46();
+    } catch (err) {
+      console.log('ℹ️ NIP-46: No active connection to disconnect');
+    }
+
+    // Clean up any existing client connection
+    if (nip46ClientRef.current) {
+      try {
+        await nip46ClientRef.current.disconnect();
+      } catch (err) {
+        console.warn('Failed to disconnect existing client:', err);
+      }
+      nip46ClientRef.current = null;
+    }
+    setNip46Client(null);
+
+    // Get or create a persistent app key pair
+    const { getOrCreateAppKeyPair } = await import('@/lib/nostr/nip46-storage');
+    const keyPair = getOrCreateAppKeyPair();
+    const { privateKey, publicKey } = keyPair;
+
+    // Get default relay for connection
+    const { getDefaultRelays } = await import('@/lib/nostr/relay');
+    const relays = getDefaultRelays();
+    const preferredRelays = relays.filter(r => !r.includes('relay.damus.io') && !r.includes('relay.nsec.app'));
+    const relayUrl = preferredRelays[0] || 'wss://nos.lol';
+
+    // Generate connection token
+    const token = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+
+    // Store connection info temporarily in sessionStorage
+    const connectionInfo = {
+      token,
+      privateKey,
+      publicKey,
+      relayUrl,
+      createdAt: Date.now(),
+    };
+    sessionStorage.setItem('nip46_pending_connection', JSON.stringify(connectionInfo));
+
+    // Initialize NIP-46 client
+    const client = new NIP46Client();
+    nip46ClientRef.current = client;
+    setNip46Client(client);
+
+    // Set up connection callback
+    client.setOnConnection((signerPubkey: string) => {
+      console.log('✅ NIP-46: Connection established with signer:', signerPubkey);
+    });
+
+    // Start listening on relay for connection
+    try {
+      await client.connect(relayUrl, token, true);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      console.error('❌ initializeAmberConnection: Failed to start relay connection:', errorMessage);
+      throw new Error(`Failed to connect to relay: ${errorMessage}`);
+    }
+
+    // Generate nostrconnect URI
+    const relayEncoded = encodeURIComponent(relayUrl);
+    const secretEncoded = encodeURIComponent(token);
+    const appName = encodeURIComponent('StableKraft');
+    const appUrl = encodeURIComponent('https://stablekraft.app/');
+    const nostrconnectUri = `nostrconnect://${publicKey}?relay=${relayEncoded}&secret=${secretEncoded}&name=${appName}&url=${appUrl}`;
+
+    console.log('NIP-46: Generated connection URI for relay:', relayUrl);
+
+    setNip46ConnectionToken(nostrconnectUri);
+    setNip46SignerUrl(relayUrl);
+    setShowNip46Connect(true);
+  }, []);
+
+  // Auto-initialize Amber connection when tab is selected
+  useEffect(() => {
+    let cancelled = false;
+
+    const initConnection = async () => {
+      if (loginMethod === 'amber' && !amberConnectionInitialized && !showPasteUri && !isSubmitting && !isInitializingAmber) {
+        setIsInitializingAmber(true);
+        setAmberConnectionError(null);
+
+        try {
+          await initializeAmberConnection();
+          if (!cancelled) {
+            setAmberConnectionInitialized(true);
+          }
+        } catch (err) {
+          if (!cancelled) {
+            setAmberConnectionError(err instanceof Error ? err.message : 'Failed to initialize connection');
+          }
+        } finally {
+          if (!cancelled) {
+            setIsInitializingAmber(false);
+          }
+        }
+      }
+    };
+
+    initConnection();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loginMethod, amberConnectionInitialized, showPasteUri, isSubmitting, isInitializingAmber, initializeAmberConnection]);
+
+  // Cleanup when switching away from Amber tab
+  useEffect(() => {
+    if (loginMethod !== 'amber' && amberConnectionInitialized) {
+      cleanupAmberConnection();
+    }
+  }, [loginMethod, amberConnectionInitialized, cleanupAmberConnection]);
+
   const handleNip05Login = async () => {
     try {
       setIsSubmitting(true);
@@ -365,33 +571,18 @@ export default function LoginModal({ onClose }: LoginModalProps) {
   };
 
   // Unified Amber login - picks best NIP for device
+  // handleAmberLogin now only handles pasted URI case - QR flow is automatic via useEffect
   const handleAmberLogin = async () => {
-    // If user wants to paste their own URI, validate and use that
     const trimmedUri = pastedConnectionUri.trim();
-    if (showPasteUri && trimmedUri) {
+    if (trimmedUri) {
       // Validate URI format
       if (!trimmedUri.startsWith('bunker://') && !trimmedUri.startsWith('nostrconnect://')) {
         setError('Invalid connection URI. Must start with bunker:// or nostrconnect://');
         return;
       }
       await handlePastedUriConnect();
-      return;
     }
-
-    // TEMPORARY: Force NIP-46 (QR code) on Android for testing
-    // NIP-55 callbacks don't seem to work reliably on Android
-    console.log('🔐 Amber: Using NIP-46 (QR code) - NIP-55 disabled for testing');
-    await handleNip46Connect();
-
-    // On Android with NIP-55 support, use NIP-55 (direct app-to-app)
-    // Otherwise use NIP-46 (QR code/relay)
-    // if (isAndroid() && isNip55Available) {
-    //   console.log('📱 Amber: Using NIP-55 (Android direct)');
-    //   await handleNip55Login();
-    // } else {
-    //   console.log('🔐 Amber: Using NIP-46 (QR code)');
-    //   await handleNip46Connect();
-    // }
+    // QR flow is now automatic - no button action needed
   };
 
   const handleNip46Connect = async () => {
@@ -1251,7 +1442,34 @@ export default function LoginModal({ onClose }: LoginModalProps) {
         {/* Unified Amber Login */}
         {loginMethod === 'amber' && (
           <>
-            {showNip46Connect ? (
+            {/* Loading state while initializing */}
+            {isInitializingAmber && !showNip46Connect && (
+              <div className="mb-4 flex flex-col items-center gap-3 py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <p className="text-sm text-gray-600">Preparing connection...</p>
+              </div>
+            )}
+
+            {/* Error state with retry */}
+            {amberConnectionError && !showNip46Connect && !isInitializingAmber && (
+              <div className="mb-4">
+                <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded mb-3">
+                  {amberConnectionError}
+                </div>
+                <button
+                  onClick={() => {
+                    setAmberConnectionError(null);
+                    setAmberConnectionInitialized(false);
+                  }}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  Retry Connection
+                </button>
+              </div>
+            )}
+
+            {/* QR Code (shows immediately once ready) */}
+            {showNip46Connect && (
               <Nip46Connect
                 connectionToken={nip46ConnectionToken}
                 signerUrl={nip46SignerUrl}
@@ -1265,81 +1483,61 @@ export default function LoginModal({ onClose }: LoginModalProps) {
                   setError(error);
                   setIsSubmitting(false);
                   setShowNip46Connect(false);
+                  setAmberConnectionInitialized(false);
                 }}
                 onCancel={() => {
-                  setShowNip46Connect(false);
-                  if (nip46Client) {
-                    nip46Client.disconnect();
-                  }
-                  setIsSubmitting(false);
+                  cleanupAmberConnection();
                 }}
               />
-            ) : (
-              <div className="mb-4">
-                <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
-                  <p className="text-sm text-blue-800">
-                    📱 <strong>Amber Signer:</strong> Connect your Amber app to sign Nostr events securely.
-                  </p>
-                  <p className="text-xs text-blue-600 mt-1">
-                    {isAndroid() && isNip55Available
-                      ? 'Using direct app connection (NIP-55) for faster signing'
-                      : 'Scan QR code with Amber on your phone (NIP-46)'}
-                  </p>
-                </div>
+            )}
 
-                {/* Toggle for pasting existing connection URI */}
-                <details
-                  className="group mb-3"
-                  onToggle={(e) => {
-                    // Reset paste mode when closing the details
-                    if (!(e.target as HTMLDetailsElement).open) {
-                      setShowPasteUri(false);
-                      setPastedConnectionUri('');
-                    }
-                  }}
-                >
-                  <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-800 list-none flex items-center gap-2">
-                    <span className="transition-transform group-open:rotate-90">▶</span>
-                    <span>Or paste existing connection URI</span>
-                  </summary>
-                  <div className="mt-3 space-y-2">
-                    <p className="text-xs text-gray-500">
-                      If you already have a bunker:// or nostrconnect:// URI from Amber, paste it here
-                    </p>
-                    <input
-                      type="text"
-                      value={pastedConnectionUri}
-                      onChange={(e) => {
-                        setPastedConnectionUri(e.target.value);
-                        // Only enable paste mode if there's actual content
-                        setShowPasteUri(e.target.value.trim().length > 0);
-                      }}
-                      onPaste={() => {
-                        // User is pasting, enable paste mode
-                        setShowPasteUri(true);
-                      }}
-                      placeholder="bunker://... or nostrconnect://..."
+            {/* Paste URI option - always available below QR */}
+            {!isInitializingAmber && !amberConnectionError && (
+              <details
+                className="group mb-3"
+                onToggle={(e) => {
+                  // Reset paste mode when closing the details
+                  if (!(e.target as HTMLDetailsElement).open) {
+                    setShowPasteUri(false);
+                    setPastedConnectionUri('');
+                  }
+                }}
+              >
+                <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-800 list-none flex items-center gap-2">
+                  <span className="transition-transform group-open:rotate-90">▶</span>
+                  <span>Or paste existing connection URI</span>
+                </summary>
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs text-gray-500">
+                    If you already have a bunker:// or nostrconnect:// URI from Amber, paste it here
+                  </p>
+                  <input
+                    type="text"
+                    value={pastedConnectionUri}
+                    onChange={(e) => {
+                      setPastedConnectionUri(e.target.value);
+                      // Only enable paste mode if there's actual content
+                      setShowPasteUri(e.target.value.trim().length > 0);
+                    }}
+                    onPaste={() => {
+                      // User is pasting, enable paste mode
+                      setShowPasteUri(true);
+                    }}
+                    placeholder="bunker://... or nostrconnect://..."
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed font-mono text-xs"
+                  />
+                  {showPasteUri && pastedConnectionUri.trim() && (
+                    <button
+                      onClick={handleAmberLogin}
                       disabled={isSubmitting}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed font-mono text-xs"
-                    />
-                  </div>
-                </details>
-
-                <button
-                  onClick={handleAmberLogin}
-                  disabled={isSubmitting || (showPasteUri && !pastedConnectionUri.trim())}
-                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                >
-                  {isSubmitting ? 'Connecting...' : '🔐 Connect with Amber'}
-                </button>
-                <p className="mt-2 text-xs text-gray-500 text-center">
-                  {showPasteUri && pastedConnectionUri.trim()
-                    ? 'Click to connect with your pasted URI'
-                    : isAndroid()
-                    ? 'Make sure Amber is installed on your device'
-                    : 'Scan QR code with Amber on your phone'}
-                </p>
-              </div>
+                      className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                    >
+                      {isSubmitting ? 'Connecting...' : 'Connect with Pasted URI'}
+                    </button>
+                  )}
+                </div>
+              </details>
             )}
           </>
         )}
