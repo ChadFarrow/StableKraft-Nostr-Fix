@@ -5,6 +5,7 @@ import { hexToBytes } from './keys';
 const ShortTextNote = 1;
 const Contacts = 3;
 const Metadata = 0;
+const ClientAuthentication = 22242; // NIP-42 auth event
 
 /**
  * Event creation and signing utilities
@@ -402,13 +403,13 @@ export function isValidEvent(event: unknown): event is Event {
 
 /**
  * Create a standardized login event template for authentication
- * Uses kind 1 (note) for compatibility with all signers (especially NIP-46/Amber)
+ * Uses kind 22242 (NIP-42 client authentication) - proper auth event type
  * @param challenge - Authentication challenge string from server
  * @returns Unsigned event template for login
  */
 export function createLoginEventTemplate(challenge: string): EventTemplate {
   return {
-    kind: ShortTextNote, // Use kind 1 for compatibility (Amber crashes with kind 22242)
+    kind: ClientAuthentication, // NIP-42 auth event (kind 22242)
     tags: [['challenge', challenge]],
     content: 'Authentication challenge', // Consistent content for all login methods
     created_at: Math.floor(Date.now() / 1000),

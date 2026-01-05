@@ -350,8 +350,8 @@ export default function Nip46Connect({
         </div>
       )}
 
-      {/* Debug Info Panel (always visible on web) */}
-      {!isAndroid() && (
+      {/* Debug Info Panel (development only) */}
+      {!isAndroid() && process.env.NODE_ENV !== 'production' && (
         <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
           <div className="flex justify-between items-center mb-2">
             <h4 className="text-sm font-semibold text-blue-900">Debug Info</h4>
