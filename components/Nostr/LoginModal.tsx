@@ -1,21 +1,18 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useNostr } from '@/contexts/NostrContext';
 import { NIP46Client } from '@/lib/nostr/nip46-client';
 import { NIP55Client } from '@/lib/nostr/nip55-client';
 import { getUnifiedSigner } from '@/lib/nostr/signer';
 import { saveNIP46Connection } from '@/lib/nostr/nip46-storage';
 import { isAndroid, isIOS } from '@/lib/utils/device';
 import Nip46Connect from './Nip46Connect';
+import { useNip46Connection } from './hooks';
 import {
   preserveWalletConnection,
   prepareLoginEvent,
   processSignedLogin,
-  saveUserData,
-  startFavoritesSync,
-  completeLogin,
 } from '@/lib/nostr/auth-utils';
 
 interface LoginModalProps {
@@ -23,26 +20,40 @@ interface LoginModalProps {
 }
 
 export default function LoginModal({ onClose }: LoginModalProps) {
+  // Core UI state
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasExtension, setHasExtension] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [nip05Identifier, setNip05Identifier] = useState('');
   const [loginMethod, setLoginMethod] = useState<'extension' | 'nip05' | 'amber'>('extension');
-  const [showNip46Connect, setShowNip46Connect] = useState(false);
-  const [nip46ConnectionToken, setNip46ConnectionToken] = useState<string>('');
-  const [nip46SignerUrl, setNip46SignerUrl] = useState<string>('');
-  const [nip46Client, setNip46Client] = useState<NIP46Client | null>(null);
-  const nip46ClientRef = useRef<NIP46Client | null>(null);
+
+  // NIP-55 state
   const [nip55Client, setNip55Client] = useState<NIP55Client | null>(null);
   const [isNip55Available, setIsNip55Available] = useState(false);
-  const [pastedConnectionUri, setPastedConnectionUri] = useState<string>('');
-  const [showPasteUri, setShowPasteUri] = useState(false);
 
-  // New state for auto-initializing Amber connection
-  const [amberConnectionInitialized, setAmberConnectionInitialized] = useState(false);
-  const [amberConnectionError, setAmberConnectionError] = useState<string | null>(null);
-  const [isInitializingAmber, setIsInitializingAmber] = useState(false);
+  // NIP-46 connection hook
+  const {
+    nip46Client,
+    showNip46Connect,
+    nip46ConnectionToken,
+    nip46SignerUrl,
+    amberConnectionInitialized,
+    amberConnectionError,
+    isInitializingAmber,
+    pastedConnectionUri,
+    showPasteUri,
+    setShowNip46Connect,
+    setPastedConnectionUri,
+    setShowPasteUri,
+    setAmberConnectionError,
+    setAmberConnectionInitialized,
+    setNip46Client,
+    setNip46ConnectionToken,
+    setNip46SignerUrl,
+    cleanupAmberConnection,
+    nip46ClientRef,
+  } = useNip46Connection({ loginMethod, isSubmitting });
 
   // Ensure we're mounted before rendering portal
   useEffect(() => {
@@ -262,206 +273,6 @@ export default function LoginModal({ onClose }: LoginModalProps) {
     }
   }, [onClose]);
 
-  // Cleanup function for Amber connection
-  const cleanupAmberConnection = useCallback(async () => {
-    if (nip46ClientRef.current) {
-      try {
-        await nip46ClientRef.current.disconnect();
-      } catch (err) {
-        console.warn('Failed to disconnect NIP-46 client:', err);
-      }
-      nip46ClientRef.current = null;
-    }
-    setNip46Client(null);
-    setShowNip46Connect(false);
-    setNip46ConnectionToken('');
-    setNip46SignerUrl('');
-    setAmberConnectionInitialized(false);
-    setAmberConnectionError(null);
-    setIsInitializingAmber(false);
-  }, []);
-
-  // Initialize Amber connection - extracted from handleNip46Connect for auto-init
-  const initializeAmberConnection = useCallback(async () => {
-    // Check if localStorage is available and persistent
-    try {
-      const testKey = '_nip46_storage_test';
-      localStorage.setItem(testKey, 'test');
-      const retrieved = localStorage.getItem(testKey);
-      localStorage.removeItem(testKey);
-
-      if (retrieved !== 'test') {
-        throw new Error('localStorage is not working properly. You may be in incognito/private mode.');
-      }
-    } catch (err) {
-      throw new Error('localStorage is blocked. You may be in incognito/private mode.');
-    }
-
-    // Check for existing valid connection and try to auto-reconnect
-    const { hasValidConnection, loadNIP46Connection, clearNIP46Connection } = await import('@/lib/nostr/nip46-storage');
-    const { getUnifiedSigner } = await import('@/lib/nostr/signer');
-
-    if (hasValidConnection()) {
-      console.log('🔄 NIP-46: Found existing connection, attempting auto-reconnect...');
-
-      // Get current user pubkey for validation
-      let currentUserPubkey: string | undefined;
-      try {
-        const storedUser = localStorage.getItem('nostr_user');
-        if (storedUser) {
-          const userData = JSON.parse(storedUser);
-          currentUserPubkey = userData.nostrPubkey;
-        }
-      } catch (err) {
-        console.warn('⚠️ Failed to get current user pubkey:', err);
-      }
-
-      // Load the stored connection (with user pubkey validation)
-      const storedConnection = loadNIP46Connection(currentUserPubkey);
-      if (storedConnection && storedConnection.pubkey) {
-        // Validate connection matches current user
-        if (currentUserPubkey && storedConnection.pubkey !== currentUserPubkey) {
-          throw new Error('Stored connection is for a different user. Please reconnect.');
-        }
-        // Create client and restore connection
-        const client = new NIP46Client();
-
-        // Manually set the connection data from storage
-        (client as any).connection = storedConnection;
-
-        setNip46Client(client);
-        nip46ClientRef.current = client;
-
-        // Register with unified signer
-        const signer = getUnifiedSigner();
-        await signer.setNIP46Signer(client);
-
-        console.log('✅ NIP-46: Auto-reconnect successful');
-
-        // Set state to show we're ready (but don't show QR - we'll auto-login)
-        setShowNip46Connect(true);
-        return;
-      }
-    }
-
-    // Clear any existing connections to start fresh
-    clearNIP46Connection();
-
-    // Disconnect any active NIP-46 signer in UnifiedSigner
-    const signer = getUnifiedSigner();
-    try {
-      await signer.disconnectNIP46();
-    } catch (err) {
-      console.log('ℹ️ NIP-46: No active connection to disconnect');
-    }
-
-    // Clean up any existing client connection
-    if (nip46ClientRef.current) {
-      try {
-        await nip46ClientRef.current.disconnect();
-      } catch (err) {
-        console.warn('Failed to disconnect existing client:', err);
-      }
-      nip46ClientRef.current = null;
-    }
-    setNip46Client(null);
-
-    // Get or create a persistent app key pair
-    const { getOrCreateAppKeyPair } = await import('@/lib/nostr/nip46-storage');
-    const keyPair = getOrCreateAppKeyPair();
-    const { privateKey, publicKey } = keyPair;
-
-    // Get default relay for connection
-    const { getDefaultRelays } = await import('@/lib/nostr/relay');
-    const relays = getDefaultRelays();
-    const preferredRelays = relays.filter(r => !r.includes('relay.damus.io') && !r.includes('relay.nsec.app'));
-    const relayUrl = preferredRelays[0] || 'wss://nos.lol';
-
-    // Generate connection token
-    const token = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
-
-    // Store connection info temporarily in sessionStorage
-    const connectionInfo = {
-      token,
-      privateKey,
-      publicKey,
-      relayUrl,
-      createdAt: Date.now(),
-    };
-    sessionStorage.setItem('nip46_pending_connection', JSON.stringify(connectionInfo));
-
-    // Initialize NIP-46 client
-    const client = new NIP46Client();
-    nip46ClientRef.current = client;
-    setNip46Client(client);
-
-    // Set up connection callback
-    client.setOnConnection((signerPubkey: string) => {
-      console.log('✅ NIP-46: Connection established with signer:', signerPubkey);
-    });
-
-    // Start listening on relay for connection
-    try {
-      await client.connect(relayUrl, token, true);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      console.error('❌ initializeAmberConnection: Failed to start relay connection:', errorMessage);
-      throw new Error(`Failed to connect to relay: ${errorMessage}`);
-    }
-
-    // Generate nostrconnect URI
-    const relayEncoded = encodeURIComponent(relayUrl);
-    const secretEncoded = encodeURIComponent(token);
-    const appName = encodeURIComponent('StableKraft');
-    const appUrl = encodeURIComponent('https://stablekraft.app/');
-    const nostrconnectUri = `nostrconnect://${publicKey}?relay=${relayEncoded}&secret=${secretEncoded}&name=${appName}&url=${appUrl}`;
-
-    console.log('NIP-46: Generated connection URI for relay:', relayUrl);
-
-    setNip46ConnectionToken(nostrconnectUri);
-    setNip46SignerUrl(relayUrl);
-    setShowNip46Connect(true);
-  }, []);
-
-  // Auto-initialize Amber connection when tab is selected
-  useEffect(() => {
-    let cancelled = false;
-
-    const initConnection = async () => {
-      if (loginMethod === 'amber' && !amberConnectionInitialized && !showPasteUri && !isSubmitting && !isInitializingAmber) {
-        setIsInitializingAmber(true);
-        setAmberConnectionError(null);
-
-        try {
-          await initializeAmberConnection();
-          if (!cancelled) {
-            setAmberConnectionInitialized(true);
-          }
-        } catch (err) {
-          if (!cancelled) {
-            setAmberConnectionError(err instanceof Error ? err.message : 'Failed to initialize connection');
-          }
-        } finally {
-          if (!cancelled) {
-            setIsInitializingAmber(false);
-          }
-        }
-      }
-    };
-
-    initConnection();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [loginMethod, amberConnectionInitialized, showPasteUri, isSubmitting, isInitializingAmber, initializeAmberConnection]);
-
-  // Cleanup when switching away from Amber tab
-  useEffect(() => {
-    if (loginMethod !== 'amber' && amberConnectionInitialized) {
-      cleanupAmberConnection();
-    }
-  }, [loginMethod, amberConnectionInitialized, cleanupAmberConnection]);
 
   const handleNip05Login = async () => {
     try {
@@ -584,239 +395,6 @@ export default function LoginModal({ onClose }: LoginModalProps) {
     }
     // QR flow is now automatic - no button action needed
   };
-
-  const handleNip46Connect = async () => {
-    // Prevent multiple simultaneous connection attempts
-    if (isSubmitting) {
-      console.log('⚠️ NIP-46: Connection already in progress, ignoring duplicate call');
-      return;
-    }
-
-    // Check if localStorage is available and persistent
-    try {
-      const testKey = '_nip46_storage_test';
-      localStorage.setItem(testKey, 'test');
-      const retrieved = localStorage.getItem(testKey);
-      localStorage.removeItem(testKey);
-
-      if (retrieved !== 'test') {
-        setError('⚠️ localStorage is not working properly. You may be in incognito/private mode. NIP-46 connections require persistent storage to work across sessions.');
-        return;
-      }
-    } catch (err) {
-      setError('⚠️ localStorage is blocked. You may be in incognito/private mode. NIP-46 connections require persistent storage to work across sessions.');
-      return;
-    }
-
-    // Check for existing valid connection and try to auto-reconnect
-    const { hasValidConnection, loadNIP46Connection, clearNIP46Connection } = await import('@/lib/nostr/nip46-storage');
-    const { getUnifiedSigner } = await import('@/lib/nostr/signer');
-
-    if (hasValidConnection()) {
-      console.log('🔄 NIP-46: Found existing connection, attempting auto-reconnect...');
-
-      try {
-        setIsSubmitting(true);
-        setError(null);
-
-        // Get current user pubkey for validation
-        let currentUserPubkey: string | undefined;
-        try {
-          const storedUser = localStorage.getItem('nostr_user');
-          if (storedUser) {
-            const userData = JSON.parse(storedUser);
-            currentUserPubkey = userData.nostrPubkey;
-          }
-        } catch (err) {
-          console.warn('⚠️ Failed to get current user pubkey:', err);
-        }
-
-        // Load the stored connection (with user pubkey validation)
-        const storedConnection = loadNIP46Connection(currentUserPubkey);
-        if (storedConnection && storedConnection.pubkey) {
-          // Validate connection matches current user
-          if (currentUserPubkey && storedConnection.pubkey !== currentUserPubkey) {
-            setError('Stored connection is for a different user. Please reconnect.');
-            setIsSubmitting(false);
-            return;
-          }
-          // Create client and restore connection
-          const client = new NIP46Client();
-
-          // Manually set the connection data from storage
-          (client as any).connection = storedConnection;
-
-          setNip46Client(client);
-          nip46ClientRef.current = client;
-
-          // Register with unified signer
-          const signer = getUnifiedSigner();
-          await signer.setNIP46Signer(client);
-
-          console.log('✅ NIP-46: Auto-reconnect successful, proceeding to login');
-
-          // Proceed directly to login with the restored connection
-          await handleNip46ConnectedWithClient(client);
-          return; // Exit early, we've completed the login
-        }
-      } catch (reconnectError) {
-        console.warn('⚠️ NIP-46: Auto-reconnect failed, falling back to QR code flow:', reconnectError);
-        // Clear the invalid connection and fall through to normal flow
-        clearNIP46Connection();
-      }
-    }
-
-    // Clear any existing connections to start fresh
-    // This ensures we always create a new connection when user explicitly clicks NIP-46
-    clearNIP46Connection();
-
-    // Disconnect any active NIP-46 signer in UnifiedSigner
-    const signer = getUnifiedSigner();
-    try {
-      await signer.disconnectNIP46();
-    } catch (err) {
-      // Ignore errors if not connected
-      console.log('ℹ️ NIP-46: No active connection to disconnect');
-    }
-
-    console.log('🔄 NIP-46: Cleared old connections, starting fresh login flow');
-
-    // Clean up any existing client connection
-    if (nip46ClientRef.current) {
-      console.log('🧹 NIP-46: Cleaning up existing client before creating new connection');
-      try {
-        await nip46ClientRef.current.disconnect();
-      } catch (err) {
-        console.warn('Failed to disconnect existing client:', err);
-      }
-      nip46ClientRef.current = null;
-    }
-    
-    // Also clear the state
-    setNip46Client(null);
-
-    try {
-      setIsSubmitting(true);
-      setError(null);
-
-      // Get or create a persistent app key pair (reused across sessions)
-      // This ensures the same pubkey is used, preventing Amber connection mismatches
-      const { getOrCreateAppKeyPair } = await import('@/lib/nostr/nip46-storage');
-      const keyPair = getOrCreateAppKeyPair();
-      const { privateKey, publicKey } = keyPair;
-      
-      // Get default relay for connection
-      // Prefer relays that are less likely to be rate-limited
-      const { getDefaultRelays } = await import('@/lib/nostr/relay');
-      const relays = getDefaultRelays();
-      // Skip Damus relay if it's first (it's often rate-limited)
-      // Try nos.lol instead to bypass potential relay-side caching
-      const preferredRelays = relays.filter(r => !r.includes('relay.damus.io') && !r.includes('relay.nsec.app'));
-      const relayUrl = preferredRelays[0] || 'wss://nos.lol';
-      
-      // Generate connection token (secret for this session)
-      const token = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
-      
-      // Store connection info temporarily in sessionStorage (for backward compatibility)
-      // The key pair itself is stored persistently in localStorage
-      const connectionInfo = {
-        token,
-        privateKey, // Persistent key pair (reused across sessions)
-        publicKey,
-        relayUrl,
-        createdAt: Date.now(),
-      };
-      sessionStorage.setItem('nip46_pending_connection', JSON.stringify(connectionInfo));
-      
-      // Initialize NIP-46 client (but don't connect yet - wait for Amber)
-      const client = new NIP46Client();
-      
-      // Store client in ref for callback access
-      nip46ClientRef.current = client;
-      setNip46Client(client);
-      
-      // Set up connection callback - use ref to access client
-      client.setOnConnection((signerPubkey: string) => {
-        console.log('✅ NIP-46: Connection established with signer:', signerPubkey);
-        // Hide the connection UI first
-        setShowNip46Connect(false);
-        // Automatically complete login when connection is established
-        // Use the ref to ensure we have the client
-        if (nip46ClientRef.current) {
-          handleNip46ConnectedWithClient(nip46ClientRef.current);
-        }
-      });
-      
-      // Start listening on relay for connection
-      // For client-initiated flow (nostrconnect://), we need to connect to the relay immediately
-      // to listen for Amber's connection response
-      try {
-        await client.connect(relayUrl, token, true);
-      } catch (err) {
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        console.error('❌ LoginModal: Failed to start relay connection:', {
-          error: errorMessage,
-          relayUrl,
-          errorDetails: err,
-        });
-        setError(`Failed to connect to relay: ${errorMessage}. Please check your connection and try again.`);
-        setIsSubmitting(false);
-        return;
-      }
-      
-      // Generate nostrconnect URI
-      // NIP-46 format: nostrconnect://<client-pubkey>?relay=<relay_url>&secret=<required>&name=<optional>&url=<optional>
-      // Reference: https://github.com/nostr-protocol/nips/blob/master/46.md
-      // IMPORTANT: 
-      // - <pubkey> should be HEX-ENCODED (not npub/bech32)
-      // - secret is REQUIRED (not optional)
-      // - Use separate query params (name, url) instead of metadata JSON
-      
-      // NIP-46 compliant format: hex pubkey with minimal required params (relay and secret)
-      // According to NIP-46 spec, pubkey MUST be hex-encoded (not npub/bech32)
-      // Reference: https://github.com/nostr-protocol/nips/blob/master/46.md
-      const relayEncoded = encodeURIComponent(relayUrl);
-      const secretEncoded = encodeURIComponent(token);
-      const appName = encodeURIComponent('StableKraft');
-      const appUrl = encodeURIComponent('https://stablekraft.app/');
-      const nostrconnectUri = `nostrconnect://${publicKey}?relay=${relayEncoded}&secret=${secretEncoded}&name=${appName}&url=${appUrl}`;
-      
-      console.log('NIP-46: Generated connection URI for relay:', relayUrl);
-      
-      // Validate URI format
-      if (!nostrconnectUri.startsWith('nostrconnect://')) {
-        throw new Error('Invalid nostrconnect URI format');
-      }
-      if (!publicKey || publicKey.length !== 64) {
-        throw new Error('Invalid pubkey format - must be 64 hex characters');
-      }
-      if (!token || token.length === 0) {
-        throw new Error('Secret is required per NIP-46 spec');
-      }
-      
-      setNip46ConnectionToken(nostrconnectUri);
-      setNip46SignerUrl(relayUrl);
-      setShowNip46Connect(true);
-      setIsSubmitting(false);
-
-      console.log('NIP-46: Connection UI displayed. Waiting for Amber to scan QR code...');
-      
-      // According to NIP-46 spec, when client initiates via nostrconnect://:
-      // 1. Client generates QR code with nostrconnect:// URI (done above)
-      // 2. User scans QR code with Amber (remote-signer)
-      // 3. Amber sends a connect RESPONSE event to the client-pubkey via the specified relays
-      // 4. Client receives the response and learns remote-signer-pubkey from event author
-      // 5. Client validates the secret returned in the connect response
-      // 
-      // The client should NOT send connect requests - it should passively wait for Amber's response.
-      // The connection callback (set above) will be triggered when we receive the connect response event.
-      // No retry loop needed - just wait for Amber to send the response.
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to initialize NIP-46 connection');
-      setIsSubmitting(false);
-    }
-  };
-
 
   const handleNip46Connected = async () => {
     // Use the ref to get the client
