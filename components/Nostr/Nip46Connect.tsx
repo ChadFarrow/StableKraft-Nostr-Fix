@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { isAndroid } from '@/lib/utils/device';
+import { isAndroid, isIOS } from '@/lib/utils/device';
 
 interface Nip46ConnectProps {
   connectionToken: string;
@@ -182,34 +182,35 @@ export default function Nip46Connect({
     }
   };
 
+  const isMobile = isAndroid() || isIOS();
+
   return (
     <div className="space-y-4">
       <div className="text-center">
         <h3 className="text-lg font-semibold mb-2">Connect with Amber</h3>
         <p className="text-sm text-gray-600 mb-4">
-          {isAndroid() 
-            ? 'Scan the QR code or use the deep link to connect your Amber app'
+          {isMobile
+            ? 'Copy the connection link below and paste it into Amber, or tap the button to open Amber directly'
             : 'Scan the QR code with Amber on your phone, or copy the connection URI and paste it into Amber'}
         </p>
       </div>
 
-      {/* QR Code */}
-      <div className="flex justify-center p-4 bg-white rounded-lg border border-gray-200">
-        <QRCodeSVG
-          value={connectionToken} // This is the nostrconnect:// URI
-          size={256}
-          level="M"
-          includeMargin={true}
-        />
-      </div>
+      {/* QR Code - Desktop only */}
+      {!isMobile && (
+        <div className="flex justify-center p-4 bg-white rounded-lg border border-gray-200">
+          <QRCodeSVG
+            value={connectionToken}
+            size={256}
+            level="M"
+            includeMargin={true}
+          />
+        </div>
+      )}
 
-      {/* Connection URI (for manual entry) */}
-      <details className="group">
-        <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-800 list-none flex items-center gap-2">
-          <span className="transition-transform group-open:rotate-90">▶</span>
-          <span>Or copy connection link</span>
-        </summary>
-        <div className="mt-3 space-y-2">
+      {/* Connection URI - Prominent on mobile, collapsible on desktop */}
+      {isMobile ? (
+        <div className="space-y-2">
+          <label className="block text-sm font-medium text-gray-700">Connection Link</label>
           <div className="flex gap-2">
             <input
               type="text"
@@ -219,18 +220,42 @@ export default function Nip46Connect({
             />
             <button
               onClick={handleCopyToken}
-              className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-md text-sm"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium"
             >
               Copy
             </button>
           </div>
           <p className="text-xs text-gray-500">
-            {isAndroid()
-              ? 'Paste this in Amber if the QR code doesn\'t work'
-              : 'Paste this in Amber on your phone to connect'}
+            Copy this link and paste it into Amber&apos;s connection field
           </p>
         </div>
-      </details>
+      ) : (
+        <details className="group">
+          <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-800 list-none flex items-center gap-2">
+            <span className="transition-transform group-open:rotate-90">▶</span>
+            <span>Or copy connection link</span>
+          </summary>
+          <div className="mt-3 space-y-2">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={connectionToken}
+                readOnly
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-sm font-mono text-xs"
+              />
+              <button
+                onClick={handleCopyToken}
+                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-md text-sm"
+              >
+                Copy
+              </button>
+            </div>
+            <p className="text-xs text-gray-500">
+              Paste this in Amber on your phone to connect
+            </p>
+          </div>
+        </details>
+      )}
 
       {/* Deep Link Button (Android only) */}
       {isAndroid() && deepLinkUrl && (
@@ -258,11 +283,13 @@ export default function Nip46Connect({
             Waiting for Amber to connect...
           </p>
           <p className="text-xs text-blue-600 text-center">
-            Please scan the QR code and approve the connection in Amber
+            {isMobile
+              ? 'Please open Amber and approve the connection'
+              : 'Please scan the QR code and approve the connection in Amber'}
           </p>
           {debugInfo.connectionCheckCount && debugInfo.connectionCheckCount > 10 && (
             <p className="text-xs text-yellow-700 text-center">
-              Still waiting... Check the browser console (F12) for details
+              Still waiting... {!isMobile && 'Check the browser console (F12) for details'}
             </p>
           )}
         </div>
@@ -358,16 +385,22 @@ export default function Nip46Connect({
       <div className="p-4 bg-gray-50 border border-gray-200 rounded-md">
         <h4 className="text-sm font-semibold mb-2">How to connect:</h4>
         <ol className="text-xs text-gray-600 space-y-1 list-decimal list-inside">
-          <li>Open the Amber app on your mobile device</li>
+          <li>Open the Amber app on your device</li>
           <li>Go to Settings → Remote Signing (NIP-46) or use the &quot;Connect&quot; option</li>
-          {isAndroid() ? (
-            <>
-              <li>Scan the QR code above or tap &quot;Open in Amber App&quot; button</li>
-            </>
+          {isMobile ? (
+            isAndroid() ? (
+              <>
+                <li>Tap &quot;Open in Amber App&quot; button above, or copy the connection link and paste it in Amber</li>
+              </>
+            ) : (
+              <>
+                <li>Copy the connection link above and paste it into Amber&apos;s connection field</li>
+              </>
+            )
           ) : (
             <>
               <li>Scan the QR code above with your phone&apos;s camera, or</li>
-              <li>Copy the connection URI above and paste it into Amber&apos;s connection field</li>
+              <li>Copy the connection link and paste it into Amber&apos;s connection field</li>
             </>
           )}
           <li>Approve the connection request in Amber</li>
