@@ -347,22 +347,55 @@ export async function GET(request: Request) {
       return true;
     });
 
+    // Deduplicate albums with same title and artist (keep the one with more tracks or from preferred source)
+    const deduplicatedAlbums = (() => {
+      const seen = new Map<string, typeof unresolvedFilteredAlbums[0]>();
+
+      for (const album of unresolvedFilteredAlbums) {
+        // Create a key from normalized title + artist
+        const key = `${album.title?.toLowerCase().trim()}|${album.artist?.toLowerCase().trim()}`;
+        const existing = seen.get(key);
+
+        if (!existing) {
+          seen.set(key, album);
+        } else {
+          // Keep the one with more tracks, or prefer wavlake source
+          const existingTrackCount = existing.tracks?.length || 0;
+          const newTrackCount = album.tracks?.length || 0;
+          const existingIsWavlake = existing.feedUrl?.includes('wavlake.com');
+          const newIsWavlake = album.feedUrl?.includes('wavlake.com');
+
+          // Prefer more tracks, then Wavlake as tiebreaker
+          if (newTrackCount > existingTrackCount || (!existingIsWavlake && newIsWavlake && newTrackCount >= existingTrackCount)) {
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`🔄 Dedup: Replacing "${existing.title}" (${existingTrackCount} tracks) with (${newTrackCount} tracks)`);
+            }
+            seen.set(key, album);
+          } else if (process.env.NODE_ENV === 'development') {
+            console.log(`🔄 Dedup: Keeping "${existing.title}" (${existingTrackCount} tracks), skipping duplicate (${newTrackCount} tracks)`);
+          }
+        }
+      }
+
+      return Array.from(seen.values());
+    })();
+
     // Apply filtering
-    let filteredAlbums = unresolvedFilteredAlbums;
+    let filteredAlbums = deduplicatedAlbums;
     if (filter !== 'all') {
       switch (filter) {
         case 'albums':
-          filteredAlbums = unresolvedFilteredAlbums.filter(album =>
+          filteredAlbums = deduplicatedAlbums.filter(album =>
             album.tracks && album.tracks.length >= 8
           );
           break;
         case 'eps':
-          filteredAlbums = unresolvedFilteredAlbums.filter(album =>
+          filteredAlbums = deduplicatedAlbums.filter(album =>
             album.tracks && album.tracks.length >= 2 && album.tracks.length < 8
           );
           break;
         case 'singles':
-          filteredAlbums = unresolvedFilteredAlbums.filter(album =>
+          filteredAlbums = deduplicatedAlbums.filter(album =>
             album.tracks && album.tracks.length === 1
           );
           break;
