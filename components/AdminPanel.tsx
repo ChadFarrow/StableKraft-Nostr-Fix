@@ -34,6 +34,40 @@ export default function AdminPanel() {
     message?: string;
   } | null>(null);
 
+  // Orphan cleanup state
+  const [parsingMissingTracks, setParsingMissingTracks] = useState(false);
+  const [parseProgress, setParseProgress] = useState<{
+    current: number;
+    total: number;
+    feedTitle?: string;
+    parsed: number;
+    failed: number;
+    totalTracks: number;
+  } | null>(null);
+  const [parseResult, setParseResult] = useState<{
+    total: number;
+    parsed: number;
+    failed: number;
+    totalTracks: number;
+  } | null>(null);
+  const [checkingOrphans, setCheckingOrphans] = useState(false);
+  const [deletingOrphans, setDeletingOrphans] = useState(false);
+  const [orphanPreview, setOrphanPreview] = useState<{
+    feedsToKeep: number;
+    orphanedFeeds: number;
+    orphanedTracks: number;
+    totalFeeds: number;
+    totalTracks: number;
+    sampleOrphanedFeeds: Array<{
+      id: string;
+      title: string;
+      artist: string;
+      image?: string;
+      type: string;
+      trackCount: number;
+    }>;
+  } | null>(null);
+
   // Nostr authentication
   const { user: nostrUser, isAuthenticated: isNostrAuthenticated, isLoading: nostrLoading } = useNostr();
 
@@ -392,6 +426,148 @@ export default function AdminPanel() {
     }
   };
 
+  const parseMissingTracks = async () => {
+    setParsingMissingTracks(true);
+    setParseResult(null);
+    setParseProgress(null);
+
+    try {
+      const response = await fetch('/api/playlist/parse-feeds-stream');
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        toast.error('Failed to start parsing');
+        setParsingMissingTracks(false);
+        return;
+      }
+
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.type === 'start') {
+                setParseProgress({
+                  current: 0,
+                  total: data.total,
+                  parsed: 0,
+                  failed: 0,
+                  totalTracks: 0
+                });
+              } else if (data.type === 'progress') {
+                setParseProgress({
+                  current: data.current,
+                  total: data.total,
+                  feedTitle: data.feedTitle,
+                  parsed: data.parsed,
+                  failed: data.failed,
+                  totalTracks: data.totalTracks
+                });
+              } else if (data.type === 'complete') {
+                setParseResult({
+                  total: data.parsed + data.failed,
+                  parsed: data.parsed,
+                  failed: data.failed,
+                  totalTracks: data.totalTracks
+                });
+                setParseProgress(null);
+                if (data.parsed > 0) {
+                  toast.success(`Parsed ${data.parsed} feeds, imported ${data.totalTracks} tracks`);
+                } else if (data.parsed === 0 && data.failed === 0) {
+                  toast.info('No feeds with missing tracks found');
+                } else {
+                  toast.warning(`Found feeds but failed to parse any`);
+                }
+                setOrphanPreview(null);
+              } else if (data.error) {
+                toast.error(data.error);
+              }
+            } catch (e) {
+              // Ignore parse errors
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error parsing feeds:', error);
+      toast.error('Network error. Please try again.');
+    } finally {
+      setParsingMissingTracks(false);
+      setParseProgress(null);
+    }
+  };
+
+  const checkForOrphans = async () => {
+    setCheckingOrphans(true);
+    setOrphanPreview(null);
+
+    try {
+      const response = await fetch('/api/admin/orphaned-items');
+      const data = await response.json();
+
+      if (response.ok) {
+        setOrphanPreview(data);
+        if (data.orphanedFeeds === 0) {
+          toast.success('No orphaned items found - database is clean!');
+        }
+      } else {
+        toast.error(data.error || 'Failed to check for orphaned items');
+      }
+    } catch (error) {
+      console.error('Error checking orphans:', error);
+      toast.error('Network error. Please try again.');
+    } finally {
+      setCheckingOrphans(false);
+    }
+  };
+
+  const deleteOrphanedItems = async () => {
+    if (!orphanPreview || orphanPreview.orphanedFeeds === 0) {
+      toast.error('No orphaned items to delete');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${orphanPreview.orphanedFeeds} orphaned feeds and ${orphanPreview.orphanedTracks} orphaned tracks?\n\nThis will remove all items NOT referenced by any system playlist.\n\nThis action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    setDeletingOrphans(true);
+
+    try {
+      const response = await fetch('/api/admin/orphaned-items', {
+        method: 'DELETE',
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success(`Deleted ${data.deletedFeeds} feeds and ${data.deletedTracks} tracks. ${data.remainingFeeds} feeds remain.`);
+        setOrphanPreview(null);
+        fetchRecentFeeds();
+      } else {
+        toast.error(data.error || 'Failed to delete orphaned items');
+      }
+    } catch (error) {
+      console.error('Error deleting orphans:', error);
+      toast.error('Network error. Please try again.');
+    } finally {
+      setDeletingOrphans(false);
+    }
+  };
+
   // Show loading state
   if (loading || nostrLoading || verifying) {
     return (
@@ -700,6 +876,187 @@ export default function AdminPanel() {
                   <div className="text-center py-2">
                     <p className="text-gray-400">
                       {deletePreview.message || `No feed found for slug "${deletePreview.slug}"`}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Database Cleanup - Orphaned Items */}
+        <div className="bg-white/5 backdrop-blur-sm rounded-xl border border-orange-500/30 p-6 mb-8">
+          <h2 className="text-2xl font-semibold mb-4 text-orange-400">Database Cleanup</h2>
+          <p className="text-sm text-gray-400 mb-4">
+            Remove feeds and tracks that are NOT referenced by any system playlist. This keeps only items that are part of curated playlists (MMM, SAS, HGH, etc.).
+          </p>
+
+          <div className="space-y-4">
+            {/* Step 1: Parse missing tracks */}
+            <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+              <h3 className="text-sm font-medium text-gray-300 mb-2">Step 1: Parse Missing Tracks</h3>
+              <p className="text-xs text-gray-500 mb-3">
+                Import tracks for feeds that have none. This ensures feeds are properly linked before cleanup.
+              </p>
+              <button
+                type="button"
+                onClick={parseMissingTracks}
+                disabled={parsingMissingTracks || checkingOrphans || deletingOrphans}
+                className="px-4 py-2 bg-blue-600/20 text-blue-400 rounded-lg hover:bg-blue-600/30 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium flex items-center gap-2"
+              >
+                {parsingMissingTracks ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
+                    Parsing feeds...
+                  </>
+                ) : (
+                  <>Parse Missing Tracks</>
+                )}
+              </button>
+              {/* Progress Bar */}
+              {parseProgress && (
+                <div className="mt-3 space-y-2">
+                  <div className="flex justify-between text-xs text-gray-400">
+                    <span>Processing {parseProgress.current} of {parseProgress.total}</span>
+                    <span>{Math.round((parseProgress.current / parseProgress.total) * 100)}%</span>
+                  </div>
+                  <div className="w-full bg-gray-700 rounded-full h-2">
+                    <div
+                      className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                      style={{ width: `${(parseProgress.current / parseProgress.total) * 100}%` }}
+                    />
+                  </div>
+                  {parseProgress.feedTitle && (
+                    <p className="text-xs text-gray-500 truncate">
+                      {parseProgress.feedTitle}
+                    </p>
+                  )}
+                  <div className="flex gap-4 text-xs">
+                    <span className="text-green-400">{parseProgress.parsed} parsed</span>
+                    <span className="text-yellow-400">{parseProgress.failed} failed</span>
+                    <span className="text-blue-400">{parseProgress.totalTracks} tracks</span>
+                  </div>
+                </div>
+              )}
+              {parseResult && !parseProgress && (
+                <div className="mt-3 text-xs text-gray-400">
+                  Found {parseResult.total} feeds without tracks.
+                  Parsed {parseResult.parsed}, imported {parseResult.totalTracks} tracks.
+                  {parseResult.failed > 0 && <span className="text-yellow-400"> ({parseResult.failed} failed)</span>}
+                </div>
+              )}
+            </div>
+
+            {/* Step 2: Check for orphans */}
+            <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+              <h3 className="text-sm font-medium text-gray-300 mb-2">Step 2: Check for Orphaned Items</h3>
+              <p className="text-xs text-gray-500 mb-3">
+                Find feeds/tracks not referenced by any system playlist.
+              </p>
+              <button
+                type="button"
+                onClick={checkForOrphans}
+                disabled={checkingOrphans || deletingOrphans || parsingMissingTracks}
+                className="px-4 py-2 bg-orange-600/20 text-orange-400 rounded-lg hover:bg-orange-600/30 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium flex items-center gap-2"
+              >
+                {checkingOrphans ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-400"></div>
+                    Checking...
+                  </>
+                ) : (
+                  <>Check for Orphaned Items</>
+                )}
+              </button>
+            </div>
+
+            {/* Orphan Preview Results */}
+            {orphanPreview && (
+              <div className={`rounded-lg p-4 border ${
+                orphanPreview.orphanedFeeds > 0
+                  ? 'bg-red-500/10 border-red-500/30'
+                  : 'bg-green-500/10 border-green-500/30'
+              }`}>
+                {orphanPreview.orphanedFeeds > 0 ? (
+                  <div className="space-y-4">
+                    {/* Summary Stats */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="bg-white/5 rounded p-3">
+                        <p className="text-xs text-gray-400">Feeds to Keep</p>
+                        <p className="text-xl font-bold text-green-400">{orphanPreview.feedsToKeep}</p>
+                      </div>
+                      <div className="bg-white/5 rounded p-3">
+                        <p className="text-xs text-gray-400">Orphaned Feeds</p>
+                        <p className="text-xl font-bold text-red-400">{orphanPreview.orphanedFeeds}</p>
+                      </div>
+                      <div className="bg-white/5 rounded p-3">
+                        <p className="text-xs text-gray-400">Orphaned Tracks</p>
+                        <p className="text-xl font-bold text-red-400">{orphanPreview.orphanedTracks}</p>
+                      </div>
+                      <div className="bg-white/5 rounded p-3">
+                        <p className="text-xs text-gray-400">Total in DB</p>
+                        <p className="text-xl font-bold text-gray-300">{orphanPreview.totalFeeds} feeds</p>
+                      </div>
+                    </div>
+
+                    {/* Sample Orphaned Feeds */}
+                    {orphanPreview.sampleOrphanedFeeds.length > 0 && (
+                      <div>
+                        <p className="text-sm text-gray-400 mb-2">
+                          Sample of feeds to be deleted ({Math.min(50, orphanPreview.orphanedFeeds)} of {orphanPreview.orphanedFeeds}):
+                        </p>
+                        <div className="max-h-48 overflow-y-auto space-y-2">
+                          {orphanPreview.sampleOrphanedFeeds.map((feed) => (
+                            <div key={feed.id} className="flex items-center gap-3 bg-white/5 rounded p-2 text-sm">
+                              {feed.image && (
+                                <img
+                                  src={feed.image}
+                                  alt={feed.title}
+                                  className="w-8 h-8 rounded object-cover flex-shrink-0"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                  }}
+                                />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-white truncate">{feed.title}</p>
+                                <p className="text-xs text-gray-400">{feed.artist} - {feed.trackCount} tracks</p>
+                              </div>
+                              <span className={`px-2 py-0.5 rounded text-xs ${
+                                feed.type === 'album' ? 'bg-blue-600/20 text-blue-400' :
+                                feed.type === 'publisher' ? 'bg-purple-600/20 text-purple-400' :
+                                'bg-gray-600/20 text-gray-400'
+                              }`}>
+                                {feed.type}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Delete Button */}
+                    <button
+                      type="button"
+                      onClick={deleteOrphanedItems}
+                      disabled={deletingOrphans || checkingOrphans}
+                      className="w-full px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center justify-center gap-2"
+                    >
+                      {deletingOrphans ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          Deleting...
+                        </>
+                      ) : (
+                        <>Delete {orphanPreview.orphanedFeeds} Orphaned Feeds</>
+                      )}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <p className="text-green-400 font-medium">Database is clean!</p>
+                    <p className="text-sm text-gray-400 mt-1">
+                      All {orphanPreview.totalFeeds} feeds are referenced by system playlists.
                     </p>
                   </div>
                 )}
