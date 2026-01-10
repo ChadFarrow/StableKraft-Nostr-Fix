@@ -142,9 +142,10 @@ export async function GET(request: Request) {
       
       // Get active feeds with their tracks directly from database
       // Exclude sidebar-only items from main site display
-      // Add timeout protection and limit to prevent hanging
-      const maxFeedsToLoad = Math.min(feedsToLoad, 500); // Limit to 500 feeds max to prevent timeout
-      
+      // Load all feeds - no artificial limit
+      const maxFeedsToLoad = feedsToLoad;
+
+
       try {
         // Fetch feeds with minimal track data (optimized select)
         feeds = await prisma.feed.findMany({
@@ -411,7 +412,18 @@ export async function GET(request: Request) {
     // Get accurate total count of filtered results
     // Since we always load all feeds, filteredAlbums.length is the accurate total count
     let totalCount = filteredAlbums.length;
-    
+
+    // Calculate format counts for "all" filter (helps frontend with format-aware pagination)
+    let formatCounts = { albums: 0, eps: 0, singles: 0 };
+    if (filter === 'all') {
+      filteredAlbums.forEach(album => {
+        const trackCount = album.trackCount || album.tracks?.length || 0;
+        if (trackCount >= 6) formatCounts.albums++;
+        else if (trackCount >= 2) formatCounts.eps++;
+        else formatCounts.singles++;
+      });
+    }
+
     // Apply final pagination to filtered results
     const paginatedAlbums = filteredAlbums.slice(offset, offset + limit);
     
@@ -428,7 +440,8 @@ export async function GET(request: Request) {
         filter,
         cached: !shouldRefreshCache,
         cacheAge: now - cacheTimestamp,
-        source: 'database'
+        source: 'database',
+        formatCounts: filter === 'all' ? formatCounts : undefined
       }
     }, {
       headers: {
