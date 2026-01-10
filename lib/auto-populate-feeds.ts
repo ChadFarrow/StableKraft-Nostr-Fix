@@ -80,6 +80,7 @@ export async function autoPopulateFeeds(feedGuids: string[], playlistName: strin
                   type: feedData.medium === 'music' ? 'album' : 'podcast',
                   language: feedData.language || null,
                   category: feedData.categories ? Object.keys(feedData.categories)[0] : null,
+                  podcastCategories: [], // Will be populated from RSS parsing
                   explicit: feedData.explicit || false,
                   status: 'active',
                   lastFetched: new Date(),
@@ -128,6 +129,7 @@ export async function autoPopulateFeeds(feedGuids: string[], playlistName: strin
                     itunesDuration: item.itunesDuration,
                     itunesKeywords: item.itunesKeywords || [],
                     itunesCategories: item.itunesCategories || [],
+                    podcastCategories: parsedFeed.podcastCategories || [],
                     v4vRecipient: item.v4vRecipient,
                     v4vValue: item.v4vValue,
                     startTime: item.startTime,

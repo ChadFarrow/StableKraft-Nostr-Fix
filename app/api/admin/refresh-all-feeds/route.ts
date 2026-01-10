@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
               image: parsedFeed.image,
               language: parsedFeed.language,
               category: parsedFeed.category,
+              podcastCategories: parsedFeed.podcastCategories || [],
               explicit: parsedFeed.explicit,
               lastFetched: new Date(),
               status: 'active',
@@ -99,21 +100,30 @@ export async function POST(request: NextRequest) {
               itunesDuration: item.itunesDuration,
               itunesKeywords: item.itunesKeywords || [],
               itunesCategories: item.itunesCategories || [],
+              podcastCategories: parsedFeed.podcastCategories || [],
               v4vRecipient: item.v4vRecipient,
               v4vValue: item.v4vValue,
               startTime: item.startTime,
               endTime: item.endTime,
               updatedAt: new Date()
             }));
-            
+
             await prisma.track.createMany({
               data: tracksData,
               skipDuplicates: true
             });
-            
+
             newTracksTotal += newItems.length;
           }
-          
+
+          // Update all existing tracks with podcastCategories from the feed
+          if (parsedFeed.podcastCategories && parsedFeed.podcastCategories.length > 0) {
+            await prisma.track.updateMany({
+              where: { feedId: feed.id },
+              data: { podcastCategories: parsedFeed.podcastCategories }
+            });
+          }
+
           successCount++;
           console.log(`✅ Refreshed ${feed.title}: ${newItems.length} new tracks`);
           

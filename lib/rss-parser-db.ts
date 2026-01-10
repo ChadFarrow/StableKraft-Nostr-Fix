@@ -88,6 +88,7 @@ export interface ParsedFeed {
   artist?: string;
   language?: string;
   category?: string;
+  podcastCategories?: string[];
   explicit: boolean;
   podcastGuid?: string;
   items: ParsedItem[];
@@ -526,9 +527,9 @@ function extractItunesImage(itunesImage: any): string | undefined {
 
 function extractItunesCategories(categories: any): string[] {
   if (!categories) return [];
-  
+
   const result: string[] = [];
-  
+
   if (Array.isArray(categories)) {
     categories.forEach(cat => {
       if (!cat) return; // Skip null/undefined items
@@ -539,8 +540,60 @@ function extractItunesCategories(categories: any): string[] {
       }
     });
   }
-  
+
   return result;
+}
+
+/**
+ * Extract podcast:category tags from XML including nested subcategories
+ * Example input:
+ * <podcast:category text="Pop">
+ *   <podcast:category text="Indie Pop"/>
+ * </podcast:category>
+ * Returns: ["Pop", "Indie Pop"]
+ */
+function extractPodcastCategories(xmlText: string): string[] {
+  const categories: string[] = [];
+
+  try {
+    // Extract the channel section (before items)
+    const channelMatch = xmlText.match(/<channel[^>]*>([\s\S]*?)<\/channel>/);
+    if (!channelMatch) return categories;
+
+    const channelContent = channelMatch[1];
+    // Get only channel-level content before items
+    const beforeItems = channelContent.split(/<item[\s>]/)[0];
+
+    // Match all podcast:category tags with their content
+    // Handles both self-closing and tags with children
+    const categoryRegex = /<podcast:category[^>]*text=["']([^"']+)["'][^>]*(?:\/>|>([\s\S]*?)<\/podcast:category>)/gi;
+
+    let match;
+    while ((match = categoryRegex.exec(beforeItems)) !== null) {
+      const categoryText = match[1];
+      const innerContent = match[2] || '';
+
+      if (categoryText && !categories.includes(categoryText)) {
+        categories.push(categoryText);
+      }
+
+      // Parse nested subcategories
+      if (innerContent) {
+        const nestedRegex = /<podcast:category[^>]*text=["']([^"']+)["'][^>]*(?:\/>|>[^<]*<\/podcast:category>)/gi;
+        let nestedMatch;
+        while ((nestedMatch = nestedRegex.exec(innerContent)) !== null) {
+          const subCategoryText = nestedMatch[1];
+          if (subCategoryText && !categories.includes(subCategoryText)) {
+            categories.push(subCategoryText);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error extracting podcast categories from XML:', error);
+  }
+
+  return categories;
 }
 
 function parseDuration(duration: string | undefined): number | undefined {
@@ -616,7 +669,8 @@ export async function parseRSSFeed(feedUrl: string): Promise<ParsedFeed> {
     
     const feedArtist = feed.itunes?.author || undefined;
     const feedCategories = extractItunesCategories(feed.itunes?.categories);
-    const feedExplicit = feed.itunes?.explicit?.toLowerCase() === 'yes' || 
+    const podcastCategories = extractPodcastCategories(xmlText);
+    const feedExplicit = feed.itunes?.explicit?.toLowerCase() === 'yes' ||
                         feed.itunes?.explicit?.toLowerCase() === 'true';
     
     // Parse items
@@ -893,6 +947,7 @@ export async function parseRSSFeed(feedUrl: string): Promise<ParsedFeed> {
       artist: feedArtist,
       language: feed.language,
       category: feedCategories[0], // Take first category as primary
+      podcastCategories: podcastCategories.length > 0 ? podcastCategories : undefined,
       explicit: feedExplicit,
       podcastGuid: podcastGuid || undefined,
       items,

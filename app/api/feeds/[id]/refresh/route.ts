@@ -96,13 +96,14 @@ export async function POST(
           itunesDuration: item.itunesDuration,
           itunesKeywords: item.itunesKeywords || [],
           itunesCategories: item.itunesCategories || [],
+          podcastCategories: parsedFeed.podcastCategories || [],
           v4vRecipient: item.v4vRecipient,
           v4vValue: item.v4vValue,
           startTime: item.startTime,
           endTime: item.endTime,
           updatedAt: new Date()
         }));
-        
+
         await prisma.track.createMany({
           data: tracksData,
           skipDuplicates: true

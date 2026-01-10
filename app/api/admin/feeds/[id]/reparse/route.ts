@@ -62,6 +62,7 @@ export async function POST(
           image: parsedFeed.image,
           language: parsedFeed.language,
           category: parsedFeed.category,
+          podcastCategories: parsedFeed.podcastCategories || [],
           explicit: parsedFeed.explicit,
           lastFetched: new Date(),
           status: 'active',
@@ -121,8 +122,11 @@ export async function POST(
         }
 
         if (order !== null) {
-          // Build update data with trackOrder and v4v data if available
-          const updateData: any = { trackOrder: order };
+          // Build update data with trackOrder, v4v data, and podcast categories
+          const updateData: any = {
+            trackOrder: order,
+            podcastCategories: parsedFeed.podcastCategories || []
+          };
 
           // Update v4v data from the parsed feed item
           if (matchedItem) {
@@ -205,6 +209,7 @@ export async function POST(
             itunesDuration: item.itunesDuration,
             itunesKeywords: item.itunesKeywords || [],
             itunesCategories: item.itunesCategories || [],
+            podcastCategories: parsedFeed.podcastCategories || [],
             v4vRecipient: item.v4vRecipient,
             v4vValue: item.v4vValue,
             startTime: item.startTime,

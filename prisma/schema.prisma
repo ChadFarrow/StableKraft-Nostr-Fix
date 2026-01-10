@@ -34,8 +34,9 @@ model Feed {
   artist       String?
   image        String?
   language     String?
-  category     String?
-  explicit     Boolean   @default(false)
+  category          String?
+  podcastCategories String[]  @default([])
+  explicit          Boolean   @default(false)
   priority     String    @default("normal")
   status       String    @default("active")
   lastFetched  DateTime?
@@ -91,8 +92,9 @@ model Track {
   itunesImage      String?
   itunesDuration   String?
   itunesKeywords   String[]  @default([])
-  itunesCategories String[]  @default([])
-  v4vRecipient     String?
+  itunesCategories  String[]  @default([])
+  podcastCategories String[]  @default([])
+  v4vRecipient      String?
   v4vValue         Json?
   startTime        Float?
   endTime          Float?

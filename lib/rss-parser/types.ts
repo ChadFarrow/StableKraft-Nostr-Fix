@@ -107,6 +107,7 @@ export interface RSSAlbum {
   summary?: string;
   keywords?: string[];
   categories?: string[];
+  podcastCategories?: string[];
   explicit?: boolean;
   language?: string;
   copyright?: string;
