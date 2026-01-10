@@ -130,10 +130,6 @@ function HomePageContent() {
   const [displayedAlbums, setDisplayedAlbums] = useState<RSSAlbum[]>([]);
   const [hasMoreAlbums, setHasMoreAlbums] = useState(true);
   const ALBUMS_PER_PAGE = 50; // Load 50 albums per page for better user experience
-
-  // Format-aware loading state (for "all" filter - load all albums before EPs)
-  const [formatCounts, setFormatCounts] = useState<{ albums: number; eps: number; singles: number } | null>(null);
-  const [currentFormatPhase, setCurrentFormatPhase] = useState<'albums' | 'eps' | 'singles'>('albums');
   const API_VERSION = 'v10'; // Increment to bust cache when API changes - v10 includes V4V fields + AudioContext version check
   
   // HGH filter removed - no longer needed
@@ -407,51 +403,15 @@ function HomePageContent() {
     const nextPage = currentPage + 1;
 
       try {
-        // Format-aware loading: For "all" filter, ensure we load all albums before any EPs
-        const currentCount = displayedAlbums.length;
-        let startIndex = (nextPage - 1) * ALBUMS_PER_PAGE;
-        let loadLimit = ALBUMS_PER_PAGE;
-
-        // When "all" is selected and we have format counts, enforce format boundaries
-        if (activeFilter === 'all' && formatCounts) {
-          const { albums: albumCount, eps: epCount } = formatCounts;
-          const albumsAndEpsCount = albumCount + epCount;
-
-          if (currentCount < albumCount) {
-            // Still loading albums - load remaining albums (or batch size, whichever is smaller)
-            const remaining = albumCount - currentCount;
-            loadLimit = Math.min(remaining, ALBUMS_PER_PAGE * 2); // Load bigger batches for albums
-            if (process.env.NODE_ENV === 'development') {
-              console.log(`📀 Loading albums: ${currentCount}/${albumCount} loaded, requesting ${loadLimit} more`);
-            }
-          } else if (currentCount < albumsAndEpsCount) {
-            // Done with albums, now loading EPs
-            if (currentFormatPhase !== 'eps') {
-              setCurrentFormatPhase('eps');
-              if (process.env.NODE_ENV === 'development') {
-                console.log(`💿 Transitioning to EPs phase`);
-              }
-            }
-          } else {
-            // Done with EPs, now loading singles
-            if (currentFormatPhase !== 'singles') {
-              setCurrentFormatPhase('singles');
-              if (process.env.NODE_ENV === 'development') {
-                console.log(`🎵 Transitioning to Singles phase`);
-              }
-            }
-          }
-        }
-
         // Load next page from API (server-side sorted globally: Albums → EPs → Singles)
-        const { albums: newAlbums, totalCount: newTotalCount } = await loadAlbumsData('all', loadLimit, startIndex, activeFilter, selectedGenre);
-
-
+        const startIndex = (nextPage - 1) * ALBUMS_PER_PAGE;
+        const { albums: newAlbums, totalCount: newTotalCount } = await loadAlbumsData('all', ALBUMS_PER_PAGE, startIndex, activeFilter);
+        
         // Update totalAlbums if we got a new total count (should be the same, but ensure consistency)
         if (newTotalCount > 0) {
           setTotalAlbums(newTotalCount);
         }
-
+        
         if (newAlbums.length > 0) {
           // Append new albums to existing ones (already sorted globally from server)
           // The API returns albums in correct global order: Albums → EPs → Singles
@@ -461,7 +421,7 @@ function HomePageContent() {
             // Check if there are more albums:
             // 1. If we loaded fewer albums than requested, we've reached the end
             // 2. Otherwise, check if total loaded is less than total count
-            const hasMore = newAlbums.length >= loadLimit && totalLoaded < newTotalCount;
+            const hasMore = newAlbums.length >= ALBUMS_PER_PAGE && totalLoaded < newTotalCount;
             if (process.env.NODE_ENV === 'development') {
               console.log(`📊 Pagination check: loaded=${newAlbums.length}, totalLoaded=${totalLoaded}, totalCount=${newTotalCount}, hasMore=${hasMore}`);
             }
@@ -481,7 +441,7 @@ function HomePageContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [isLoading, hasMoreAlbums, currentPage, activeFilter, totalAlbums, displayedAlbums.length, selectedGenre, formatCounts, currentFormatPhase]);
+  }, [isLoading, hasMoreAlbums, currentPage, activeFilter, totalAlbums, displayedAlbums.length]);
   
   // Keep loadPage for backward compatibility (used by pagination buttons)
   const loadPage = async (page: number) => {
@@ -543,16 +503,6 @@ function HomePageContent() {
 
     // Set activeFilter immediately so UI updates right away
     setActiveFilter(newFilter);
-
-    // Reset format-aware loading state
-    setFormatCounts(null);
-    setCurrentFormatPhase('albums');
-
-    // Clear genre filter when switching to publishers or playlists (genres don't apply)
-    if (newFilter === 'publishers' || newFilter === 'playlist') {
-      setSelectedGenre(null);
-      setIsGenreDropdownOpen(false);
-    }
 
     // Prevent URL sync effect from interfering while we're updating
     isUpdatingFromUrlRef.current = true;
@@ -917,16 +867,7 @@ function HomePageContent() {
       const albums = data.albums || [];
       const totalCount = data.totalCount || 0;
       const publisherStatsFromAPI = data.publisherStats || [];
-
-      // Capture format counts for format-aware pagination (when "all" filter)
-      if (data.metadata?.formatCounts && filter === 'all' && offset === 0) {
-        setFormatCounts(data.metadata.formatCounts);
-        setCurrentFormatPhase('albums'); // Reset to albums phase on new load
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`📊 Format counts: ${data.metadata.formatCounts.albums} albums, ${data.metadata.formatCounts.eps} EPs, ${data.metadata.formatCounts.singles} singles`);
-        }
-      }
-
+      
       // Update total albums count from API response (for pagination)
       setTotalAlbums(totalCount);
       
@@ -1395,61 +1336,6 @@ function HomePageContent() {
                 ))}
               </div>
 
-              {/* Genre Filter Dropdown */}
-              {availableGenres.length > 0 && (
-                <div className="relative" ref={genreDropdownRef}>
-                  <button
-                    onClick={() => setIsGenreDropdownOpen(!isGenreDropdownOpen)}
-                    disabled={isFilterLoading || activeFilter === 'publishers' || activeFilter === 'playlist'}
-                    title={activeFilter === 'publishers' || activeFilter === 'playlist' ? 'Genre filter not available for this view' : undefined}
-                    className={`flex items-center gap-2 px-3 py-2 rounded text-sm font-medium transition-all border ${
-                      activeFilter === 'publishers' || activeFilter === 'playlist'
-                        ? 'bg-gray-800/50 text-gray-500 border-gray-700 cursor-not-allowed opacity-50'
-                        : selectedGenre
-                          ? 'bg-purple-600 text-white border-purple-500'
-                          : 'bg-gray-800 text-gray-300 border-gray-600 hover:text-white hover:bg-gray-700'
-                    }`}
-                  >
-                    <span className="hidden sm:inline">Genre:</span>
-                    <span className="truncate max-w-[80px] sm:max-w-[120px]">
-                      {selectedGenre || 'All'}
-                    </span>
-                    <svg className={`w-4 h-4 transition-transform ${isGenreDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-
-                  {/* Dropdown Menu */}
-                  {isGenreDropdownOpen && (
-                    <div className="absolute top-full left-0 mt-1 w-56 max-h-80 overflow-y-auto bg-gray-800 border border-gray-600 rounded-lg shadow-xl z-50">
-                      {/* Clear option */}
-                      <button
-                        onClick={() => handleGenreChange(null)}
-                        className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-700 transition-colors ${
-                          !selectedGenre ? 'text-stablekraft-teal font-medium' : 'text-gray-300'
-                        }`}
-                      >
-                        All Genres
-                      </button>
-                      <div className="border-t border-gray-700" />
-                      {/* Genre list */}
-                      {availableGenres.slice(0, 20).map((genre) => (
-                        <button
-                          key={genre.name}
-                          onClick={() => handleGenreChange(genre.name)}
-                          className={`w-full text-left px-4 py-2 text-sm hover:bg-gray-700 transition-colors flex justify-between items-center ${
-                            selectedGenre === genre.name ? 'text-purple-400 font-medium bg-purple-900/30' : 'text-gray-300'
-                          }`}
-                        >
-                          <span className="truncate">{genre.name}</span>
-                          <span className="text-xs text-gray-500 ml-2">({genre.count})</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
               {/* Right side - Action buttons */}
               <div className="flex items-center gap-2 flex-shrink-0">
                 {/* Search Button */}
@@ -1781,8 +1667,8 @@ function HomePageContent() {
                       </div>
                   )}
 
-                  {/* EPs Grid - Only show after all albums have loaded */}
-                  {epsOnly.length > 0 && (!formatCounts || albumsWithMultipleTracks.length >= formatCounts.albums) && (
+                  {/* EPs Grid */}
+                  {epsOnly.length > 0 && (
                       <div className="mb-12">
                         <h2 className="text-2xl font-bold mb-6 text-white">EPs</h2>
                         {viewType === 'grid' ? (
@@ -1861,8 +1747,8 @@ function HomePageContent() {
                       </div>
                   )}
 
-                  {/* Singles Grid - Only show after all EPs have loaded */}
-                  {singlesOnly.length > 0 && (!formatCounts || (albumsWithMultipleTracks.length >= formatCounts.albums && epsOnly.length >= formatCounts.eps)) && (
+                  {/* Singles Grid */}
+                  {singlesOnly.length > 0 && (
                       <div>
                         <h2 className="text-2xl font-bold mb-6 text-white">Singles</h2>
                         {viewType === 'grid' ? (
