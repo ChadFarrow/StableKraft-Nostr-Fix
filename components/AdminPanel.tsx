@@ -24,6 +24,16 @@ export default function AdminPanel() {
   const [reparseFeedUrl, setReparseFeedUrl] = useState('');
   const [reparsingByUrl, setReparsingByUrl] = useState(false);
 
+  // Delete by URL state
+  const [deleteUrl, setDeleteUrl] = useState('');
+  const [deletingByUrl, setDeletingByUrl] = useState(false);
+  const [deletePreview, setDeletePreview] = useState<{
+    found: boolean;
+    feed?: { id: string; title: string; artist: string; image?: string; trackCount: number };
+    slug?: string;
+    message?: string;
+  } | null>(null);
+
   // Nostr authentication
   const { user: nostrUser, isAuthenticated: isNostrAuthenticated, isLoading: nostrLoading } = useNostr();
 
@@ -312,6 +322,75 @@ export default function AdminPanel() {
     }
   };
 
+  const previewDeleteByUrl = async () => {
+    const url = deleteUrl.trim();
+    if (!url) {
+      toast.error('Please enter a URL');
+      return;
+    }
+
+    setDeletingByUrl(true);
+    setDeletePreview(null);
+
+    try {
+      const response = await fetch('/api/admin/feeds/delete-by-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, preview: true }),
+      });
+
+      const data = await response.json();
+      setDeletePreview(data);
+
+      if (!data.found) {
+        toast.info(data.message || 'No feed found for this URL');
+      }
+    } catch (error) {
+      console.error('Error previewing delete:', error);
+      toast.error('Failed to look up feed');
+    } finally {
+      setDeletingByUrl(false);
+    }
+  };
+
+  const confirmDeleteByUrl = async () => {
+    if (!deletePreview?.found || !deletePreview.feed) {
+      toast.error('No feed selected for deletion');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${deletePreview.feed.title}" by ${deletePreview.feed.artist}?\n\nThis will remove the feed and all ${deletePreview.feed.trackCount} tracks. This action cannot be undone.`
+    );
+
+    if (!confirmed) return;
+
+    setDeletingByUrl(true);
+
+    try {
+      const response = await fetch('/api/admin/feeds/delete-by-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: deleteUrl.trim(), preview: false }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success(`Deleted "${data.deleted.title}" by ${data.deleted.artist} (${data.deleted.trackCount} tracks)`);
+        setDeleteUrl('');
+        setDeletePreview(null);
+        fetchRecentFeeds();
+      } else {
+        toast.error(data.error || 'Failed to delete feed');
+      }
+    } catch (error) {
+      console.error('Error deleting feed:', error);
+      toast.error('Network error. Please try again.');
+    } finally {
+      setDeletingByUrl(false);
+    }
+  };
 
   // Show loading state
   if (loading || nostrLoading || verifying) {
@@ -514,6 +593,119 @@ export default function AdminPanel() {
               </p>
             </div>
           </form>
+        </div>
+
+        {/* Delete by URL */}
+        <div className="bg-white/5 backdrop-blur-sm rounded-xl border border-red-500/30 p-6 mb-8">
+          <h2 className="text-2xl font-semibold mb-4 text-red-400">Delete Feed by URL</h2>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="deleteUrl" className="block text-sm font-medium text-gray-300 mb-2">
+                Paste Site URL (e.g., /album/some-album)
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  id="deleteUrl"
+                  value={deleteUrl}
+                  onChange={(e) => {
+                    setDeleteUrl(e.target.value);
+                    setDeletePreview(null);
+                  }}
+                  onPaste={(e) => {
+                    const pastedText = e.clipboardData.getData('text');
+                    if (pastedText.trim()) {
+                      setDeleteUrl(pastedText.trim());
+                      setDeletePreview(null);
+                    }
+                  }}
+                  placeholder="http://localhost:3000/album/aseda or /album/aseda"
+                  className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                  disabled={deletingByUrl}
+                  autoComplete="off"
+                />
+                <button
+                  type="button"
+                  onClick={previewDeleteByUrl}
+                  disabled={deletingByUrl || !deleteUrl.trim()}
+                  className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
+                >
+                  {deletingByUrl && !deletePreview ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Looking up...
+                    </>
+                  ) : (
+                    <>
+                      🔍 Preview
+                    </>
+                  )}
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-gray-400">
+                Paste a site URL to look up the feed. Preview first to confirm, then delete.
+              </p>
+            </div>
+
+            {/* Preview Result */}
+            {deletePreview && (
+              <div className={`rounded-lg p-4 border ${
+                deletePreview.found
+                  ? 'bg-red-500/10 border-red-500/30'
+                  : 'bg-gray-500/10 border-gray-500/30'
+              }`}>
+                {deletePreview.found && deletePreview.feed ? (
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-4">
+                      {deletePreview.feed.image && (
+                        <img
+                          src={deletePreview.feed.image}
+                          alt={deletePreview.feed.title}
+                          className="w-16 h-16 rounded object-cover flex-shrink-0"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-semibold text-white">{deletePreview.feed.title}</h4>
+                        <p className="text-sm text-gray-300">{deletePreview.feed.artist}</p>
+                        <p className="text-sm text-gray-400 mt-1">
+                          📀 {deletePreview.feed.trackCount} tracks
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1 font-mono">
+                          ID: {deletePreview.feed.id}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={confirmDeleteByUrl}
+                      disabled={deletingByUrl}
+                      className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center justify-center gap-2"
+                    >
+                      {deletingByUrl ? (
+                        <>
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                          Deleting...
+                        </>
+                      ) : (
+                        <>
+                          🗑️ Delete This Feed
+                        </>
+                      )}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="text-center py-2">
+                    <p className="text-gray-400">
+                      {deletePreview.message || `No feed found for slug "${deletePreview.slug}"`}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Recently Added Feeds */}
