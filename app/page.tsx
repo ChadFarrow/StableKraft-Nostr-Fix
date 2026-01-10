@@ -1516,7 +1516,7 @@ function HomePageContent() {
                     <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
                       {criticalAlbums.map((album, index) => (
                         <AlbumCard
-                          key={`critical-${index}`}
+                          key={album.feedId || album.feedGuid || album.title}
                           album={album}
                           onPlay={playAlbum}
                         />
@@ -1533,9 +1533,9 @@ function HomePageContent() {
                         <h2 className="text-2xl font-bold mb-6 text-white">Albums</h2>
                         {viewType === 'grid' ? (
                           <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
-                            {albumsWithMultipleTracks.map((album, index) => (
+                            {albumsWithMultipleTracks.map((album) => (
                               <AlbumCard
-                                key={`album-${index}`}
+                                key={album.feedId || album.feedGuid || album.title}
                                 album={album}
                                 onPlay={playAlbum}
                               />
@@ -1543,9 +1543,9 @@ function HomePageContent() {
                           </div>
                         ) : (
                           <div className="space-y-2">
-                            {albumsWithMultipleTracks.map((album, index) => (
+                            {albumsWithMultipleTracks.map((album) => (
                               <Link
-                                key={`album-${index}`}
+                                key={album.feedId || album.feedGuid || album.title}
                                 href={generateAlbumUrl(album.title)}
                                 className="group flex items-center gap-4 p-4 bg-black/40 backdrop-blur-md rounded-xl hover:bg-black/50 transition-all duration-300 border border-gray-700/50 hover:border-cyan-400/30 shadow-lg hover:shadow-xl hover:shadow-cyan-400/10"
                               >
@@ -1615,7 +1615,7 @@ function HomePageContent() {
                           <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
                             {epsOnly.map((album, index) => (
                               <AlbumCard
-                                key={`ep-${index}`}
+                                key={album.feedId || album.feedGuid || album.title}
                                 album={album}
                                 onPlay={playAlbum}
                               />
@@ -1625,7 +1625,7 @@ function HomePageContent() {
                           <div className="space-y-2">
                             {epsOnly.map((album, index) => (
                               <Link
-                                key={`ep-${index}`}
+                                key={album.feedId || album.feedGuid || album.title}
                                 href={generateAlbumUrl(album.title)}
                                 className="group flex items-center gap-4 p-4 bg-black/40 backdrop-blur-md rounded-xl hover:bg-black/50 transition-all duration-300 border border-gray-700/50 hover:border-cyan-400/30 shadow-lg hover:shadow-xl hover:shadow-cyan-400/10"
                               >
@@ -1695,7 +1695,7 @@ function HomePageContent() {
                           <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
                             {singlesOnly.map((album, index) => (
                               <AlbumCard
-                                key={`single-${index}`}
+                                key={album.feedId || album.feedGuid || album.title}
                                 album={album}
                                 onPlay={playAlbum}
                               />
@@ -1705,7 +1705,7 @@ function HomePageContent() {
                           <div className="space-y-2">
                             {singlesOnly.map((album, index) => (
                               <Link
-                                key={`single-${index}`}
+                                key={album.feedId || album.feedGuid || album.title}
                                 href={generateAlbumUrl(album.title)}
                                 className="group flex items-center gap-4 p-4 bg-black/40 backdrop-blur-md rounded-xl hover:bg-black/50 transition-all duration-300 border border-gray-700/50 hover:border-cyan-400/30 shadow-lg hover:shadow-xl hover:shadow-cyan-400/10"
                               >
@@ -1772,9 +1772,9 @@ function HomePageContent() {
                 viewType === 'grid' ? (
                   <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
                     {filteredAlbums
-                      .map((album, index) => (
+                      .map((album) => (
                       <AlbumCard
-                        key={`${album.title}-${index}`}
+                        key={album.feedId || album.feedGuid || album.title}
                         album={album}
                         onPlay={playAlbum}
                       />
@@ -1783,9 +1783,9 @@ function HomePageContent() {
                 ) : (
                   <div className="space-y-2">
                     {filteredAlbums
-                      .map((album, index) => (
+                      .map((album) => (
                       <Link
-                        key={`${album.title}-${index}`}
+                        key={album.feedId || album.feedGuid || album.title}
                         href={generateAlbumUrl(album.title)}
                         className="group flex items-center gap-4 p-4 bg-black/40 backdrop-blur-md rounded-xl hover:bg-black/50 transition-all duration-300 border border-gray-700/50 hover:border-cyan-400/30 shadow-lg hover:shadow-xl hover:shadow-cyan-400/10"
                       >
