@@ -6,26 +6,7 @@ export async function GET() {
   try {
     console.log('🔍 Publishers API: Loading publishers from database');
 
-    // Get all publisher feeds
-    const publishers = await prisma.feed.findMany({
-      where: {
-        type: 'publisher',
-        status: 'active'
-      },
-      select: {
-        id: true,
-        title: true,
-        artist: true,
-        description: true,
-        image: true,
-        originalUrl: true
-      },
-      orderBy: {
-        title: 'asc'
-      }
-    });
-
-    // Get all album feeds with track counts and images (for matching by artist name)
+    // Get all album feeds with track counts and images, grouped by artist
     const albumFeeds = await prisma.feed.findMany({
       where: {
         type: { in: ['album', 'music'] },
@@ -46,102 +27,70 @@ export async function GET() {
       }
     });
 
-    // Fetch all albums with publisherId in a single query (fixes N+1 query issue)
-    const albumsWithPublisherId = await prisma.feed.findMany({
-      where: {
-        publisherId: { not: null },
-        type: { in: ['album', 'music'] },
-        status: 'active'
-      },
-      select: {
-        id: true,
-        image: true,
-        publisherId: true,
-        _count: { select: { Track: true } }
-      }
-    });
+    console.log(`📊 Found ${albumFeeds.length} album feeds`);
 
-    // Group albums by publisherId for fast lookup
-    const albumsByPublisherId = new Map<string, typeof albumsWithPublisherId>();
-    for (const album of albumsWithPublisherId) {
-      if (album.publisherId) {
-        const existing = albumsByPublisherId.get(album.publisherId) || [];
-        existing.push(album);
-        albumsByPublisherId.set(album.publisherId, existing);
-      }
+    // Group albums by artist name to create publishers
+    const artistAlbums = new Map<string, typeof albumFeeds>();
+    for (const album of albumFeeds) {
+      if (!album.artist || album._count.Track === 0) continue;
+
+      const artistKey = album.artist.toLowerCase().trim();
+      const existing = artistAlbums.get(artistKey) || [];
+      existing.push(album);
+      artistAlbums.set(artistKey, existing);
     }
 
-    console.log(`📊 Found ${publishers.length} publishers, ${albumFeeds.length} album feeds, ${albumsWithPublisherId.length} linked albums`);
+    // Transform to the expected format
+    const publisherList: {
+      id: string;
+      title: string;
+      feedGuid: string;
+      originalUrl: string | null;
+      image: string;
+      description: string;
+      albums: never[];
+      itemCount: number;
+      totalTracks: number;
+      isPublisherCard: boolean;
+      publisherUrl: string;
+    }[] = [];
 
-    // Transform to the expected format, counting albums by artist name match AND publisherId relationship
-    const publisherList = publishers.map(publisher => {
-      const publisherArtist = (publisher.artist || publisher.title)?.toLowerCase();
+    for (const [artistKey, albums] of artistAlbums) {
+      // Only include artists with more than 1 release
+      if (albums.length <= 1) continue;
 
-      // Find albums that match this publisher by artist name
-      // Matches exact name OR albums where artist starts with publisher name (for "Artist w/ Featured" cases)
-      const matchingAlbums = albumFeeds.filter(album => {
-        const albumArtist = album.artist?.toLowerCase();
-        if (!publisherArtist || !albumArtist) return false;
-        // Exact match
-        if (publisherArtist === albumArtist) return true;
-        // StartsWith match for "Artist w/ Featured" or "Artist & Band" patterns
-        if (albumArtist.startsWith(publisherArtist + ' ')) return true;
-        return false;
-      });
+      const artistName = albums[0].artist || 'Unknown Artist';
+      const trackCount = albums.reduce((sum, album) => sum + album._count.Track, 0);
 
-      // Only count albums that have tracks
-      const albumsWithTracks = matchingAlbums.filter(a => a._count.Track > 0);
-      let albumCount = albumsWithTracks.length;
-      let trackCount = albumsWithTracks.reduce((sum, album) => sum + album._count.Track, 0);
+      // Use the most recent album's image as the publisher image
+      const sortedAlbums = albums.sort((a, b) =>
+        new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
+      );
+      const image = sortedAlbums.find(a => a.image)?.image || '/placeholder-artist.png';
 
-      // Also count albums linked via publisherId (using pre-fetched data instead of N+1 query)
-      const linkedAlbums = albumsByPublisherId.get(publisher.id) || [];
-
-      // Use the higher count (artist matching vs publisherId linking)
-      if (linkedAlbums.length > albumCount) {
-        albumCount = linkedAlbums.length;
-        trackCount = linkedAlbums.reduce((sum, album) => sum + album._count.Track, 0);
-      }
-
-      // Use publisher image, or fallback to first album's cover art
-      const albumCover = albumsWithTracks.find(a => a.image)?.image;
-      const image = publisher.image || albumCover || '/placeholder-artist.png';
-
-      return {
-        id: publisher.id,
-        title: publisher.title || 'Unknown Publisher',
-        feedGuid: publisher.id,
-        originalUrl: publisher.originalUrl,
+      publisherList.push({
+        id: `artist-${artistKey.replace(/\s+/g, '-')}`,
+        title: artistName,
+        feedGuid: `artist-${artistKey.replace(/\s+/g, '-')}`,
+        originalUrl: null,
         image,
-        description: publisher.description || `Publisher with ${albumCount} releases`,
+        description: `${albums.length} releases, ${trackCount} tracks`,
         albums: [],
-        itemCount: albumCount,
+        itemCount: albums.length,
         totalTracks: trackCount,
         isPublisherCard: true,
-        publisherUrl: `/publisher/${generateAlbumSlug(publisher.title || publisher.id)}`
-      };
-    });
-
-    // Filter out publishers with 0-1 releases
-    const filteredPublisherList = publisherList.filter(publisher => publisher.itemCount > 1);
-
-    // Deduplicate publishers by title (keep the one with more releases)
-    const seenTitles = new Map<string, typeof filteredPublisherList[0]>();
-    for (const publisher of filteredPublisherList) {
-      const key = publisher.title.toLowerCase();
-      const existing = seenTitles.get(key);
-      if (!existing || publisher.itemCount > existing.itemCount) {
-        seenTitles.set(key, publisher);
-      }
+        publisherUrl: `/publisher/${generateAlbumSlug(artistName)}`
+      });
     }
-    const deduplicatedList = Array.from(seenTitles.values())
-      .sort((a, b) => a.title.localeCompare(b.title));
 
-    console.log(`✅ Publishers API: Returning ${deduplicatedList.length} publishers (from ${publishers.length} total, ${filteredPublisherList.length} with releases)`);
+    // Sort alphabetically by title
+    const sortedList = publisherList.sort((a, b) => a.title.localeCompare(b.title));
+
+    console.log(`✅ Publishers API: Returning ${sortedList.length} publishers derived from ${albumFeeds.length} album feeds`);
 
     const response = {
-      publishers: deduplicatedList,
-      total: deduplicatedList.length,
+      publishers: sortedList,
+      total: sortedList.length,
       timestamp: new Date().toISOString()
     };
 
