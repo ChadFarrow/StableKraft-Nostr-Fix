@@ -359,16 +359,20 @@ export async function GET(request: Request) {
         if (!existing) {
           seen.set(key, album);
         } else {
-          // Keep the one with more tracks, or prefer wavlake source
+          // Keep the one with more tracks, or prefer non-Wavlake (artist's own site) as tiebreaker
           const existingTrackCount = existing.tracks?.length || 0;
           const newTrackCount = album.tracks?.length || 0;
           const existingIsWavlake = existing.feedUrl?.includes('wavlake.com');
           const newIsWavlake = album.feedUrl?.includes('wavlake.com');
 
-          // Prefer more tracks, then Wavlake as tiebreaker
-          if (newTrackCount > existingTrackCount || (!existingIsWavlake && newIsWavlake && newTrackCount >= existingTrackCount)) {
+          // Prefer more tracks, then non-Wavlake (artist's own hosting) as tiebreaker
+          const shouldReplace =
+            newTrackCount > existingTrackCount ||
+            (existingIsWavlake && !newIsWavlake && newTrackCount >= existingTrackCount);
+
+          if (shouldReplace) {
             if (process.env.NODE_ENV === 'development') {
-              console.log(`🔄 Dedup: Replacing "${existing.title}" (${existingTrackCount} tracks) with (${newTrackCount} tracks)`);
+              console.log(`🔄 Dedup: Replacing "${existing.title}" (${existingTrackCount} tracks, wavlake: ${existingIsWavlake}) with (${newTrackCount} tracks, wavlake: ${newIsWavlake})`);
             }
             seen.set(key, album);
           } else if (process.env.NODE_ENV === 'development') {
