@@ -503,6 +503,15 @@ export default function LoginModal({ onClose }: LoginModalProps) {
 
       // Complete login flow using the connected client
       try {
+        // Pass the debug callback for bunker connections
+        if (isBunkerUri) {
+          addTimestamp('⚠️ KEEP AEGIS OPEN NOW!');
+          addTimestamp('Sending sign request...');
+          setBunkerDebugInfo(prev => prev ? {
+            ...prev,
+            stage: '⚠️ KEEP AEGIS OPEN - Signing...',
+          } : null);
+        }
         await handleNip46ConnectedWithClient(client);
       } catch (loginErr) {
         if (isBunkerUri) {
