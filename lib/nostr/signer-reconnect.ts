@@ -318,6 +318,26 @@ export async function ensureSignerAvailable(): Promise<ReconnectResult> {
     return restoreNIP55Connection(signer);
   }
 
+  // For extension or NIP-05 login, try reinitializing again as NIP-07 might be available now
+  if (loginType === 'extension' || loginType === 'nip05') {
+    console.log(`ℹ️ ${loginType} login detected, checking for NIP-07 extension...`);
+    try {
+      await signer.reinitialize();
+      if (signer.isAvailable()) {
+        return { success: true, signerType: signer.getSignerType() || undefined };
+      }
+    } catch (error) {
+      console.warn('⚠️ Failed to find NIP-07 extension:', error);
+    }
+
+    return {
+      success: false,
+      error: loginType === 'nip05'
+        ? 'No NIP-07 extension found. Install a Nostr extension (Primal, Alby, nos2x) to post to Nostr.'
+        : 'No NIP-07 extension available. Please install or enable your Nostr extension.'
+    };
+  }
+
   // No reconnection possible
   console.log('ℹ️ No signer available (NIP-07 extension, NIP-46, or NIP-55 required)');
   return {

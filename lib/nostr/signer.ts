@@ -336,8 +336,17 @@ export class UnifiedSigner {
       }
       // Fall through to try other signers as fallback
     } else if (userLoginType === 'nip05') {
-      // User logged in with NIP-05 (read-only) - no signer available
-      console.log('ℹ️ UnifiedSigner: User chose NIP-05 login (read-only mode, no signer available)');
+      // User logged in with NIP-05 - check if they have a NIP-07 extension for signing
+      // NIP-05 is just an identifier, but the user might have Primal, Alby, or another extension
+      const nip07 = this.getNIP07Signer();
+      if (nip07.isAvailable()) {
+        this.activeSigner = nip07;
+        this.signerType = 'nip07';
+        console.log('✅ UnifiedSigner: Using NIP-07 extension for signing (user logged in with NIP-05)');
+        return;
+      }
+      // No NIP-07 extension available - read-only mode
+      console.log('ℹ️ UnifiedSigner: User chose NIP-05 login (no NIP-07 extension available, read-only mode)');
       return;
     }
 
