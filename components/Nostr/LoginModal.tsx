@@ -32,16 +32,6 @@ export default function LoginModal({ onClose }: LoginModalProps) {
   const [nip55Client, setNip55Client] = useState<NIP55Client | null>(null);
   const [isNip55Available, setIsNip55Available] = useState(false);
 
-  // Bunker debug state (for iOS where console isn't accessible)
-  const [bunkerDebugInfo, setBunkerDebugInfo] = useState<{
-    stage: string;
-    relayConnected: boolean | null;
-    relayUrl: string;
-    eventsReceived: number;
-    error: string | null;
-    timestamps: string[];
-  } | null>(null);
-
   // NIP-46 connection hook
   const {
     nip46Client,
@@ -349,14 +339,6 @@ export default function LoginModal({ onClose }: LoginModalProps) {
       return;
     }
 
-    const addTimestamp = (msg: string) => {
-      const time = new Date().toLocaleTimeString();
-      setBunkerDebugInfo(prev => prev ? {
-        ...prev,
-        timestamps: [...prev.timestamps.slice(-9), `${time}: ${msg}`],
-      } : null);
-    };
-
     try {
       setIsSubmitting(true);
       setError(null);
@@ -364,37 +346,9 @@ export default function LoginModal({ onClose }: LoginModalProps) {
       const { NIP46Client } = await import('@/lib/nostr/nip46-client');
       const isBunkerUri = pastedConnectionUri.trim().startsWith('bunker://');
 
-      // Extract relay URL from bunker:// URI for debugging
-      let relayUrl = '';
-      if (isBunkerUri) {
-        try {
-          const uriWithoutScheme = pastedConnectionUri.trim().substring(9);
-          const queryStart = uriWithoutScheme.indexOf('?');
-          if (queryStart > 0) {
-            const params = new URLSearchParams(uriWithoutScheme.substring(queryStart + 1));
-            relayUrl = params.get('relay') || '';
-          }
-        } catch (e) {
-          // ignore
-        }
-      }
-
-      // Initialize debug info for bunker connections
-      if (isBunkerUri) {
-        setBunkerDebugInfo({
-          stage: 'Initializing...',
-          relayConnected: null,
-          relayUrl: relayUrl,
-          eventsReceived: 0,
-          error: null,
-          timestamps: [`${new Date().toLocaleTimeString()}: Starting bunker connection`],
-        });
-      }
-
       console.log('🔌 Connecting with pasted URI:', pastedConnectionUri.substring(0, 30) + '...');
       if (isBunkerUri) {
         console.log('📱 Bunker URI detected - make sure your signer app (Aegis/Amber) is open and connected');
-        addTimestamp('Parsing bunker URI');
       }
 
       // Parse token from URI (both bunker:// and nostrconnect:// have secret param)
@@ -409,68 +363,11 @@ export default function LoginModal({ onClose }: LoginModalProps) {
         console.warn('⚠️ Failed to parse token from URI, using empty token:', parseErr);
       }
 
-      if (isBunkerUri) {
-        setBunkerDebugInfo(prev => prev ? { ...prev, stage: 'Connecting to relay...' } : null);
-        addTimestamp('Creating NIP-46 client');
-      }
-
       const client = new NIP46Client();
-
-      // Set up a progress callback if available
-      if (isBunkerUri && typeof (client as any).onProgress === 'function') {
-        (client as any).onProgress((info: any) => {
-          setBunkerDebugInfo(prev => prev ? {
-            ...prev,
-            stage: info.stage || prev.stage,
-            relayConnected: info.relayConnected ?? prev.relayConnected,
-            eventsReceived: info.eventsReceived ?? prev.eventsReceived,
-          } : null);
-        });
-      }
-
-      if (isBunkerUri) {
-        addTimestamp('Calling connect()');
-        setBunkerDebugInfo(prev => prev ? { ...prev, stage: 'Sending connect request...' } : null);
-      }
 
       // connect() signature: (signerUrl, token, connectImmediately?, signerPubkey?)
       // For bunker:// URIs, connect immediately without showing QR code UI
-      // Set up a timeout to update debug info periodically
-      let debugInterval: NodeJS.Timeout | null = null;
-      if (isBunkerUri) {
-        let seconds = 0;
-        debugInterval = setInterval(() => {
-          seconds++;
-          setBunkerDebugInfo(prev => prev ? {
-            ...prev,
-            stage: `Waiting for response... (${seconds}s)`,
-          } : null);
-          if (seconds % 10 === 0) {
-            addTimestamp(`Still waiting after ${seconds}s`);
-          }
-        }, 1000);
-      }
-
-      try {
-        await client.connect(pastedConnectionUri, token, true);
-        if (debugInterval) clearInterval(debugInterval);
-        if (isBunkerUri) {
-          addTimestamp('Connect succeeded!');
-          setBunkerDebugInfo(prev => prev ? { ...prev, stage: 'Connected!' } : null);
-        }
-      } catch (connectErr) {
-        if (debugInterval) clearInterval(debugInterval);
-        if (isBunkerUri) {
-          const errMsg = connectErr instanceof Error ? connectErr.message : String(connectErr);
-          addTimestamp(`Connect failed: ${errMsg.substring(0, 50)}`);
-          setBunkerDebugInfo(prev => prev ? {
-            ...prev,
-            stage: 'Connection failed',
-            error: errMsg,
-          } : null);
-        }
-        throw connectErr;
-      }
+      await client.connect(pastedConnectionUri, token, true);
 
       setNip46Client(client);
       nip46ClientRef.current = client;
@@ -485,49 +382,11 @@ export default function LoginModal({ onClose }: LoginModalProps) {
       // The signer app needs time to receive and process the connection
       if (isBunkerUri) {
         console.log('⏳ Bunker connection: waiting for signer to be ready...');
-        addTimestamp('Waiting for signer ready');
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
 
-      if (isBunkerUri) {
-        // Check if we got a pubkey from the connect response
-        const connection = client.getConnection();
-        const pubkey = client.getPubkey();
-        addTimestamp(`Got pubkey: ${pubkey ? pubkey.slice(0, 8) + '...' : 'NO'}`);
-        addTimestamp(`Connection pubkey: ${connection?.pubkey ? connection.pubkey.slice(0, 8) + '...' : 'NO'}`);
-        setBunkerDebugInfo(prev => prev ? {
-          ...prev,
-          stage: pubkey ? 'Logging in with pubkey...' : 'Requesting pubkey from signer...'
-        } : null);
-      }
-
       // Complete login flow using the connected client
-      try {
-        // Pass the debug callback for bunker connections
-        if (isBunkerUri) {
-          addTimestamp('⚠️ KEEP AEGIS OPEN NOW!');
-          addTimestamp('Sending sign request...');
-          setBunkerDebugInfo(prev => prev ? {
-            ...prev,
-            stage: '⚠️ KEEP AEGIS OPEN - Signing...',
-          } : null);
-        }
-        await handleNip46ConnectedWithClient(client);
-      } catch (loginErr) {
-        if (isBunkerUri) {
-          const errMsg = loginErr instanceof Error ? loginErr.message : String(loginErr);
-          addTimestamp(`Login failed: ${errMsg.substring(0, 40)}`);
-          setBunkerDebugInfo(prev => prev ? {
-            ...prev,
-            stage: 'Login failed',
-            error: errMsg,
-          } : null);
-        }
-        throw loginErr;
-      }
-
-      // Clear debug info on success
-      setBunkerDebugInfo(null);
+      await handleNip46ConnectedWithClient(client);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to connect with URI';
       // Provide more helpful error for bunker:// connections
@@ -1207,60 +1066,6 @@ export default function LoginModal({ onClose }: LoginModalProps) {
                   {isSubmitting ? 'Connecting...' : 'Connect'}
                 </button>
               </div>
-
-              {/* Bunker Debug Panel - visible during bunker connection attempts */}
-              {bunkerDebugInfo && (
-                <div className="mt-3 p-3 bg-gray-900 text-gray-100 rounded-md text-xs font-mono">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-yellow-400 font-bold">Debug Info (iOS)</span>
-                    <button
-                      onClick={() => setBunkerDebugInfo(null)}
-                      className="text-gray-400 hover:text-white"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                  <div className="space-y-1">
-                    <div>
-                      <span className="text-gray-400">Stage:</span>{' '}
-                      <span className="text-green-400">{bunkerDebugInfo.stage}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-400">Relay:</span>{' '}
-                      <span className="text-blue-400">{bunkerDebugInfo.relayUrl || 'N/A'}</span>
-                    </div>
-                    {bunkerDebugInfo.relayConnected !== null && (
-                      <div>
-                        <span className="text-gray-400">Relay Connected:</span>{' '}
-                        <span className={bunkerDebugInfo.relayConnected ? 'text-green-400' : 'text-red-400'}>
-                          {bunkerDebugInfo.relayConnected ? 'Yes' : 'No'}
-                        </span>
-                      </div>
-                    )}
-                    {bunkerDebugInfo.eventsReceived > 0 && (
-                      <div>
-                        <span className="text-gray-400">Events:</span>{' '}
-                        <span className="text-cyan-400">{bunkerDebugInfo.eventsReceived}</span>
-                      </div>
-                    )}
-                    {bunkerDebugInfo.error && (
-                      <div className="text-red-400 mt-2 break-words">
-                        Error: {bunkerDebugInfo.error.substring(0, 100)}
-                      </div>
-                    )}
-                    {bunkerDebugInfo.timestamps.length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-gray-700">
-                        <div className="text-gray-400 mb-1">Timeline:</div>
-                        <div className="max-h-24 overflow-y-auto space-y-0.5">
-                          {bunkerDebugInfo.timestamps.map((ts, i) => (
-                            <div key={i} className="text-gray-300 text-xs">{ts}</div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Loading state while initializing */}
