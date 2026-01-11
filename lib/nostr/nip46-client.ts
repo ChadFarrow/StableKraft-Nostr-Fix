@@ -284,6 +284,20 @@ export class NIP46Client {
       const currentAppKeyPair = getOrCreateAppKeyPair();
       console.log('🔑 NIP-46: Our app pubkey (should match Aegis "Application Pubkey"):', currentAppKeyPair.publicKey);
 
+      // Verify relay connection is actually working
+      const connectedRelays = this.relayClient?.getConnectedRelays?.() || [];
+      console.log('🔌 NIP-46: Connected relays before sending connect request:', connectedRelays);
+      if (connectedRelays.length === 0) {
+        console.error('❌ NIP-46: No relays connected! Attempting to reconnect...');
+        await this.relayClient?.connectToRelays([relayUrl]);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const reconnectedRelays = this.relayClient?.getConnectedRelays?.() || [];
+        console.log('🔌 NIP-46: Connected relays after reconnection attempt:', reconnectedRelays);
+        if (reconnectedRelays.length === 0) {
+          throw new Error(`Failed to connect to bunker relay: ${relayUrl}`);
+        }
+      }
+
       // For bunker:// URIs, the CLIENT should initiate by sending a 'connect' request
       // This is different from nostrconnect:// where we wait for the signer to connect
       console.log('📤 NIP-46: Sending connect request to signer (bunker:// flow)...');
