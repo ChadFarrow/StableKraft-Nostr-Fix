@@ -358,6 +358,21 @@ export class NIP46Client {
           this.connection.connected = true;
           this.connection.connectedAt = Date.now();
         }
+
+        // IMPORTANT: After connect succeeds, immediately fetch the user's pubkey
+        // This is required because connect() just returns "ack", not the pubkey
+        console.log('📤 NIP-46: Now requesting user pubkey via get_public_key...');
+        try {
+          const userPubkey = await this.sendRequest('get_public_key', []);
+          console.log('✅ NIP-46: Got user pubkey:', userPubkey?.slice(0, 16) + '...');
+          if (this.connection && userPubkey) {
+            this.connection.pubkey = userPubkey;
+            console.log('✅ NIP-46: Stored user pubkey in connection');
+          }
+        } catch (pubkeyError) {
+          console.warn('⚠️ NIP-46: Failed to get pubkey after connect:', pubkeyError);
+          // Don't throw - we can try again later in LoginModal
+        }
       } catch (connectError) {
         console.warn('⚠️ NIP-46: Connect request failed or timed out:', connectError);
 

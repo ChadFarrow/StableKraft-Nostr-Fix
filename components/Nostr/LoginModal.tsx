@@ -490,12 +490,32 @@ export default function LoginModal({ onClose }: LoginModalProps) {
       }
 
       if (isBunkerUri) {
-        addTimestamp('Completing login');
-        setBunkerDebugInfo(prev => prev ? { ...prev, stage: 'Logging in...' } : null);
+        // Check if we got a pubkey from the connect response
+        const connection = client.getConnection();
+        const pubkey = client.getPubkey();
+        addTimestamp(`Got pubkey: ${pubkey ? pubkey.slice(0, 8) + '...' : 'NO'}`);
+        addTimestamp(`Connection pubkey: ${connection?.pubkey ? connection.pubkey.slice(0, 8) + '...' : 'NO'}`);
+        setBunkerDebugInfo(prev => prev ? {
+          ...prev,
+          stage: pubkey ? 'Logging in with pubkey...' : 'Requesting pubkey from signer...'
+        } : null);
       }
 
       // Complete login flow using the connected client
-      await handleNip46ConnectedWithClient(client);
+      try {
+        await handleNip46ConnectedWithClient(client);
+      } catch (loginErr) {
+        if (isBunkerUri) {
+          const errMsg = loginErr instanceof Error ? loginErr.message : String(loginErr);
+          addTimestamp(`Login failed: ${errMsg.substring(0, 40)}`);
+          setBunkerDebugInfo(prev => prev ? {
+            ...prev,
+            stage: 'Login failed',
+            error: errMsg,
+          } : null);
+        }
+        throw loginErr;
+      }
 
       // Clear debug info on success
       setBunkerDebugInfo(null);
