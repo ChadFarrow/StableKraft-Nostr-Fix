@@ -105,6 +105,7 @@ export class NIP46Client {
   private onPubkeyMismatchCallback: ((oldPubkey: string, currentPubkey: string) => void) | null = null;
   private eventCounter: number = 0; // Track total events received
   private lastEventTime: number = 0; // Track when last event was received
+  private eventsByRelay: Map<string, number> = new Map(); // Track events by relay URL for debugging
   private lastRequestTime: Map<string, number> = new Map(); // Track last request time per method for rate limiting
   private readonly RATE_LIMIT_MS = 2000; // 2 seconds between requests of the same method (reduced for debugging)
   private rateLimitedRelays: Map<string, { until: number; backoffMs: number }> = new Map(); // Track rate-limited relays with backoff
@@ -287,6 +288,9 @@ export class NIP46Client {
       // Verify relay connection is actually working
       const connectedRelays = this.relayClient?.getConnectedRelays?.() || [];
       console.log('🔌 NIP-46: Connected relays before sending connect request:', connectedRelays);
+      console.log('🔌 NIP-46: Bunker relay URL:', relayUrl);
+      console.log('🔌 NIP-46: Is bunker relay connected?', connectedRelays.includes(relayUrl));
+
       if (connectedRelays.length === 0) {
         console.error('❌ NIP-46: No relays connected! Attempting to reconnect...');
         await this.relayClient?.connectToRelays([relayUrl]);
@@ -296,7 +300,22 @@ export class NIP46Client {
         if (reconnectedRelays.length === 0) {
           throw new Error(`Failed to connect to bunker relay: ${relayUrl}`);
         }
+      } else if (!connectedRelays.includes(relayUrl)) {
+        // Bunker relay not in connected list - try to add it
+        console.warn('⚠️ NIP-46: Bunker relay not in connected list, attempting to connect...');
+        await this.relayClient?.connectToRelays([relayUrl]);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const updatedRelays = this.relayClient?.getConnectedRelays?.() || [];
+        console.log('🔌 NIP-46: Updated connected relays:', updatedRelays);
+        if (!updatedRelays.includes(relayUrl)) {
+          console.error('❌ NIP-46: Failed to connect to bunker relay:', relayUrl);
+          throw new Error(`Failed to connect to bunker relay: ${relayUrl}. The relay might be offline or blocking connections.`);
+        }
       }
+
+      // Track events received after this point
+      const eventsBeforeConnect = this.eventCounter;
+      console.log('📊 NIP-46: Events received before connect request:', eventsBeforeConnect);
 
       // For bunker:// URIs, the CLIENT should initiate by sending a 'connect' request
       // This is different from nostrconnect:// where we wait for the signer to connect
@@ -341,6 +360,26 @@ export class NIP46Client {
         }
       } catch (connectError) {
         console.warn('⚠️ NIP-46: Connect request failed or timed out:', connectError);
+
+        // Log post-connect diagnostics
+        const eventsAfterConnect = this.eventCounter;
+        const eventsReceived = eventsAfterConnect - eventsBeforeConnect;
+        const postConnectRelays = this.relayClient?.getConnectedRelays?.() || [];
+        console.log('📊 NIP-46: Post-connect diagnostics:', {
+          eventsReceivedDuringConnect: eventsReceived,
+          totalEventsNow: eventsAfterConnect,
+          relaysStillConnected: postConnectRelays,
+          bunkerRelayStillConnected: postConnectRelays.includes(relayUrl),
+          lastEventTime: this.lastEventTime > 0 ? `${Math.floor((Date.now() - this.lastEventTime) / 1000)}s ago` : 'never',
+          note: eventsReceived === 0
+            ? '⚠️ NO EVENTS received during connect - subscription may not be working'
+            : `✅ ${eventsReceived} events received during connect`,
+        });
+
+        if (!postConnectRelays.includes(relayUrl)) {
+          console.error('❌ NIP-46: Bunker relay disconnected during connect request!');
+        }
+
         // Don't throw - the signer might still respond to get_public_key
         // Some signers don't implement the connect method
       }
@@ -682,6 +721,17 @@ export class NIP46Client {
           // Increment event counter
           this.eventCounter++;
           this.lastEventTime = Date.now();
+
+          // Log for bunker relay debugging
+          const bunkerRelayUrl = (this.connection as any)?.relayUrl;
+          if (bunkerRelayUrl && bunkerRelayUrl.includes('localrelay')) {
+            console.log('🎯 NIP-46: Event received (bunker relay in use):', {
+              eventId: event.id.slice(0, 16) + '...',
+              totalEventsNow: this.eventCounter,
+              bunkerRelay: bunkerRelayUrl,
+              note: 'This is good! We ARE receiving events while waiting for bunker response.',
+            });
+          }
           
           // Check if this event is for us (tagged with our pubkey) BEFORE doing expensive logging
           const isForUs = event.tags.some(tag => tag[0] === 'p' && tag[1] === appPubkey);
