@@ -297,7 +297,9 @@ export class NIP46Client {
         console.log('🔑 NIP-46: IMPORTANT - The event will be:');
         console.log('   - Tagged with p-tag:', bunkerInfo.pubkey);
         console.log('   - Encrypted to pubkey:', bunkerInfo.pubkey);
-        console.log('   - Aegis should be listening for events with this p-tag');
+        console.log('   - Signed by OUR app pubkey:', appPubkey);
+        console.log('   - Aegis should respond to events tagged with OUR pubkey:', appPubkey);
+        console.log('   - CHECK: Does Aegis show this pubkey as "Application Pubkey"?');
 
         const response = await this.sendRequest('connect', connectParams);
         console.log('✅ NIP-46: Connect request acknowledged by signer:', response);
@@ -486,9 +488,12 @@ export class NIP46Client {
     // User's pubkey (from Amber) will be received later in the connection event
     console.log('📡 NIP-46: Setting up subscription filters:', {
       appPubkey: appPubkey.slice(0, 16) + '...',
+      appPubkeyFull: appPubkey,
       relayUrl: relayUrl,
       note: 'App pubkey is for NIP-46 communication. User\'s Nostr account pubkey will be received from Amber later.',
     });
+    console.log('🎯 NIP-46: We will listen for events tagged with OUR pubkey:', appPubkey);
+    console.log('   - If Aegis responds to a DIFFERENT pubkey, we will NOT receive it!');
     
     const filters: Filter[] = [
       {
@@ -608,6 +613,20 @@ export class NIP46Client {
       filters,
       onEvent: (event: Event) => {
         try {
+          // LOG EVERY EVENT RECEIVED (for debugging Aegis connection)
+          const eventPTags = event.tags.filter(t => t[0] === 'p').map(t => t[1]);
+          console.log('📨 NIP-46: RAW EVENT RECEIVED:', {
+            eventId: event.id.slice(0, 16) + '...',
+            kind: event.kind,
+            from: event.pubkey.slice(0, 16) + '...',
+            fromFull: event.pubkey,
+            pTags: eventPTags,
+            pTagsFull: eventPTags.map(p => p),
+            contentPreview: event.content.substring(0, 100),
+            ourPubkey: appPubkey,
+            isTaggedForUs: eventPTags.includes(appPubkey),
+          });
+
           // Track event reception
           const timeSinceSubscription = Date.now() - subscriptionStartTime;
           
