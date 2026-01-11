@@ -344,8 +344,12 @@ export default function LoginModal({ onClose }: LoginModalProps) {
       setError(null);
 
       const { NIP46Client } = await import('@/lib/nostr/nip46-client');
+      const isBunkerUri = pastedConnectionUri.trim().startsWith('bunker://');
 
       console.log('🔌 Connecting with pasted URI:', pastedConnectionUri.substring(0, 30) + '...');
+      if (isBunkerUri) {
+        console.log('📱 Bunker URI detected - make sure your signer app (Aegis/Amber) is open and connected');
+      }
 
       // Parse token from URI (both bunker:// and nostrconnect:// have secret param)
       let token = '';
@@ -373,10 +377,23 @@ export default function LoginModal({ onClose }: LoginModalProps) {
       await signer.setNIP46Signer(client);
       console.log('✅ NIP-46 client registered with unified signer');
 
+      // For bunker:// URIs, wait a bit for the signer to be ready before completing login
+      // The signer app needs time to receive and process the connection
+      if (isBunkerUri) {
+        console.log('⏳ Bunker connection: waiting for signer to be ready...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+
       // Complete login flow using the connected client
       await handleNip46ConnectedWithClient(client);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to connect with URI');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to connect with URI';
+      // Provide more helpful error for bunker:// connections
+      if (pastedConnectionUri.trim().startsWith('bunker://') && errorMessage.includes('timeout')) {
+        setError(`Connection timed out. Make sure your signer app (Aegis/Amber) is open and connected to the relay. The relay in your bunker URI must be accessible.`);
+      } else {
+        setError(errorMessage);
+      }
       setIsSubmitting(false);
     }
   };

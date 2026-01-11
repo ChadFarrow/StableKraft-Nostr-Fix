@@ -264,7 +264,30 @@ export class NIP46Client {
       // Use relay-based connection (not direct WebSocket) for mobile signers like Aegis
       console.log('🔌 NIP-46: Connecting via relay for mobile signer:', relayUrl);
       console.log('🔌 NIP-46: Signer app pubkey:', bunkerInfo.pubkey.slice(0, 16) + '...');
-      return this.startRelayConnection(relayUrl);
+
+      // First, set up the relay connection and subscription
+      await this.startRelayConnection(relayUrl);
+
+      // For bunker:// URIs, the CLIENT should initiate by sending a 'connect' request
+      // This is different from nostrconnect:// where we wait for the signer to connect
+      console.log('📤 NIP-46: Sending connect request to signer (bunker:// flow)...');
+      try {
+        // Send connect request with the secret (if provided in bunker URI)
+        // The signer should respond with 'ack' or the user's pubkey
+        const connectParams = bunkerInfo.secret ? [bunkerInfo.secret] : [];
+        const response = await this.sendRequest('connect', connectParams);
+        console.log('✅ NIP-46: Connect request acknowledged by signer:', response);
+
+        // Mark as connected after successful connect
+        if (this.connection) {
+          this.connection.connected = true;
+          this.connection.connectedAt = Date.now();
+        }
+      } catch (connectError) {
+        console.warn('⚠️ NIP-46: Connect request failed or timed out:', connectError);
+        // Don't throw - the signer might still respond to get_public_key
+        // Some signers don't implement the connect method
+      }
     } catch (error) {
       console.error('❌ NIP-46: Failed to parse bunker:// URI:', error);
       throw new Error(`Failed to parse bunker:// URI: ${error instanceof Error ? error.message : String(error)}`);
@@ -1000,15 +1023,12 @@ export class NIP46Client {
       hasSubscription: !!this.relaySubscription,
     });
 
-    // For bunker:// URIs (Aegis, nsecbunker), wait for the signer to initiate the connection
-    // The signer should send a 'connect' event first, then we can make requests
-    // Don't try to send get_public_key or connect requests immediately - wait for signer to initiate
+    // For bunker:// URIs (Aegis, nsecbunker), the connect request is sent in connectBunker()
+    // For nostrconnect:// URIs, wait for the signer to initiate the connection
     if ((this.connection as any).signerPubkey && !this.connection.pubkey) {
-      console.log('🔑 NIP-46: Bunker connection detected, waiting for signer to initiate connection...');
-      console.log('📱 NIP-46: Please approve the connection in Amber/Aegis. The signer will send a connect event.');
-      console.log('⏳ NIP-46: Once the signer initiates, we can then request the user pubkey.');
-      // Don't try to get pubkey immediately - wait for signer to send connect event
-      // The handleRelayEvent will process the connect event when it arrives
+      console.log('🔑 NIP-46: Bunker connection - subscription ready, connect request will be sent by connectBunker()');
+    } else if (!this.connection.pubkey) {
+      console.log('⏳ NIP-46: Waiting for signer to initiate connection (nostrconnect:// flow)...');
     }
   }
 
