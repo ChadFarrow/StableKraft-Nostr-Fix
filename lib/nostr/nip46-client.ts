@@ -2648,13 +2648,17 @@ export class NIP46Client {
     });
 
     // Rate limiting: Check if we've sent a request of this method recently
+    // SKIP rate limiting for 'connect' method - it's critical for initial connection
     const lastTime = this.lastRequestTime.get(method);
     const now = Date.now();
-    if (lastTime && (now - lastTime) < this.RATE_LIMIT_MS) {
+    if (method !== 'connect' && lastTime && (now - lastTime) < this.RATE_LIMIT_MS) {
       const waitTime = this.RATE_LIMIT_MS - (now - lastTime);
       const errorMsg = `Rate limit: Please wait ${Math.ceil(waitTime / 1000)} seconds before sending another ${method} request. This prevents overwhelming Amber.`;
       console.warn(`⚠️ NIP-46: Rate limit - ${method} request too soon (${Math.ceil((now - lastTime) / 1000)}s ago). ${errorMsg}`);
       throw new Error(errorMsg);
+    }
+    if (method === 'connect') {
+      console.log('ℹ️ NIP-46: Skipping rate limit for connect method');
     }
     
     // Update last request time
