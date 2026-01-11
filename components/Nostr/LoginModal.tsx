@@ -1020,6 +1020,36 @@ export default function LoginModal({ onClose }: LoginModalProps) {
         {/* Unified Amber Login */}
         {loginMethod === 'amber' && (
           <>
+            {/* Paste URI option - always visible at top */}
+            <div className="mb-4 pb-4 border-b border-gray-200">
+              <h4 className="text-sm font-medium text-gray-700 mb-2">
+                Paste connection string from Amber
+              </h4>
+              <p className="text-xs text-gray-500 mb-2">
+                If you have a bunker:// or nostrconnect:// URI from Amber or nsecBunker
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={pastedConnectionUri}
+                  onChange={(e) => {
+                    setPastedConnectionUri(e.target.value);
+                    setShowPasteUri(e.target.value.trim().length > 0);
+                  }}
+                  placeholder="bunker://... or nostrconnect://..."
+                  disabled={isSubmitting}
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 font-mono text-xs"
+                />
+                <button
+                  onClick={handleAmberLogin}
+                  disabled={isSubmitting || !pastedConnectionUri.trim()}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium whitespace-nowrap"
+                >
+                  {isSubmitting ? 'Connecting...' : 'Connect'}
+                </button>
+              </div>
+            </div>
+
             {/* Loading state while initializing */}
             {isInitializingAmber && !showNip46Connect && (
               <div className="mb-4 flex flex-col items-center gap-3 py-8">
@@ -1067,55 +1097,6 @@ export default function LoginModal({ onClose }: LoginModalProps) {
                   cleanupAmberConnection();
                 }}
               />
-            )}
-
-            {/* Paste URI option - always available below QR */}
-            {!isInitializingAmber && !amberConnectionError && (
-              <details
-                className="group mb-3"
-                onToggle={(e) => {
-                  // Reset paste mode when closing the details
-                  if (!(e.target as HTMLDetailsElement).open) {
-                    setShowPasteUri(false);
-                    setPastedConnectionUri('');
-                  }
-                }}
-              >
-                <summary className="cursor-pointer text-sm text-gray-600 hover:text-gray-800 list-none flex items-center gap-2">
-                  <span className="transition-transform group-open:rotate-90">▶</span>
-                  <span>Or paste existing connection URI</span>
-                </summary>
-                <div className="mt-3 space-y-2">
-                  <p className="text-xs text-gray-500">
-                    If you already have a bunker:// or nostrconnect:// URI from Amber, paste it here
-                  </p>
-                  <input
-                    type="text"
-                    value={pastedConnectionUri}
-                    onChange={(e) => {
-                      setPastedConnectionUri(e.target.value);
-                      // Only enable paste mode if there's actual content
-                      setShowPasteUri(e.target.value.trim().length > 0);
-                    }}
-                    onPaste={() => {
-                      // User is pasting, enable paste mode
-                      setShowPasteUri(true);
-                    }}
-                    placeholder="bunker://... or nostrconnect://..."
-                    disabled={isSubmitting}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed font-mono text-xs"
-                  />
-                  {showPasteUri && pastedConnectionUri.trim() && (
-                    <button
-                      onClick={handleAmberLogin}
-                      disabled={isSubmitting}
-                      className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                    >
-                      {isSubmitting ? 'Connecting...' : 'Connect with Pasted URI'}
-                    </button>
-                  )}
-                </div>
-              </details>
             )}
           </>
         )}

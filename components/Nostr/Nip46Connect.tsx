@@ -449,15 +449,6 @@ export default function Nip46Connect({
         </div>
       )}
 
-      {/* Cancel Button */}
-      <div className="flex gap-2">
-        <button
-          onClick={onCancel}
-          className="flex-1 px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
-        >
-          Cancel
-        </button>
-      </div>
     </div>
   );
 }
