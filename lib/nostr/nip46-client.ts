@@ -276,8 +276,13 @@ export class NIP46Client {
       // This prevents a race condition where we send the connect request before
       // the relay is ready to forward responses to us
       console.log('⏳ NIP-46: Waiting for subscription to be fully active...');
-      await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
-      console.log('✅ NIP-46: Subscription should now be active');
+      console.log('🔌 NIP-46: Bunker relay URL:', relayUrl);
+      await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay for bunker relay
+      console.log('✅ NIP-46: Subscription should now be active on', relayUrl);
+
+      // Log the app pubkey we're using so user can compare with Aegis
+      const currentAppKeyPair = getOrCreateAppKeyPair();
+      console.log('🔑 NIP-46: Our app pubkey (should match Aegis "Application Pubkey"):', currentAppKeyPair.publicKey);
 
       // For bunker:// URIs, the CLIENT should initiate by sending a 'connect' request
       // This is different from nostrconnect:// where we wait for the signer to connect
