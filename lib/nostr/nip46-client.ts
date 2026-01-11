@@ -328,10 +328,12 @@ export class NIP46Client {
         // Send connect request per NIP-46 spec:
         // params[0]: remote_user_pubkey (app's pubkey that wants to connect)
         // params[1]: secret (optional, from bunker URI)
-        // params[2]: permissions (optional)
+        // params[2]: permissions (optional but recommended)
+        // Request permissions for sign_event (kind 22242 for login, kind 1 for notes, kind 7 for reactions)
+        const permissions = 'sign_event:22242,sign_event:1,sign_event:7,get_public_key';
         const connectParams = bunkerInfo.secret
-          ? [appPubkey, bunkerInfo.secret]
-          : [appPubkey];
+          ? [appPubkey, bunkerInfo.secret, permissions]
+          : [appPubkey, '', permissions]; // Empty string for secret if not provided
 
         console.log('📤 NIP-46: Connect params:', {
           appPubkey: appPubkey.slice(0, 16) + '...',
@@ -3776,6 +3778,18 @@ export class NIP46Client {
     const eventJson = JSON.stringify(eventForSigner);
     console.log('📋 NIP-46: Exact event JSON being sent to signer:', eventJson);
     console.log('📋 NIP-46: This will be sent as sign_event([eventJson]) to signer via NIP-46');
+
+    // Log connection details for bunker debugging
+    const bunkerRelayUrl = (this.connection as any)?.relayUrl;
+    const isBunkerConnection = !!(this.connection as any)?.signerPubkey;
+    console.log('🔌 NIP-46: Sign request connection details:', {
+      isBunkerConnection,
+      bunkerRelayUrl,
+      signerUrl: this.connection?.signerUrl?.slice(0, 50) + '...',
+      connectedRelays: this.relayClient?.getConnectedRelays?.() || [],
+      lastEventTime: this.lastEventTime > 0 ? `${Math.floor((Date.now() - this.lastEventTime) / 1000)}s ago` : 'never',
+      eventCounter: this.eventCounter,
+    });
 
     const signatureResponse = await this.sendRequest('sign_event', [eventJson]);
 
