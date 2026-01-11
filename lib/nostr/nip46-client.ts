@@ -674,18 +674,34 @@ export class NIP46Client {
           const isWaitingForConnection = !hasActiveConnection && !hasPendingRequests;
 
           // Get the known signer pubkey (stored after successful connect)
+          // NOTE: For bunker:// connections, signerPubkey is initially set to the USER's pubkey from URI
+          // But the actual SIGNER APP pubkey is different - we learn it from the first response
           const knownSignerPubkey = (this.connection as any)?.signerPubkey;
-          const isFromKnownSigner = knownSignerPubkey && event.pubkey === knownSignerPubkey;
+          const actualSignerAppPubkey = (this.connection as any)?.actualSignerAppPubkey; // Set after first response
+          const isFromKnownSigner = (knownSignerPubkey && event.pubkey === knownSignerPubkey) ||
+                                    (actualSignerAppPubkey && event.pubkey === actualSignerAppPubkey);
+
+          // Check if this is a bunker:// connection (bunker connections have signerPubkey set from URI)
+          const isBunkerConnection = !!(this.connection as any)?.signerPubkey &&
+                                     this.connection?.signerUrl?.startsWith('bunker://');
 
           // CRITICAL: After connection is established, ONLY process events from the known signer
           // This prevents processing noise from other NIP-46 signers on public relays
-          if (hasActiveConnection && knownSignerPubkey && !isFromKnownSigner && !isFromUs) {
+          // BUT: For bunker:// connections waiting for first response, be more permissive
+          const shouldFilterBySigner = hasActiveConnection && !isBunkerConnection && knownSignerPubkey;
+          if (shouldFilterBySigner && !isFromKnownSigner && !isFromUs) {
             // Event is from an unknown signer - silently ignore it
             // Only log occasionally to avoid spam
             if (this.eventCounter % 10 === 0) {
               console.log(`🚫 NIP-46: Ignoring event from unknown signer ${event.pubkey.slice(0, 16)}... (expected ${knownSignerPubkey.slice(0, 16)}...)`);
             }
             return;
+          }
+
+          // For bunker:// connections, store the actual signer app pubkey from the first response we can decrypt
+          if (isBunkerConnection && !actualSignerAppPubkey && hasPendingRequests && !isFromUs) {
+            // This might be the signer's response - try to decrypt and if successful, store their pubkey
+            console.log(`🔍 NIP-46: Bunker connection - checking if event from ${event.pubkey.slice(0, 16)}... is from our signer`);
           }
 
           // Also check all 'p' tags to see what pubkeys are tagged
@@ -1701,6 +1717,15 @@ export class NIP46Client {
           const pending = this.pendingRequests.get(content.id);
           if (pending) {
             this.pendingRequests.delete(content.id);
+
+            // For bunker:// connections, store the actual signer app pubkey from successful responses
+            // This allows us to filter out noise from other signers after we know who we're talking to
+            const isBunkerConn = this.connection?.signerUrl?.startsWith('bunker://');
+            if (isBunkerConn && this.connection && !(this.connection as any).actualSignerAppPubkey) {
+              (this.connection as any).actualSignerAppPubkey = event.pubkey;
+              console.log(`🔑 NIP-46: Stored actual signer app pubkey for bunker connection: ${event.pubkey.slice(0, 16)}...`);
+            }
+
             console.log('✅ NIP-46: Found matching pending request, processing response:', {
               requestId: content.id,
               requestMethod: pending.method,
