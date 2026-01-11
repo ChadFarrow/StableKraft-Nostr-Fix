@@ -106,7 +106,7 @@ export class NIP46Client {
   private eventCounter: number = 0; // Track total events received
   private lastEventTime: number = 0; // Track when last event was received
   private lastRequestTime: Map<string, number> = new Map(); // Track last request time per method for rate limiting
-  private readonly RATE_LIMIT_MS = 5000; // 5 seconds between requests of the same method
+  private readonly RATE_LIMIT_MS = 2000; // 2 seconds between requests of the same method (reduced for debugging)
   private rateLimitedRelays: Map<string, { until: number; backoffMs: number }> = new Map(); // Track rate-limited relays with backoff
   private readonly RATE_LIMIT_BACKOFF_BASE_MS = 60000; // Start with 1 minute backoff
   private readonly RATE_LIMIT_BACKOFF_MAX_MS = 600000; // Max 10 minutes backoff
@@ -267,6 +267,13 @@ export class NIP46Client {
 
       // First, set up the relay connection and subscription
       await this.startRelayConnection(relayUrl);
+
+      // IMPORTANT: Wait for subscription to be fully active on the relay
+      // This prevents a race condition where we send the connect request before
+      // the relay is ready to forward responses to us
+      console.log('⏳ NIP-46: Waiting for subscription to be fully active...');
+      await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
+      console.log('✅ NIP-46: Subscription should now be active');
 
       // For bunker:// URIs, the CLIENT should initiate by sending a 'connect' request
       // This is different from nostrconnect:// where we wait for the signer to connect
