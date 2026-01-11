@@ -215,8 +215,9 @@ export function useNip46Connection(options: UseNip46ConnectionOptions): Nip46Con
     const secretEncoded = encodeURIComponent(token);
     const appName = encodeURIComponent('StableKraft');
     const appUrl = encodeURIComponent('https://stablekraft.app/');
-    // Request permissions for signing events: kind 1 (notes/boosts), kind 7 (reactions), kind 22242 (login auth)
-    const perms = encodeURIComponent('sign_event:1,sign_event:7,sign_event:22242,get_public_key');
+    // Request broad permissions - some signers (Primal) don't support kind-specific permissions
+    // Use generic sign_event to allow all event signing, plus specific kinds for signers that support it
+    const perms = encodeURIComponent('nip04_encrypt,nip04_decrypt,nip44_encrypt,nip44_decrypt,sign_event,get_public_key');
     const nostrconnectUri = `nostrconnect://${publicKey}?relay=${relayEncoded}&secret=${secretEncoded}&name=${appName}&url=${appUrl}&perms=${perms}`;
 
     console.log('NIP-46: Generated connection URI for relay:', relayUrl);
