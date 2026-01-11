@@ -286,9 +286,18 @@ export class NIP46Client {
 
         console.log('📤 NIP-46: Connect params:', {
           appPubkey: appPubkey.slice(0, 16) + '...',
+          appPubkeyFull: appPubkey,
           hasSecret: !!bunkerInfo.secret,
+          secret: bunkerInfo.secret || 'none',
           signerPubkey: bunkerInfo.pubkey.slice(0, 16) + '...',
+          signerPubkeyFull: bunkerInfo.pubkey,
+          relayUrl: relayUrl,
+          connectParamsArray: connectParams,
         });
+        console.log('🔑 NIP-46: IMPORTANT - The event will be:');
+        console.log('   - Tagged with p-tag:', bunkerInfo.pubkey);
+        console.log('   - Encrypted to pubkey:', bunkerInfo.pubkey);
+        console.log('   - Aegis should be listening for events with this p-tag');
 
         const response = await this.sendRequest('connect', connectParams);
         console.log('✅ NIP-46: Connect request acknowledged by signer:', response);
@@ -1142,7 +1151,16 @@ export class NIP46Client {
     }
     // Note: For get_public_key without signer pubkey, we intentionally don't add a p tag
     // so that Amber can find it by listening to all kind 24133 events
-    
+
+    console.log('🏗️ NIP-46: Creating event with:', {
+      method,
+      requestId,
+      hasPTag: !!signerPubkey,
+      pTagValue: signerPubkey || 'none',
+      tags: tags,
+      appPubkey: appPubkey.slice(0, 16) + '...',
+    });
+
     const template: EventTemplate = {
       kind: 24133, // NIP-46 request/response event kind
       tags,
