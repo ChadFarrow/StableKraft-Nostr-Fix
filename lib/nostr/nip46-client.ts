@@ -237,6 +237,10 @@ export class NIP46Client {
    * Connect using bunker:// URI (relay-based for mobile signers like Aegis)
    */
   private async connectBunker(bunkerUri: string): Promise<void> {
+    // Clear rate limits for fresh connection attempt
+    this.lastRequestTime.clear();
+    console.log('🔄 NIP-46: Cleared rate limits for fresh bunker connection');
+
     try {
       const bunkerInfo = parseBunkerUri(bunkerUri);
       console.log('🔌 NIP-46: Parsed bunker:// URI:', {
