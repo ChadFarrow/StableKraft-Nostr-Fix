@@ -210,12 +210,14 @@ export function useNip46Connection(options: UseNip46ConnectionOptions): Nip46Con
       throw new Error(`Failed to connect to relay: ${errorMessage}`);
     }
 
-    // Generate nostrconnect URI
+    // Generate nostrconnect URI with permissions
     const relayEncoded = encodeURIComponent(relayUrl);
     const secretEncoded = encodeURIComponent(token);
     const appName = encodeURIComponent('StableKraft');
     const appUrl = encodeURIComponent('https://stablekraft.app/');
-    const nostrconnectUri = `nostrconnect://${publicKey}?relay=${relayEncoded}&secret=${secretEncoded}&name=${appName}&url=${appUrl}`;
+    // Request permissions for signing events: kind 1 (notes/boosts), kind 7 (reactions), kind 22242 (login auth)
+    const perms = encodeURIComponent('sign_event:1,sign_event:7,sign_event:22242,get_public_key');
+    const nostrconnectUri = `nostrconnect://${publicKey}?relay=${relayEncoded}&secret=${secretEncoded}&name=${appName}&url=${appUrl}&perms=${perms}`;
 
     console.log('NIP-46: Generated connection URI for relay:', relayUrl);
 

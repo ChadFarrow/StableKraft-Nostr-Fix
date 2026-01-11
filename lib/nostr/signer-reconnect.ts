@@ -281,6 +281,7 @@ export async function verifyNIP46Connection(
  */
 export async function ensureSignerAvailable(): Promise<ReconnectResult> {
   const signer = getUnifiedSigner();
+  const loginType = getLoginType();
 
   // Try to reinitialize first
   if (!signer.isAvailable()) {
@@ -291,9 +292,35 @@ export async function ensureSignerAvailable(): Promise<ReconnectResult> {
     }
   }
 
-  // If available, we're done
+  // If available, verify the signer type matches the login type
   if (signer.isAvailable()) {
     const signerType = signer.getSignerType();
+
+    // Check for signer/login type mismatch
+    // If user logged in with NIP-05 or extension, they should use NIP-07, not NIP-46
+    if ((loginType === 'nip05' || loginType === 'extension') &&
+        (signerType === 'nip46' || signerType === 'nsecbunker')) {
+      console.warn(`⚠️ Signer type mismatch: logged in with ${loginType} but signer is ${signerType}. Reinitializing...`);
+      // Force reinitialize to pick the correct signer
+      try {
+        await signer.reinitialize();
+        const newSignerType = signer.getSignerType();
+        if (newSignerType === 'nip07') {
+          return { success: true, signerType: 'nip07' };
+        }
+        // If still NIP-46, the NIP-07 extension isn't available
+        if (newSignerType === 'nip46' || newSignerType === 'nsecbunker') {
+          console.warn(`⚠️ Still using ${newSignerType} after reinit - NIP-07 extension not available`);
+          // Return error for NIP-05 users without NIP-07 extension
+          return {
+            success: false,
+            error: 'No NIP-07 extension found. Install a Nostr browser extension (Primal, Alby, nos2x) to post to Nostr, or log in with NIP-46 (Amber).'
+          };
+        }
+      } catch (error) {
+        console.warn('⚠️ Failed to reinitialize signer:', error);
+      }
+    }
 
     // For NIP-46, verify the connection is active
     if (signerType === 'nip46' || signerType === 'nsecbunker') {
@@ -307,7 +334,6 @@ export async function ensureSignerAvailable(): Promise<ReconnectResult> {
   }
 
   // Not available - attempt reconnection based on login type
-  const loginType = getLoginType();
   const currentUserPubkey = getCurrentUserPubkey();
 
   if (loginType === 'nip46' || loginType === 'nsecbunker' || loginType === 'amber') {
