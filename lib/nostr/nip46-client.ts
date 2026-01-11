@@ -272,9 +272,24 @@ export class NIP46Client {
       // This is different from nostrconnect:// where we wait for the signer to connect
       console.log('📤 NIP-46: Sending connect request to signer (bunker:// flow)...');
       try {
-        // Send connect request with the secret (if provided in bunker URI)
-        // The signer should respond with 'ack' or the user's pubkey
-        const connectParams = bunkerInfo.secret ? [bunkerInfo.secret] : [];
+        // Get app pubkey for the connect request
+        const appKeyPair = getOrCreateAppKeyPair();
+        const appPubkey = appKeyPair.publicKey;
+
+        // Send connect request per NIP-46 spec:
+        // params[0]: remote_user_pubkey (app's pubkey that wants to connect)
+        // params[1]: secret (optional, from bunker URI)
+        // params[2]: permissions (optional)
+        const connectParams = bunkerInfo.secret
+          ? [appPubkey, bunkerInfo.secret]
+          : [appPubkey];
+
+        console.log('📤 NIP-46: Connect params:', {
+          appPubkey: appPubkey.slice(0, 16) + '...',
+          hasSecret: !!bunkerInfo.secret,
+          signerPubkey: bunkerInfo.pubkey.slice(0, 16) + '...',
+        });
+
         const response = await this.sendRequest('connect', connectParams);
         console.log('✅ NIP-46: Connect request acknowledged by signer:', response);
 
