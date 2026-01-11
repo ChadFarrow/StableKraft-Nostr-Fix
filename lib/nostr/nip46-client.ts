@@ -672,10 +672,25 @@ export class NIP46Client {
           const hasPendingRequests = this.pendingRequests.size > 0;
           const hasActiveConnection = this.connection?.connected && this.connection?.pubkey;
           const isWaitingForConnection = !hasActiveConnection && !hasPendingRequests;
-          
+
+          // Get the known signer pubkey (stored after successful connect)
+          const knownSignerPubkey = (this.connection as any)?.signerPubkey;
+          const isFromKnownSigner = knownSignerPubkey && event.pubkey === knownSignerPubkey;
+
+          // CRITICAL: After connection is established, ONLY process events from the known signer
+          // This prevents processing noise from other NIP-46 signers on public relays
+          if (hasActiveConnection && knownSignerPubkey && !isFromKnownSigner && !isFromUs) {
+            // Event is from an unknown signer - silently ignore it
+            // Only log occasionally to avoid spam
+            if (this.eventCounter % 10 === 0) {
+              console.log(`🚫 NIP-46: Ignoring event from unknown signer ${event.pubkey.slice(0, 16)}... (expected ${knownSignerPubkey.slice(0, 16)}...)`);
+            }
+            return;
+          }
+
           // Also check all 'p' tags to see what pubkeys are tagged
           const allPTags = event.tags.filter(tag => tag[0] === 'p').map(tag => tag[1]);
-          
+
           // When waiting for connection, process all kind 24133 events (Amber's connect response might not be tagged correctly)
           if (isWaitingForConnection && event.kind === 24133 && !isFromUs) {
             this.handleRelayEvent(event, connectionInfo);
@@ -717,8 +732,10 @@ export class NIP46Client {
             eventContentType = 'unknown';
           }
           
-          // Check if this event is from the known Amber pubkey
+          // Check if this event is from the known signer (either hardcoded or from connection)
           const isFromKnownAmber = this.knownAmberPubkey && event.pubkey === this.knownAmberPubkey;
+          // Also check dynamic signer pubkey from connection
+          const isFromConnectedSigner = isFromKnownSigner;
           
           // Check if content looks encrypted (usually longer than 100 chars)
           const hasEncryptedContent = event.content.length > 100;
@@ -736,8 +753,9 @@ export class NIP46Client {
             (decryptedContent.id && decryptedContent.result && typeof decryptedContent.result === 'string' && decryptedContent.result.length === 64)
           );
           
-          // Process events from known Amber pubkey
-          if (isFromKnownAmber) {
+          // Process events from known signer (either hardcoded Amber or connected signer)
+          if (isFromKnownAmber || isFromConnectedSigner) {
+            console.log(`✅ NIP-46: Processing event from known signer: ${event.pubkey.slice(0, 16)}...`);
             this.handleRelayEvent(event, connectionInfo);
             return;
           }
@@ -1994,12 +2012,15 @@ export class NIP46Client {
         console.log(`[NIP46-CONNECT] Event #${this.eventCounter} - CONNECT response detected! Requesting public key...`);
         console.log('🔵 [NIP46Client] Connect response received, requesting public key from', event.pubkey.slice(0, 16) + '...');
 
-        // CRITICAL: Store Amber's pubkey from the connect response event so we can identify responses from Amber
-        // This is Amber's pubkey (the signer who sent the connect response)
+        // CRITICAL: Store the SIGNER's pubkey from the connect response event so we can filter subsequent events
+        // This is the signer app's pubkey (Primal, Amber, etc.) - NOT the user's Nostr account pubkey
+        // We must store this separately because the user's pubkey will be retrieved via get_public_key
         if (this.connection) {
-          this.connection.pubkey = event.pubkey; // Store Amber's pubkey temporarily
+          // Store signer's pubkey in signerPubkey field (same as bunker:// connections use)
+          (this.connection as any).signerPubkey = event.pubkey;
           this.connection.connected = true; // Mark as connected
-          console.error(`[NIP46-CONNECT] Stored Amber's pubkey from connect response: ${event.pubkey.slice(0, 16)}...`);
+          console.error(`[NIP46-CONNECT] Stored signer's pubkey for event filtering: ${event.pubkey.slice(0, 16)}...`);
+          console.log(`🔑 NIP-46: Will only process events from this signer pubkey: ${event.pubkey}`);
         }
 
         // Request public key and wait for it to complete
