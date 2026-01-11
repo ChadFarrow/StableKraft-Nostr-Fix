@@ -2570,25 +2570,30 @@ export class NIP46Client {
       // Check if bunker relay is connected (for bunker:// connections)
       if (isBunkerConnection && bunkerRelayUrl) {
         const bunkerRelayConnected = connectedRelays.includes(bunkerRelayUrl);
-        if (!bunkerRelayConnected) {
-          console.warn(`⚠️ NIP-46: Bunker relay ${bunkerRelayUrl} not connected. Reconnecting...`);
+        // Also check if connection is stale (no events in last 60 seconds)
+        const timeSinceLastEvent = this.lastEventTime > 0 ? Date.now() - this.lastEventTime : Infinity;
+        const isConnectionStale = timeSinceLastEvent > 60000; // 60 seconds
+
+        if (!bunkerRelayConnected || isConnectionStale) {
+          const reason = !bunkerRelayConnected ? 'disconnected' : 'stale (no events in 60s)';
+          console.warn(`⚠️ NIP-46: Bunker relay ${bunkerRelayUrl} is ${reason}. Reconnecting with full subscription...`);
           try {
-            await this.relayClient.connectToRelays([bunkerRelayUrl]);
-            // Wait for connection to establish
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            // Use startRelayConnection which handles BOTH relay connection AND subscription setup
+            await this.startRelayConnection(bunkerRelayUrl);
 
             // Verify connection
-            const updatedRelays = this.relayClient.getConnectedRelays?.() || [];
+            const updatedRelays = this.relayClient?.getConnectedRelays?.() || [];
             if (!updatedRelays.includes(bunkerRelayUrl)) {
               console.error(`❌ NIP-46: Failed to reconnect to bunker relay ${bunkerRelayUrl}`);
               throw new Error(`Bunker relay disconnected and reconnection failed. Please try reconnecting with your signer.`);
             }
-            console.log(`✅ NIP-46: Reconnected to bunker relay ${bunkerRelayUrl}`);
+            console.log(`✅ NIP-46: Reconnected to bunker relay ${bunkerRelayUrl} with fresh subscription`);
 
-            // Re-establish subscription after reconnect
-            console.log('🔄 NIP-46: Re-establishing subscription after reconnect...');
-            // The subscription should auto-reconnect, but let's wait a moment
-            await new Promise(resolve => setTimeout(resolve, 500));
+            // Update lastEventTime to prevent immediate stale detection
+            this.lastEventTime = Date.now();
+
+            // Wait a moment for subscription to be fully active
+            await new Promise(resolve => setTimeout(resolve, 1000));
           } catch (reconnectErr) {
             console.error('❌ NIP-46: Bunker relay reconnection failed:', reconnectErr);
             throw new Error(`Bunker relay connection lost. Please try reconnecting with your signer.`);
