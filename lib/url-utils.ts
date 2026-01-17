@@ -252,7 +252,19 @@ export const KNOWN_PUBLISHERS: { [slug: string]: { feedGuid: string; feedUrl: st
     feedUrl: 'https://wavlake.com/feed/artist/1e7f8807-31a7-454c-b612-f2563ba4cf67',
     name: 'Death by Lions'
   },
-  
+
+  // Henrik Flyman - Shadow Music (Gothic, Classical, Hard Rock)
+  'henrik-flyman': {
+    feedGuid: '6eb71986-cb92-4356-957f-156254ad1bd1',
+    feedUrl: 'https://wavlake.com/feed/artist/6eb71986-cb92-4356-957f-156254ad1bd1',
+    name: 'Henrik Flyman'
+  },
+  '6eb71986': {
+    feedGuid: '6eb71986-cb92-4356-957f-156254ad1bd1',
+    feedUrl: 'https://wavlake.com/feed/artist/6eb71986-cb92-4356-957f-156254ad1bd1',
+    name: 'Henrik Flyman'
+  },
+
   // Additional Wavlake Publishers
   'bennyjeans': {
     feedGuid: 'wavlake-publisher-4e33ca0c',
