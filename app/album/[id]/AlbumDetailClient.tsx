@@ -524,14 +524,22 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
           const cacheBuster = Date.now();
           const response = await fetch(`/api/albums/${encodeURIComponent(albumId)}?cb=${cacheBuster}`);
           
+          const data = await response.json();
+
+          // Handle redirect for publisher/test feeds
+          if (data.redirect) {
+            console.log(`🔀 Redirecting to publisher page: ${data.redirect}`);
+            window.location.href = data.redirect;
+            return;
+          }
+
           if (!response.ok) {
             if (response.status === 404) {
               throw new Error('Album not found');
             }
             throw new Error(`Failed to fetch album: ${response.status} ${response.statusText}`);
           }
-          
-          const data = await response.json();
+
           const foundAlbum = data.album;
             
             if (foundAlbum) {

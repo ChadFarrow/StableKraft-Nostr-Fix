@@ -686,9 +686,25 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       include: trackInclude
     });
 
-    // For publisher feeds, they may have 0 tracks (their albums have tracks instead)
-    // So we accept exact matches with 0 tracks for publisher/test types
-    if (exactMatch && (exactMatch.Track.length > 0 || exactMatch.type === 'publisher' || exactMatch.type === 'test')) {
+    // For publisher/test feeds, redirect to the publisher page instead of showing as album
+    if (exactMatch && (exactMatch.type === 'publisher' || exactMatch.type === 'test')) {
+      console.log(`🔀 Redirecting publisher/test feed to publisher page: "${exactMatch.title}" (feed ID: ${exactMatch.id}, type: ${exactMatch.type})`);
+      return NextResponse.json({
+        album: null,
+        redirect: `/publisher/${slug}`,
+        feedType: exactMatch.type,
+        message: `This is a ${exactMatch.type} feed. Redirecting to publisher page.`
+      }, {
+        status: 302,
+        headers: {
+          'Location': `/publisher/${slug}`,
+          'Content-Type': 'application/json'
+        }
+      });
+    }
+
+    // For regular feeds, accept exact matches with tracks
+    if (exactMatch && exactMatch.Track.length > 0) {
       console.log(`⚡ Found exact ID match: "${exactMatch.title}" (feed ID: ${exactMatch.id}, type: ${exactMatch.type})`);
       potentialMatches.push({ feed: exactMatch, trackCount: exactMatch.Track.length });
     }
