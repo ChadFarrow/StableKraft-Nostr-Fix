@@ -127,7 +127,31 @@ export async function POST(request: NextRequest) {
     }
     
     try {
-      
+      // If customFeedId provided and different from current, we need to update the ID
+      // This requires updating all track references too
+      if (customFeedId && customFeedId !== feed.id) {
+        console.log(`🔄 Updating feed ID from ${feed.id} to ${customFeedId}`);
+
+        // Update all tracks to reference new feed ID
+        await prisma.track.updateMany({
+          where: { feedId: feed.id },
+          data: { feedId: customFeedId }
+        });
+
+        // Delete old feed and create with new ID (Prisma doesn't allow updating primary key)
+        const oldFeedData = await prisma.feed.findUnique({ where: { id: feed.id } });
+        await prisma.feed.delete({ where: { id: feed.id } });
+
+        feed = await prisma.feed.create({
+          data: {
+            ...oldFeedData!,
+            id: customFeedId,
+            type: customType || oldFeedData!.type,
+            updatedAt: new Date()
+          }
+        });
+      }
+
       // Update feed metadata
       await prisma.feed.update({
         where: { id: feed.id },
@@ -139,6 +163,7 @@ export async function POST(request: NextRequest) {
           language: parsedFeed.language,
           category: parsedFeed.category,
           explicit: parsedFeed.explicit,
+          type: customType || feed.type, // Allow updating type too
           lastFetched: new Date(),
           status: 'active',
           lastError: null,
