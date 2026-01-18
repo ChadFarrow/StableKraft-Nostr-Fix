@@ -264,7 +264,7 @@ async function loadPublisherData(publisherId: string) {
       }
 
       // Find the first album feed with exact artist match
-      const firstAlbumFeed = await prisma.feed.findFirst({
+      let firstAlbumFeed = await prisma.feed.findFirst({
         where: {
           type: { in: ['album', 'music'] },
           status: 'active',
@@ -279,6 +279,32 @@ async function loadPublisherData(publisherId: string) {
           originalUrl: true
         }
       });
+
+      // If no exact match, try finding albums by ID pattern (handles special chars like "$2 Holla" → "2-holla")
+      if (!firstAlbumFeed) {
+        console.log(`🔍 No exact artist match, trying ID pattern match for "${publisherId}"`);
+        firstAlbumFeed = await prisma.feed.findFirst({
+          where: {
+            type: { in: ['album', 'music'] },
+            status: 'active',
+            id: { startsWith: `-${publisherId}`, mode: 'insensitive' } // Match IDs like "-2-holla-album-name"
+          },
+          select: {
+            id: true,
+            title: true,
+            artist: true,
+            description: true,
+            image: true,
+            originalUrl: true
+          }
+        });
+
+        // If found, use the actual artist name from the album
+        if (firstAlbumFeed?.artist) {
+          artistSearchName = firstAlbumFeed.artist;
+          console.log(`✅ Found album via ID pattern, using artist: "${artistSearchName}"`);
+        }
+      }
 
       if (firstAlbumFeed) {
         artistName = artistSearchName; // Use the search name (mapped or inferred)
