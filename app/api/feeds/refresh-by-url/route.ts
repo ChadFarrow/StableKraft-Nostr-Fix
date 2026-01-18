@@ -484,6 +484,9 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'Feed not found' }, { status: 404 });
         }
         
+        // Capture feed.id to satisfy TypeScript's control flow analysis
+        const feedId = feed.id;
+        
         // Find the starting order for new tracks
         const maxOrder = Math.max(
           ...Array.from(parsedItemsByGuid.values()).map(p => p.order),
@@ -503,8 +506,8 @@ export async function POST(request: NextRequest) {
             : (fullIndex >= 0 ? fullIndex + 1 : maxOrder + index + 1);
           
           return {
-            id: `${feed.id}-${item.guid || `track-${index}-${Date.now()}`}`,
-            feedId: feed.id,
+            id: `${feedId}-${item.guid || `track-${index}-${Date.now()}`}`,
+            feedId: feedId,
             guid: item.guid,
             title: item.title,
             subtitle: item.subtitle,
