@@ -479,6 +479,11 @@ export async function POST(request: NextRequest) {
       
       // Add new tracks with proper trackOrder
       if (newItems.length > 0) {
+        // Ensure feed exists (TypeScript guard)
+        if (!feed) {
+          return NextResponse.json({ error: 'Feed not found' }, { status: 404 });
+        }
+        
         // Find the starting order for new tracks
         const maxOrder = Math.max(
           ...Array.from(parsedItemsByGuid.values()).map(p => p.order),
