@@ -68,13 +68,34 @@ async function processRemoteItems(feedUrl: string, publisherFeedId: string): Pro
         console.log(`🎵 Parsing album: ${albumFeedUrl}`);
         const parsedAlbum = await parseRSSFeedWithSegments(albumFeedUrl);
 
+        // Detect feed type from <podcast:medium>
+        let albumType = 'album';
+        try {
+          const xmlResp = await fetch(albumFeedUrl);
+          if (xmlResp.ok) {
+            const xml = await xmlResp.text();
+            const mediumMatch = xml.match(/<podcast:medium>([^<]+)<\/podcast:medium>/);
+            if (mediumMatch) {
+              const medium = mediumMatch[1].toLowerCase().trim();
+              if (medium === 'music' || medium === 'album') {
+                albumType = 'music';
+              } else if (medium === 'publisher') {
+                albumType = 'publisher';
+              }
+              console.log(`📋 Album medium: ${medium} → type: ${albumType}`);
+            }
+          }
+        } catch (e) {
+          // Ignore, default to album
+        }
+
         const albumId = `album-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         await prisma.feed.create({
           data: {
             id: albumId,
             originalUrl: albumFeedUrl,
             cdnUrl: albumFeedUrl,
-            type: 'album',
+            type: albumType,
             priority: 'normal',
             title: parsedAlbum.title,
             description: parsedAlbum.description,
@@ -190,8 +211,35 @@ export async function POST(request: NextRequest) {
       try {
         // Use custom feedId if provided, otherwise generate a random one
         const feedId = customFeedId || `feed-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        // Use custom type if provided (e.g., 'test' for test feeds, 'publisher' for publisher feeds)
-        const feedType = customType || 'album';
+
+        // Determine feed type from <podcast:medium> tag if not explicitly provided
+        let feedType = customType;
+        if (!feedType) {
+          try {
+            // Fetch raw XML to get podcast:medium
+            const xmlResponse = await fetch(originalUrl);
+            if (xmlResponse.ok) {
+              const xmlText = await xmlResponse.text();
+              const mediumMatch = xmlText.match(/<podcast:medium>([^<]+)<\/podcast:medium>/);
+              if (mediumMatch) {
+                const medium = mediumMatch[1].toLowerCase().trim();
+                // Map podcast:medium values to feed types
+                if (medium === 'publisher') {
+                  feedType = 'publisher';
+                } else if (medium === 'music' || medium === 'album') {
+                  feedType = 'music';
+                } else if (medium === 'podcast') {
+                  feedType = 'podcast';
+                }
+                console.log(`📋 Detected <podcast:medium>${medium}</podcast:medium> → type: ${feedType}`);
+              }
+            }
+          } catch (e) {
+            console.warn('Could not fetch XML for medium detection:', e);
+          }
+          // Default to album if still not determined
+          feedType = feedType || 'album';
+        }
 
         const newFeed = await prisma.feed.create({
           data: {
