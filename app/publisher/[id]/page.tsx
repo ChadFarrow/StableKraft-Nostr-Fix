@@ -34,20 +34,31 @@ async function loadPublisherData(publisherId: string) {
     
     // First, try direct ID match (the publisherId might be the actual feed ID)
     // Try with status first, then without status requirement
+    // Include both 'publisher' and 'test' types (test feeds function as publishers)
     publisherFeed = await prisma.feed.findFirst({
       where: {
-        type: 'publisher',
+        type: { in: ['publisher', 'test'] },
         status: 'active',
         id: publisherId
       }
     });
-    
+
     // If not found, try without status requirement
     if (!publisherFeed) {
       publisherFeed = await prisma.feed.findFirst({
         where: {
-          type: 'publisher',
+          type: { in: ['publisher', 'test'] },
           id: publisherId
+        }
+      });
+    }
+
+    // Also try ID contains match (e.g., "podtards-test" matches "test-music-feed-podtards")
+    if (!publisherFeed) {
+      publisherFeed = await prisma.feed.findFirst({
+        where: {
+          type: { in: ['publisher', 'test'] },
+          id: { contains: publisherId, mode: 'insensitive' }
         }
       });
     }
@@ -56,7 +67,7 @@ async function loadPublisherData(publisherId: string) {
     if (!publisherFeed && publisherInfo?.feedUrl) {
       publisherFeed = await prisma.feed.findFirst({
         where: {
-          type: 'publisher',
+          type: { in: ['publisher', 'test'] },
           originalUrl: publisherInfo.feedUrl
         }
       });
@@ -70,37 +81,37 @@ async function loadPublisherData(publisherId: string) {
       // Try direct match first (with status)
       publisherFeed = await prisma.feed.findFirst({
         where: {
-          type: 'publisher',
+          type: { in: ['publisher', 'test'] },
           status: 'active',
           id: publisherInfo.feedGuid
         }
       });
-      
+
       // If not found, try without status
       if (!publisherFeed) {
         publisherFeed = await prisma.feed.findFirst({
           where: {
-            type: 'publisher',
+            type: { in: ['publisher', 'test'] },
             id: publisherInfo.feedGuid
           }
         });
       }
-      
+
       // If not found, try prefix match (for IDs like wavlake-publisher-93fbacab)
       if (!publisherFeed && feedGuidPrefix) {
         publisherFeed = await prisma.feed.findFirst({
           where: {
-            type: 'publisher',
+            type: { in: ['publisher', 'test'] },
             status: 'active',
             id: { contains: feedGuidPrefix }
           }
         });
-        
+
         // If still not found, try without status
         if (!publisherFeed) {
           publisherFeed = await prisma.feed.findFirst({
             where: {
-              type: 'publisher',
+              type: { in: ['publisher', 'test'] },
               id: { contains: feedGuidPrefix }
             }
           });
@@ -122,7 +133,7 @@ async function loadPublisherData(publisherId: string) {
       
       publisherFeed = await prisma.feed.findFirst({
         where: {
-          type: 'publisher',
+          type: { in: ['publisher', 'test'] },
           status: 'active',
           OR: [
             { title: { equals: possibleTitles[0], mode: 'insensitive' } },
@@ -137,18 +148,18 @@ async function loadPublisherData(publisherId: string) {
         }
       });
     }
-    
+
     // Also try matching by slug if title doesn't match
     if (!publisherFeed) {
       let searchId = publisherId.toLowerCase();
       // Strip common suffixes like "-publisher" for matching
       const normalizedSearchId = searchId.replace(/-publisher$/, '');
-      
+
       // Convert any publisher feed title or artist to slug format and compare
       // Try with status first, then without status requirement
       let allPublishers = await prisma.feed.findMany({
         where: {
-          type: 'publisher',
+          type: { in: ['publisher', 'test'] },
           status: 'active'
         },
         select: {
@@ -160,12 +171,12 @@ async function loadPublisherData(publisherId: string) {
           originalUrl: true
         }
       });
-      
+
       // If no active publishers found, try without status requirement
       if (allPublishers.length === 0) {
         allPublishers = await prisma.feed.findMany({
           where: {
-            type: 'publisher'
+            type: { in: ['publisher', 'test'] }
           },
           select: {
             id: true,

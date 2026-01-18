@@ -838,10 +838,27 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       const bestMatchData = potentialMatches.reduce((best, current) =>
         current.trackCount > best.trackCount ? current : best
       );
-      
+
       const feed = bestMatchData.feed;
-      console.log(`✅ Selected best match: "${feed.title}" with ${feed.Track.length} tracks`);
-      
+      console.log(`✅ Selected best match: "${feed.title}" with ${feed.Track.length} tracks (type: ${feed.type})`);
+
+      // Redirect publisher/test feeds to publisher page
+      if (feed.type === 'publisher' || feed.type === 'test') {
+        console.log(`🔀 Redirecting publisher/test feed to publisher page: "${feed.title}" (feed ID: ${feed.id})`);
+        return NextResponse.json({
+          album: null,
+          redirect: `/publisher/${slug}`,
+          feedType: feed.type,
+          message: `This is a ${feed.type} feed. Redirecting to publisher page.`
+        }, {
+          status: 302,
+          headers: {
+            'Location': `/publisher/${slug}`,
+            'Content-Type': 'application/json'
+          }
+        });
+      }
+
       // Helper function to parse v4vValue from JSON string to object
       const parseV4VValue = (v4vValue: any): any => {
         if (!v4vValue) return null;
