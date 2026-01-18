@@ -695,12 +695,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         redirect: `/publisher/${slug}`,
         feedType: exactMatch.type,
         message: `This is a publisher feed. Redirecting to publisher page.`
-      }, {
-        status: 302,
-        headers: {
-          'Location': `/publisher/${slug}`,
-          'Content-Type': 'application/json'
-        }
       });
     }
 
@@ -852,12 +846,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
           redirect: `/publisher/${slug}`,
           feedType: feed.type,
           message: `This is a publisher feed. Redirecting to publisher page.`
-        }, {
-          status: 302,
-          headers: {
-            'Location': `/publisher/${slug}`,
-            'Content-Type': 'application/json'
-          }
         });
       }
 
