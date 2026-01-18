@@ -686,14 +686,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       include: trackInclude
     });
 
-    // For publisher/test feeds, redirect to the publisher page instead of showing as album
-    if (exactMatch && (exactMatch.type === 'publisher' || exactMatch.type === 'test')) {
-      console.log(`🔀 Redirecting publisher/test feed to publisher page: "${exactMatch.title}" (feed ID: ${exactMatch.id}, type: ${exactMatch.type})`);
+    // For publisher feeds with no tracks, redirect to the publisher page
+    // Note: test feeds can be albums, singles, or publishers - detect by content not type
+    if (exactMatch && exactMatch.type === 'publisher' && exactMatch.Track.length === 0) {
+      console.log(`🔀 Redirecting publisher feed to publisher page: "${exactMatch.title}" (feed ID: ${exactMatch.id})`);
       return NextResponse.json({
         album: null,
         redirect: `/publisher/${slug}`,
         feedType: exactMatch.type,
-        message: `This is a ${exactMatch.type} feed. Redirecting to publisher page.`
+        message: `This is a publisher feed. Redirecting to publisher page.`
       }, {
         status: 302,
         headers: {
@@ -703,7 +704,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       });
     }
 
-    // For regular feeds, accept exact matches with tracks
+    // For feeds with tracks (including test feeds that function as albums)
     if (exactMatch && exactMatch.Track.length > 0) {
       console.log(`⚡ Found exact ID match: "${exactMatch.title}" (feed ID: ${exactMatch.id}, type: ${exactMatch.type})`);
       potentialMatches.push({ feed: exactMatch, trackCount: exactMatch.Track.length });
@@ -842,14 +843,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       const feed = bestMatchData.feed;
       console.log(`✅ Selected best match: "${feed.title}" with ${feed.Track.length} tracks (type: ${feed.type})`);
 
-      // Redirect publisher/test feeds to publisher page
-      if (feed.type === 'publisher' || feed.type === 'test') {
-        console.log(`🔀 Redirecting publisher/test feed to publisher page: "${feed.title}" (feed ID: ${feed.id})`);
+      // Redirect publisher feeds to publisher page (type='publisher' with no tracks)
+      // Note: test feeds can be albums, singles, or publishers - detect by content not type
+      if (feed.type === 'publisher' && feed.Track.length === 0) {
+        console.log(`🔀 Redirecting publisher feed to publisher page: "${feed.title}" (feed ID: ${feed.id})`);
         return NextResponse.json({
           album: null,
           redirect: `/publisher/${slug}`,
           feedType: feed.type,
-          message: `This is a ${feed.type} feed. Redirecting to publisher page.`
+          message: `This is a publisher feed. Redirecting to publisher page.`
         }, {
           status: 302,
           headers: {
