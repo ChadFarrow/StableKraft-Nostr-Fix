@@ -674,19 +674,22 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     let potentialMatches: Array<{ feed: any; trackCount: number }> = [];
 
     // 1. Try exact ID match first (fastest)
-    // Also allow test feeds via exact ID match (direct links from admin page)
+    // Also allow test and publisher feeds via exact ID match
     const exactMatch = await prisma.feed.findFirst({
       where: {
         OR: [
           { status: 'active', id: { equals: slug, mode: 'insensitive' } },
-          { type: 'test', id: { equals: slug, mode: 'insensitive' } }
+          { type: 'test', id: { equals: slug, mode: 'insensitive' } },
+          { type: 'publisher', id: { equals: slug, mode: 'insensitive' } }
         ]
       },
       include: trackInclude
     });
 
-    if (exactMatch && exactMatch.Track.length > 0) {
-      console.log(`⚡ Found exact ID match: "${exactMatch.title}" (feed ID: ${exactMatch.id})`);
+    // For publisher feeds, they may have 0 tracks (their albums have tracks instead)
+    // So we accept exact matches with 0 tracks for publisher/test types
+    if (exactMatch && (exactMatch.Track.length > 0 || exactMatch.type === 'publisher' || exactMatch.type === 'test')) {
+      console.log(`⚡ Found exact ID match: "${exactMatch.title}" (feed ID: ${exactMatch.id}, type: ${exactMatch.type})`);
       potentialMatches.push({ feed: exactMatch, trackCount: exactMatch.Track.length });
     }
 
@@ -864,13 +867,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       }));
       
       // Determine if this is a playlist based on track variety
-      const isPlaylist = tracks.length > 1 && 
+      const isPlaylist = tracks.length > 1 &&
         new Set(tracks.map((t: any) => t.artist || feed.artist)).size > 1;
-      
+
       const albumTitle = feed.title;
       const albumSlug = generateAlbumSlug(albumTitle);
       const albumId = albumSlug + '-' + feed.id.split('-')[0];
-      
+
       // Check if this is a publisher feed ID and resolve artist name
       let artistName = feed.artist;
       if (!artistName || artistName === 'Unknown Artist') {
@@ -881,7 +884,33 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
           console.log(`✅ Resolved artist name from publisher mapping: "${artistName}"`);
         }
       }
-      
+
+      // For publisher feeds, fetch their linked albums
+      let publisherAlbums: any[] = [];
+      if (feed.type === 'publisher' || feed.type === 'test') {
+        const linkedAlbums = await prisma.feed.findMany({
+          where: {
+            publisherId: feed.id,
+            status: 'active'
+          },
+          include: {
+            _count: { select: { Track: true } },
+            Track: { take: 1, select: { duration: true } }
+          }
+        });
+
+        publisherAlbums = linkedAlbums.map(album => ({
+          id: album.id,
+          title: album.title,
+          artist: album.artist || artistName,
+          coverArt: isValidImageUrl(album.image) ? album.image : null,
+          trackCount: album._count.Track,
+          releaseDate: album.createdAt
+        }));
+
+        console.log(`📀 Found ${publisherAlbums.length} albums for publisher "${feed.title}"`);
+      }
+
       foundAlbum = {
         id: albumId,
         title: albumTitle,
@@ -931,10 +960,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         feedUrl: feed.originalUrl,
         lastUpdated: feed.updatedAt,
         v4vRecipient: feed.v4vRecipient || feed.Track?.[0]?.v4vRecipient || null,
-        v4vValue: parseV4VValue(feed.v4vValue) || parseV4VValue(feed.Track?.[0]?.v4vValue) || null
+        v4vValue: parseV4VValue(feed.v4vValue) || parseV4VValue(feed.Track?.[0]?.v4vValue) || null,
+        // Include albums for publisher feeds
+        albums: publisherAlbums.length > 0 ? publisherAlbums : undefined,
+        isPublisher: feed.type === 'publisher' || feed.type === 'test' ? true : undefined
       };
     }
-    
+
     // If not found by exact slug match, try more flexible matching
     if (!foundAlbum) {
       console.log(`🔍 Trying flexible matching for slug: "${slug}"`);
