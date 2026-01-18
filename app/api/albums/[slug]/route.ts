@@ -704,6 +704,35 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       potentialMatches.push({ feed: exactMatch, trackCount: exactMatch.Track.length });
     }
 
+    // 1b. Try ID contains match for publisher feeds (e.g., "podtards-test" matches "test-music-feed-podtards")
+    if (!exactMatch) {
+      const publisherMatch = await prisma.feed.findFirst({
+        where: {
+          type: { in: ['publisher', 'test'] },
+          id: { contains: slug, mode: 'insensitive' }
+        },
+        include: trackInclude
+      });
+
+      if (publisherMatch) {
+        // For publisher feeds with no tracks, redirect to publisher page
+        if (publisherMatch.type === 'publisher' && publisherMatch.Track.length === 0) {
+          console.log(`🔀 Redirecting publisher feed to publisher page: "${publisherMatch.title}" (feed ID: ${publisherMatch.id})`);
+          return NextResponse.json({
+            album: null,
+            redirect: `/publisher/${slug}`,
+            feedType: publisherMatch.type,
+            message: `This is a publisher feed. Redirecting to publisher page.`
+          });
+        }
+        // For test/publisher feeds with tracks, add to potential matches
+        if (publisherMatch.Track.length > 0) {
+          console.log(`⚡ Found ID contains match: "${publisherMatch.title}" (feed ID: ${publisherMatch.id}, type: ${publisherMatch.type})`);
+          potentialMatches.push({ feed: publisherMatch, trackCount: publisherMatch.Track.length });
+        }
+      }
+    }
+
     // 2. Try matching by generated slug from feed titles (most accurate for title-based slugs)
     // First, try to find feeds with titles that could generate this slug
     if (potentialMatches.length === 0) {
