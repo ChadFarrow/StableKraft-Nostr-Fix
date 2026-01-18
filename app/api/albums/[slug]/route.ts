@@ -674,10 +674,13 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
     let potentialMatches: Array<{ feed: any; trackCount: number }> = [];
 
     // 1. Try exact ID match first (fastest)
+    // Also allow test feeds via exact ID match (direct links from admin page)
     const exactMatch = await prisma.feed.findFirst({
       where: {
-        status: 'active',
-        id: { equals: slug, mode: 'insensitive' }
+        OR: [
+          { status: 'active', id: { equals: slug, mode: 'insensitive' } },
+          { type: 'test', id: { equals: slug, mode: 'insensitive' } }
+        ]
       },
       include: trackInclude
     });

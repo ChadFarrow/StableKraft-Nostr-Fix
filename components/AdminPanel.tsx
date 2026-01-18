@@ -1176,18 +1176,99 @@ export default function AdminPanel() {
           )}
         </div>
 
-        {/* Test Feed Link */}
+        {/* Test Feeds Section */}
         <div className="bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 p-6">
-          <h2 className="text-2xl font-semibold mb-4">Test Feed</h2>
-          <a
-            href="/album/lnurl-test-feed"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-orange-600/20 text-orange-400 rounded-lg hover:bg-orange-600/30 transition-colors text-sm font-medium"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-            LNURL Test Feed
-          </a>
+          <h2 className="text-2xl font-semibold mb-4">Test Feeds</h2>
+          <p className="text-gray-400 text-sm mb-4">
+            These feeds are hidden from main site browsing and only accessible via direct links.
+          </p>
+          <div className="space-y-3">
+            {/* LNURL Test Feed */}
+            <div className="flex items-center gap-3 p-3 bg-white/5 rounded-lg border border-white/10">
+              <a
+                href="/album/lnurl-test-feed"
+                className="flex-1 inline-flex items-center gap-2 text-orange-400 hover:text-orange-300 transition-colors text-sm font-medium"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                LNURL Test Feed
+              </a>
+              <button
+                onClick={async () => {
+                  setReparsingFeeds(prev => new Set(prev).add('lnurl-test-feed'));
+                  try {
+                    const response = await fetch('/api/feeds/refresh-by-url', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ url: 'https://raw.githubusercontent.com/ChadFarrow/lnurl-test-feed/main/public/lnurl-test-feed.xml' })
+                    });
+                    const data = await response.json();
+                    if (response.ok) {
+                      toast.success(`LNURL Test Feed parsed! ${data.totalTracks || 0} tracks`);
+                    } else {
+                      toast.error(data.error || 'Failed to parse feed');
+                    }
+                  } catch (error) {
+                    toast.error('Network error parsing feed');
+                  } finally {
+                    setReparsingFeeds(prev => {
+                      const next = new Set(prev);
+                      next.delete('lnurl-test-feed');
+                      return next;
+                    });
+                  }
+                }}
+                disabled={reparsingFeeds.has('lnurl-test-feed')}
+                className="px-3 py-1.5 bg-blue-600/20 text-blue-400 rounded-lg hover:bg-blue-600/30 transition-colors text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {reparsingFeeds.has('lnurl-test-feed') ? 'Parsing...' : 'Parse'}
+              </button>
+            </div>
+
+            {/* Podtards Test Feed */}
+            <div className="flex items-center gap-3 p-3 bg-white/5 rounded-lg border border-white/10">
+              <a
+                href="/album/podtards-test"
+                className="flex-1 inline-flex items-center gap-2 text-orange-400 hover:text-orange-300 transition-colors text-sm font-medium"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                Podtards Test Feed
+              </a>
+              <button
+                onClick={async () => {
+                  setReparsingFeeds(prev => new Set(prev).add('podtards-test'));
+                  try {
+                    const response = await fetch('/api/feeds/refresh-by-url', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ url: 'https://msp.podtards.com/api/hosted/3eeb8274-6e82-4f88-ad84-3416ea5c50c4.xml' })
+                    });
+                    const data = await response.json();
+                    if (response.ok) {
+                      toast.success(`Podtards Test Feed parsed! ${data.totalTracks || 0} tracks`);
+                    } else {
+                      toast.error(data.error || 'Failed to parse feed');
+                    }
+                  } catch (error) {
+                    toast.error('Network error parsing feed');
+                  } finally {
+                    setReparsingFeeds(prev => {
+                      const next = new Set(prev);
+                      next.delete('podtards-test');
+                      return next;
+                    });
+                  }
+                }}
+                disabled={reparsingFeeds.has('podtards-test')}
+                className="px-3 py-1.5 bg-blue-600/20 text-blue-400 rounded-lg hover:bg-blue-600/30 transition-colors text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {reparsingFeeds.has('podtards-test') ? 'Parsing...' : 'Parse'}
+              </button>
+            </div>
+          </div>
         </div>
 
       </div>
