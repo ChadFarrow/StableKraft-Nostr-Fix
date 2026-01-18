@@ -48,17 +48,17 @@ async function processRemoteItems(feedUrl: string, publisherFeedId: string): Pro
 
       try {
         // Check if album feed already exists
-        let albumFeed = await prisma.feed.findFirst({
+        const existingAlbum = await prisma.feed.findFirst({
           where: { originalUrl: albumFeedUrl },
           include: { _count: { select: { Track: true } } }
         });
 
-        if (albumFeed) {
-          console.log(`⚡ Album already exists: ${albumFeed.title}`);
+        if (existingAlbum) {
+          console.log(`⚡ Album already exists: ${existingAlbum.title}`);
           results.albums.push({
-            id: albumFeed.id,
-            title: albumFeed.title,
-            tracks: albumFeed._count.Track
+            id: existingAlbum.id,
+            title: existingAlbum.title,
+            tracks: existingAlbum._count.Track
           });
           results.skipped++;
           continue;
@@ -69,7 +69,7 @@ async function processRemoteItems(feedUrl: string, publisherFeedId: string): Pro
         const parsedAlbum = await parseRSSFeedWithSegments(albumFeedUrl);
 
         const albumId = `album-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        albumFeed = await prisma.feed.create({
+        await prisma.feed.create({
           data: {
             id: albumId,
             originalUrl: albumFeedUrl,
@@ -84,7 +84,7 @@ async function processRemoteItems(feedUrl: string, publisherFeedId: string): Pro
             category: parsedAlbum.category,
             explicit: parsedAlbum.explicit,
             v4vRecipient: parsedAlbum.v4vRecipient,
-            v4vValue: parsedAlbum.v4vValue,
+            v4vValue: parsedAlbum.v4vValue ?? undefined,
             publisherId: publisherFeedId,
             lastFetched: new Date(),
             status: 'active',
