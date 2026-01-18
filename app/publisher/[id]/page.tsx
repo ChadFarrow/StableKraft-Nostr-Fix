@@ -228,60 +228,69 @@ async function loadPublisherData(publisherId: string) {
     }
     
     // If no publisher feed found, try to find albums by artist name and create publisher info from them
-    // BUT only if we have a known publisher mapping to prevent false matches
+    // Supports both KNOWN_PUBLISHERS mapping and dynamic discovery from URL slug
     let artistName: string | null = null;
-    
+
     if (!publisherFeed) {
       const publisherInfo = getPublisherInfo(publisherId);
-      
-      // Only create synthetic publisher if we have a known mapping
-      // This prevents creating publishers from wrong artist matches
+
+      // Determine artist search name: use known mapping or infer from URL slug
+      let artistSearchName: string | null = null;
+      let feedUrl: string | null = null;
+
       if (publisherInfo?.name) {
+        // Use known publisher mapping
+        artistSearchName = publisherInfo.name;
+        feedUrl = publisherInfo.feedUrl || null;
         console.log(`⚠️ No publisher feed found for "${publisherId}", but we have a mapping to "${publisherInfo.name}"`);
-        
-        // Find the first album feed with exact artist match
-        const firstAlbumFeed = await prisma.feed.findFirst({
-          where: {
-            type: { in: ['album', 'music'] },
-            status: 'active',
-            artist: { equals: publisherInfo.name, mode: 'insensitive' } // Exact match only!
-          },
-          select: {
-            id: true,
-            title: true,
-            artist: true,
-            description: true,
-            image: true,
-            originalUrl: true
-          }
-        });
-        
-        if (firstAlbumFeed) {
-          artistName = publisherInfo.name; // Use the mapped name, not the feed's artist
-          console.log(`✅ Found albums by mapped artist: "${artistName}"`);
-          
-          // Create a synthetic publisher feed from the first album
-          // NOTE: Don't set image here - we'll fetch it from the actual feed XML below
-          publisherFeed = {
-            id: `publisher-${publisherId}`,
-            title: artistName || publisherId,
-            artist: artistName || null,
-            description: `Albums by ${artistName || publisherId}`,
-            image: null, // Will be populated from feed XML fetch below
-            originalUrl: publisherInfo.feedUrl || '',
-            type: 'publisher' as any,
-            status: 'active' as any,
-            createdAt: new Date(),
-            updatedAt: new Date()
-          } as any;
-          
-          console.log(`📝 Created synthetic publisher feed for "${artistName}"`);
-        } else {
-          console.log(`❌ No albums found for mapped artist "${publisherInfo.name}"`);
-          return null;
-        }
       } else {
-        console.log(`❌ No publisher feed found for "${publisherId}" and no known mapping - cannot create synthetic publisher`);
+        // NEW: Infer artist name from the URL slug (e.g., "liv-faith" → "Liv Faith")
+        artistSearchName = publisherId
+          .split('-')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+        console.log(`⚠️ No publisher feed found for "${publisherId}", inferring artist name: "${artistSearchName}"`);
+      }
+
+      // Find the first album feed with exact artist match
+      const firstAlbumFeed = await prisma.feed.findFirst({
+        where: {
+          type: { in: ['album', 'music'] },
+          status: 'active',
+          artist: { equals: artistSearchName, mode: 'insensitive' } // Exact match only!
+        },
+        select: {
+          id: true,
+          title: true,
+          artist: true,
+          description: true,
+          image: true,
+          originalUrl: true
+        }
+      });
+
+      if (firstAlbumFeed) {
+        artistName = artistSearchName; // Use the search name (mapped or inferred)
+        console.log(`✅ Found albums by artist: "${artistName}"`);
+
+        // Create a synthetic publisher feed from the first album
+        // NOTE: Don't set image here - we'll fetch it from the actual feed XML below
+        publisherFeed = {
+          id: `publisher-${publisherId}`,
+          title: artistName || publisherId,
+          artist: artistName || null,
+          description: `Albums by ${artistName || publisherId}`,
+          image: null, // Will be populated from feed XML fetch below
+          originalUrl: feedUrl || '',
+          type: 'publisher' as any,
+          status: 'active' as any,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        } as any;
+
+        console.log(`📝 Created synthetic publisher feed for "${artistName}"`);
+      } else {
+        console.log(`❌ No albums found for artist "${artistSearchName}"`);
         return null;
       }
     } else {

@@ -909,6 +909,165 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         }));
 
         console.log(`📀 Found ${publisherAlbums.length} albums for publisher "${feed.title}"`);
+
+        // If publisher/test feed has 0 tracks, resolve tracks from linked albums or remoteItems
+        if (tracks.length === 0) {
+          console.log(`🔍 Publisher feed has 0 tracks, attempting to resolve from linked albums or remoteItems`);
+
+          // Option 1: Aggregate tracks from linked albums (via publisherId)
+          if (publisherAlbums.length > 0) {
+            const linkedAlbumsWithTracks = await prisma.feed.findMany({
+              where: {
+                publisherId: feed.id,
+                status: 'active'
+              },
+              include: {
+                Track: {
+                  where: { audioUrl: { not: '' } },
+                  orderBy: [
+                    { trackOrder: 'asc' as const },
+                    { publishedAt: 'asc' as const },
+                    { createdAt: 'asc' as const }
+                  ]
+                }
+              }
+            });
+
+            let trackIndex = 0;
+            for (const album of linkedAlbumsWithTracks) {
+              for (const track of album.Track) {
+                tracks.push({
+                  id: track.id,
+                  guid: track.guid,
+                  title: track.title,
+                  duration: track.duration ?
+                    Math.floor(track.duration / 60) + ':' + String(track.duration % 60).padStart(2, '0') :
+                    track.itunesDuration || '0:00',
+                  url: track.audioUrl,
+                  trackNumber: ++trackIndex,
+                  subtitle: track.subtitle || '',
+                  summary: track.description || '',
+                  image: (isValidImageUrl(track.image) ? track.image : (isValidImageUrl(album.image) ? album.image : '')),
+                  explicit: track.explicit || false,
+                  keywords: track.itunesKeywords || [],
+                  v4vRecipient: track.v4vRecipient,
+                  v4vValue: parseV4VValue(track.v4vValue),
+                  status: track.status || 'active',
+                  albumTitle: album.title,
+                  feedId: album.id
+                });
+              }
+            }
+            console.log(`✅ Aggregated ${tracks.length} tracks from ${linkedAlbumsWithTracks.length} linked albums`);
+          }
+
+          // Option 2: Parse remoteItems from feed XML if still no tracks
+          if (tracks.length === 0 && feed.originalUrl) {
+            try {
+              console.log(`📡 Fetching publisher feed XML to resolve remoteItems: ${feed.originalUrl}`);
+              const feedResponse = await fetch(feed.originalUrl, {
+                signal: AbortSignal.timeout(10000)
+              });
+
+              if (feedResponse.ok) {
+                const xmlText = await feedResponse.text();
+
+                // Parse podcast:remoteItem tags to get track references
+                const remoteItems: Array<{ feedGuid: string; itemGuid: string }> = [];
+                const remoteItemRegex = /<podcast:remoteItem[^>]*>/g;
+                const matches = xmlText.match(remoteItemRegex) || [];
+
+                for (const match of matches) {
+                  const feedGuidMatch = match.match(/feedGuid="([^"]+)"/);
+                  const itemGuidMatch = match.match(/itemGuid="([^"]+)"/);
+                  const mediumMatch = match.match(/medium="([^"]+)"/);
+
+                  // Skip publisher references - we only want music items
+                  if (mediumMatch?.[1] === 'publisher') continue;
+
+                  if (feedGuidMatch?.[1] && itemGuidMatch?.[1]) {
+                    remoteItems.push({
+                      feedGuid: feedGuidMatch[1],
+                      itemGuid: itemGuidMatch[1]
+                    });
+                  }
+                }
+
+                console.log(`📋 Found ${remoteItems.length} remoteItems in publisher feed XML`);
+
+                if (remoteItems.length > 0) {
+                  // Resolve remoteItems from database by itemGuid (maps to track.guid)
+                  const itemGuids = [...new Set(remoteItems.map(item => item.itemGuid))];
+                  const resolvedTracks = await prisma.track.findMany({
+                    where: {
+                      guid: { in: itemGuids },
+                      status: 'active'
+                    },
+                    select: {
+                      id: true,
+                      guid: true,
+                      title: true,
+                      artist: true,
+                      audioUrl: true,
+                      duration: true,
+                      image: true,
+                      subtitle: true,
+                      description: true,
+                      explicit: true,
+                      itunesKeywords: true,
+                      itunesDuration: true,
+                      v4vRecipient: true,
+                      v4vValue: true,
+                      status: true,
+                      Feed: {
+                        select: {
+                          id: true,
+                          title: true,
+                          artist: true,
+                          image: true
+                        }
+                      }
+                    }
+                  });
+
+                  // Create a map for ordered lookup
+                  const trackMap = new Map(resolvedTracks.map(t => [t.guid, t]));
+
+                  // Add tracks in remoteItem order
+                  let trackIndex = 0;
+                  for (const remoteItem of remoteItems) {
+                    const track = trackMap.get(remoteItem.itemGuid);
+                    if (track && track.audioUrl) {
+                      tracks.push({
+                        id: track.id,
+                        guid: track.guid,
+                        title: track.title,
+                        duration: track.duration ?
+                          Math.floor(track.duration / 60) + ':' + String(track.duration % 60).padStart(2, '0') :
+                          track.itunesDuration || '0:00',
+                        url: track.audioUrl,
+                        trackNumber: ++trackIndex,
+                        subtitle: track.subtitle || '',
+                        summary: track.description || '',
+                        image: (isValidImageUrl(track.image) ? track.image : (isValidImageUrl(track.Feed?.image) ? track.Feed.image : '')),
+                        explicit: track.explicit || false,
+                        keywords: track.itunesKeywords || [],
+                        v4vRecipient: track.v4vRecipient,
+                        v4vValue: parseV4VValue(track.v4vValue),
+                        status: track.status || 'active',
+                        albumTitle: track.Feed?.title,
+                        feedId: track.Feed?.id
+                      });
+                    }
+                  }
+                  console.log(`✅ Resolved ${tracks.length} tracks from remoteItems`);
+                }
+              }
+            } catch (error) {
+              console.warn('⚠️ Could not fetch/parse publisher feed XML for remoteItems:', error);
+            }
+          }
+        }
       }
 
       foundAlbum = {
