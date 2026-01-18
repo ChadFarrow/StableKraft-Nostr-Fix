@@ -1233,7 +1233,7 @@ export default function AdminPanel() {
             {/* Podtards Test Feed */}
             <div className="flex items-center gap-3 p-3 bg-white/5 rounded-lg border border-white/10">
               <a
-                href="/album/podtards-test"
+                href="/publisher/podtards-test"
                 className="flex-1 inline-flex items-center gap-2 text-orange-400 hover:text-orange-300 transition-colors text-sm font-medium"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1250,8 +1250,7 @@ export default function AdminPanel() {
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
                         url: 'https://msp.podtards.com/api/hosted/3eeb8274-6e82-4f88-ad84-3416ea5c50c4.xml',
-                        feedId: 'podtards-test',
-                        type: 'test'
+                        feedId: 'podtards-test'
                       })
                     });
                     const data = await response.json();
