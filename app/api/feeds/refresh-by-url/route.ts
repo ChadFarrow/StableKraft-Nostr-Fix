@@ -307,7 +307,12 @@ export async function POST(request: NextRequest) {
         }, { status: 500 });
       }
     }
-    
+
+    // At this point feed must exist (we returned early above if it didn't)
+    if (!feed) {
+      return NextResponse.json({ error: 'Feed not found' }, { status: 404 });
+    }
+
     try {
       // If customFeedId provided and different from current, we need to update the ID
       // This requires updating all track references too
