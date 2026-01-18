@@ -6,11 +6,15 @@ import { parseRSSFeedWithSegments, calculateTrackOrder } from '@/lib/rss-parser-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { originalUrl } = body;
-    
+    // Accept both 'url' and 'originalUrl' for backwards compatibility
+    const originalUrl = body.originalUrl || body.url;
+    // Optional: custom feedId and type for test feeds
+    const customFeedId = body.feedId;
+    const customType = body.type;
+
     if (!originalUrl) {
       return NextResponse.json(
-        { error: 'originalUrl is required' },
+        { error: 'originalUrl or url is required' },
         { status: 400 }
       );
     }
@@ -35,12 +39,17 @@ export async function POST(request: NextRequest) {
     // If feed doesn't exist, create it
     if (!feed) {
       try {
+        // Use custom feedId if provided, otherwise generate a random one
+        const feedId = customFeedId || `feed-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        // Use custom type if provided (e.g., 'test' for test feeds, 'publisher' for publisher feeds)
+        const feedType = customType || 'album';
+
         const newFeed = await prisma.feed.create({
           data: {
-            id: `feed-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            id: feedId,
             originalUrl,
             cdnUrl: originalUrl,
-            type: 'album',
+            type: feedType,
             priority: 'normal',
             title: parsedFeed.title,
             description: parsedFeed.description,

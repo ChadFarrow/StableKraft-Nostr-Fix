@@ -1201,7 +1201,11 @@ export default function AdminPanel() {
                     const response = await fetch('/api/feeds/refresh-by-url', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ url: 'https://raw.githubusercontent.com/ChadFarrow/lnurl-test-feed/main/public/lnurl-test-feed.xml' })
+                      body: JSON.stringify({
+                        url: 'https://raw.githubusercontent.com/ChadFarrow/lnurl-test-feed/main/public/lnurl-test-feed.xml',
+                        feedId: 'lnurl-test-feed',
+                        type: 'test'
+                      })
                     });
                     const data = await response.json();
                     if (response.ok) {
@@ -1244,7 +1248,11 @@ export default function AdminPanel() {
                     const response = await fetch('/api/feeds/refresh-by-url', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ url: 'https://msp.podtards.com/api/hosted/3eeb8274-6e82-4f88-ad84-3416ea5c50c4.xml' })
+                      body: JSON.stringify({
+                        url: 'https://msp.podtards.com/api/hosted/3eeb8274-6e82-4f88-ad84-3416ea5c50c4.xml',
+                        feedId: 'podtards-test',
+                        type: 'test'
+                      })
                     });
                     const data = await response.json();
                     if (response.ok) {
