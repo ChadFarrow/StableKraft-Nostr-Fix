@@ -2,6 +2,155 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { parseRSSFeedWithSegments, calculateTrackOrder } from '@/lib/rss-parser-db';
 
+interface RemoteItemResult {
+  added: number;
+  skipped: number;
+  errors: Array<{ feedUrl: string; error: string }>;
+  albums: Array<{ id: string; title: string; tracks: number }>;
+}
+
+/**
+ * Process podcast:remoteItem references from a publisher feed
+ * Returns the albums that were added/found
+ */
+async function processRemoteItems(feedUrl: string, publisherFeedId: string): Promise<RemoteItemResult> {
+  const results: RemoteItemResult = {
+    added: 0,
+    skipped: 0,
+    errors: [],
+    albums: []
+  };
+
+  try {
+    // Fetch the raw XML to extract remoteItems
+    const response = await fetch(feedUrl);
+    if (!response.ok) {
+      return results;
+    }
+
+    const xml = await response.text();
+
+    // Extract podcast:remoteItem tags
+    const remoteItemRegex = /<podcast:remoteItem[^>]*>/g;
+    const matches = xml.match(remoteItemRegex) || [];
+
+    if (matches.length === 0) {
+      return results;
+    }
+
+    console.log(`📡 Found ${matches.length} remoteItems in publisher feed`);
+
+    for (const match of matches) {
+      const feedUrlMatch = match.match(/feedUrl="([^"]+)"/);
+      if (!feedUrlMatch) continue;
+
+      const albumFeedUrl = feedUrlMatch[1];
+
+      try {
+        // Check if album feed already exists
+        let albumFeed = await prisma.feed.findFirst({
+          where: { originalUrl: albumFeedUrl },
+          include: { _count: { select: { Track: true } } }
+        });
+
+        if (albumFeed) {
+          console.log(`⚡ Album already exists: ${albumFeed.title}`);
+          results.albums.push({
+            id: albumFeed.id,
+            title: albumFeed.title,
+            tracks: albumFeed._count.Track
+          });
+          results.skipped++;
+          continue;
+        }
+
+        // Parse and create the album feed
+        console.log(`🎵 Parsing album: ${albumFeedUrl}`);
+        const parsedAlbum = await parseRSSFeedWithSegments(albumFeedUrl);
+
+        const albumId = `album-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        albumFeed = await prisma.feed.create({
+          data: {
+            id: albumId,
+            originalUrl: albumFeedUrl,
+            cdnUrl: albumFeedUrl,
+            type: 'album',
+            priority: 'normal',
+            title: parsedAlbum.title,
+            description: parsedAlbum.description,
+            artist: parsedAlbum.artist,
+            image: parsedAlbum.image,
+            language: parsedAlbum.language,
+            category: parsedAlbum.category,
+            explicit: parsedAlbum.explicit,
+            v4vRecipient: parsedAlbum.v4vRecipient,
+            v4vValue: parsedAlbum.v4vValue,
+            publisherId: publisherFeedId,
+            lastFetched: new Date(),
+            status: 'active',
+            updatedAt: new Date()
+          }
+        });
+
+        // Create tracks
+        if (parsedAlbum.items.length > 0) {
+          const tracksData = parsedAlbum.items.map((item, index) => ({
+            id: `${albumId}-${item.guid || `track-${index}-${Date.now()}`}`,
+            feedId: albumId,
+            guid: item.guid,
+            title: item.title,
+            subtitle: item.subtitle,
+            description: item.description,
+            artist: item.artist,
+            audioUrl: item.audioUrl,
+            duration: item.duration,
+            explicit: item.explicit,
+            image: item.image,
+            publishedAt: item.publishedAt,
+            itunesAuthor: item.itunesAuthor,
+            itunesSummary: item.itunesSummary,
+            itunesImage: item.itunesImage,
+            itunesDuration: item.itunesDuration,
+            itunesKeywords: item.itunesKeywords || [],
+            itunesCategories: item.itunesCategories || [],
+            v4vRecipient: item.v4vRecipient,
+            v4vValue: item.v4vValue,
+            startTime: item.startTime,
+            endTime: item.endTime,
+            trackOrder: item.episode ? calculateTrackOrder(item.episode, item.season) : index + 1,
+            updatedAt: new Date()
+          }));
+
+          await prisma.track.createMany({
+            data: tracksData,
+            skipDuplicates: true
+          });
+        }
+
+        console.log(`✅ Added album "${parsedAlbum.title}" with ${parsedAlbum.items.length} tracks`);
+        results.albums.push({
+          id: albumId,
+          title: parsedAlbum.title,
+          tracks: parsedAlbum.items.length
+        });
+        results.added++;
+
+        // Rate limiting
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error(`❌ Error processing ${albumFeedUrl}: ${errorMessage}`);
+        results.errors.push({ feedUrl: albumFeedUrl, error: errorMessage });
+      }
+    }
+  } catch (error) {
+    console.error('Error processing remoteItems:', error);
+  }
+
+  return results;
+}
+
 // POST /api/feeds/refresh-by-url - Refresh a feed by its originalUrl
 export async function POST(request: NextRequest) {
   try {
@@ -103,7 +252,7 @@ export async function POST(request: NextRequest) {
         }
         
         // Return early for newly created feeds
-        const newFeedWithCount = await prisma.feed.findUnique({
+        let newFeedWithCount = await prisma.feed.findUnique({
           where: { id: newFeed.id },
           include: {
             _count: {
@@ -111,12 +260,45 @@ export async function POST(request: NextRequest) {
             }
           }
         });
-        
+
+        // If new feed has 0 tracks, check for remoteItems (publisher feed)
+        let remoteItemsResult: RemoteItemResult | null = null;
+        if (newFeedWithCount && newFeedWithCount._count.Track === 0) {
+          console.log(`📡 New feed has 0 tracks, checking for remoteItems...`);
+          remoteItemsResult = await processRemoteItems(originalUrl, newFeed.id);
+
+          if (remoteItemsResult.albums.length > 0) {
+            console.log(`✅ Processed ${remoteItemsResult.albums.length} albums from remoteItems`);
+            // Update feed type to publisher (or keep test if specified)
+            await prisma.feed.update({
+              where: { id: newFeed.id },
+              data: { type: feedType === 'test' ? 'test' : 'publisher' }
+            });
+
+            newFeedWithCount = await prisma.feed.findUnique({
+              where: { id: newFeed.id },
+              include: {
+                _count: {
+                  select: { Track: true }
+                }
+              }
+            });
+          }
+        }
+
         return NextResponse.json({
           message: 'Feed created and populated successfully',
           feed: newFeedWithCount,
           newTracks: parsedFeed.items.length,
-          totalTracks: newFeedWithCount?._count.Track || 0
+          totalTracks: newFeedWithCount?._count.Track || 0,
+          ...(remoteItemsResult && remoteItemsResult.albums.length > 0 ? {
+            remoteItems: {
+              added: remoteItemsResult.added,
+              skipped: remoteItemsResult.skipped,
+              albums: remoteItemsResult.albums,
+              errors: remoteItemsResult.errors
+            }
+          } : {})
         });
       } catch (createError) {
         return NextResponse.json({
@@ -325,7 +507,7 @@ export async function POST(request: NextRequest) {
       }
       
       // Get updated feed with counts
-      const updatedFeed = await prisma.feed.findUnique({
+      let updatedFeed = await prisma.feed.findUnique({
         where: { id: feed.id },
         include: {
           _count: {
@@ -333,11 +515,45 @@ export async function POST(request: NextRequest) {
           }
         }
       });
-      
+
+      // If this is a publisher feed (has no tracks but might have remoteItems), process them
+      let remoteItemsResult: RemoteItemResult | null = null;
+      if (updatedFeed && updatedFeed._count.Track === 0) {
+        console.log(`📡 Feed has 0 tracks, checking for remoteItems...`);
+        remoteItemsResult = await processRemoteItems(originalUrl, feed.id);
+
+        if (remoteItemsResult.albums.length > 0) {
+          console.log(`✅ Processed ${remoteItemsResult.albums.length} albums from remoteItems`);
+          // Update feed type to 'test' if it was a test feed, otherwise 'publisher'
+          await prisma.feed.update({
+            where: { id: feed.id },
+            data: { type: customType || 'publisher' }
+          });
+
+          // Refresh feed data
+          updatedFeed = await prisma.feed.findUnique({
+            where: { id: feed.id },
+            include: {
+              _count: {
+                select: { Track: true }
+              }
+            }
+          });
+        }
+      }
+
       return NextResponse.json({
         message: 'Feed refreshed successfully',
         feed: updatedFeed,
         newTracks: newItems.length,
+        ...(remoteItemsResult && remoteItemsResult.albums.length > 0 ? {
+          remoteItems: {
+            added: remoteItemsResult.added,
+            skipped: remoteItemsResult.skipped,
+            albums: remoteItemsResult.albums,
+            errors: remoteItemsResult.errors
+          }
+        } : {}),
         totalTracks: updatedFeed?._count.Track || 0,
         updatedTracks: updatePromises.length,
         v4vUpdated: v4vUpdatedCount
