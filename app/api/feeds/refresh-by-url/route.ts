@@ -322,13 +322,33 @@ export async function POST(request: NextRequest) {
 
         // Delete old feed and create with new ID (Prisma doesn't allow updating primary key)
         const oldFeedData = await prisma.feed.findUnique({ where: { id: feed.id } });
+        if (!oldFeedData) {
+          throw new Error('Feed not found after lookup');
+        }
         await prisma.feed.delete({ where: { id: feed.id } });
 
         feed = await prisma.feed.create({
           data: {
-            ...oldFeedData!,
             id: customFeedId,
-            type: customType || oldFeedData!.type,
+            guid: oldFeedData.guid,
+            title: oldFeedData.title,
+            description: oldFeedData.description,
+            originalUrl: oldFeedData.originalUrl,
+            cdnUrl: oldFeedData.cdnUrl,
+            type: customType || oldFeedData.type,
+            artist: oldFeedData.artist,
+            image: oldFeedData.image,
+            language: oldFeedData.language,
+            category: oldFeedData.category,
+            podcastCategories: oldFeedData.podcastCategories,
+            explicit: oldFeedData.explicit,
+            priority: oldFeedData.priority,
+            status: oldFeedData.status,
+            lastFetched: oldFeedData.lastFetched,
+            lastError: oldFeedData.lastError,
+            v4vRecipient: oldFeedData.v4vRecipient,
+            v4vValue: oldFeedData.v4vValue ?? undefined,
+            publisherId: oldFeedData.publisherId,
             updatedAt: new Date()
           }
         });
