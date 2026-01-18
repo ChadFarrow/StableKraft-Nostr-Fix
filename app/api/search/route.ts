@@ -148,7 +148,7 @@ export async function GET(request: NextRequest) {
           where: {
             AND: [
               ...whereConditions,
-              { feedId: { notIn: ['lnurl-testing-podcast', 'lnurl-test-feed'] } }
+              { feedId: { notIn: ['lnurl-testing-podcast', 'lnurl-test-feed', 'podtards-test'] } }
             ]
           },
           include: {
@@ -230,7 +230,7 @@ export async function GET(request: NextRequest) {
         // Filter out Bowl After Bowl podcast content (but keep Bowl Covers) and test feeds
         const filteredAlbums = albums.filter(album => {
           // Exclude test feeds
-          if (album.id === 'lnurl-testing-podcast' || album.id === 'lnurl-test-feed') {
+          if (album.id === 'lnurl-testing-podcast' || album.id === 'lnurl-test-feed' || album.id === 'podtards-test') {
             return false;
           }
 
