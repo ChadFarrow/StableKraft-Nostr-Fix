@@ -112,6 +112,25 @@ jobs:
           echo "⚠️ Publisher parsing had issues (HTTP $HTTP_CODE) - non-critical"
         fi
 
+        # Step 5: Reparse album feeds to detect new tracks
+        echo ""
+        echo "📋 Step 5: Reparsing album feeds to detect new tracks..."
+
+        REPARSE_RESPONSE=$(curl -s -X POST -w "\n%{http_code}" "${BASE_URL}/api/admin/reparse-feeds?type=album&maxAgeHours=20&limit=200")
+        HTTP_CODE=$(echo "$REPARSE_RESPONSE" | tail -n1)
+        RESPONSE_BODY=$(echo "$REPARSE_RESPONSE" | sed '$d')
+
+        if [ "$HTTP_CODE" -eq 200 ]; then
+          PROCESSED=$(echo "$RESPONSE_BODY" | jq -r '.stats.feedsProcessed // 0' 2>/dev/null || echo "?")
+          NEW_TRACKS=$(echo "$RESPONSE_BODY" | jq -r '.stats.newTracksAdded // 0' 2>/dev/null || echo "?")
+          FAILED=$(echo "$RESPONSE_BODY" | jq -r '.stats.feedsFailed // 0' 2>/dev/null || echo "?")
+          DURATION=$(echo "$RESPONSE_BODY" | jq -r '.duration // "?"' 2>/dev/null || echo "?")
+          echo "✅ Album feeds reparsed: ${PROCESSED} feeds processed, ${NEW_TRACKS} new tracks added, ${FAILED} failed (${DURATION})"
+        else
+          echo "⚠️ Album reparse had issues (HTTP $HTTP_CODE) - non-critical"
+          echo "$RESPONSE_BODY"
+        fi
+
         echo ""
         echo "✨ Playlist refresh workflow completed"
       env:
