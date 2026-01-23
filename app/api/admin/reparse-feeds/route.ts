@@ -80,7 +80,8 @@ export async function POST(request: NextRequest) {
       tracksUpdated: 0,
       feedsFailed: 0
     };
-    const errors: Array<{ feedId: string; title: string; error: string }> = [];
+    const errors: Array<{ feedId: string; title: string; url: string; error: string; errorType: string }> = [];
+    const errorCounts: Record<string, number> = {};
 
     // Split into batches
     const batches: typeof feedsToReparse[] = [];
@@ -107,10 +108,14 @@ export async function POST(request: NextRequest) {
           stats.tracksUpdated += result.updatedTracks;
         } else {
           stats.feedsFailed++;
+          const errorType = categorizeError(result.error);
+          errorCounts[errorType] = (errorCounts[errorType] || 0) + 1;
           errors.push({
             feedId: result.feedId,
             title: result.title,
-            error: result.error
+            url: result.url,
+            error: result.error,
+            errorType
           });
         }
       }
@@ -122,13 +127,23 @@ export async function POST(request: NextRequest) {
     }
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+
+    // Log error summary
+    if (Object.keys(errorCounts).length > 0) {
+      console.log(`⚠️ Error breakdown:`);
+      for (const [type, count] of Object.entries(errorCounts).sort((a, b) => b[1] - a[1])) {
+        console.log(`   ${type}: ${count}`);
+      }
+    }
+
     console.log(`✅ Bulk reparse completed in ${duration}s: ${stats.feedsProcessed} feeds processed, ${stats.newTracksAdded} new tracks added, ${stats.feedsFailed} failed`);
 
     return NextResponse.json({
       success: true,
       message: `Reparsed ${stats.feedsProcessed} feeds`,
       stats,
-      errors: errors.length > 0 ? errors : undefined,
+      errorSummary: Object.keys(errorCounts).length > 0 ? errorCounts : undefined,
+      errors: errors.length > 0 ? errors.slice(0, 50) : undefined, // Limit to first 50 errors
       duration: `${duration}s`
     });
 
@@ -156,11 +171,13 @@ async function reparseSingleFeed(feed: {
   success: boolean;
   feedId: string;
   title: string;
+  url: string;
   newTracks: number;
   updatedTracks: number;
   error: string;
 }> {
   const feedTitle = feed.title || 'Unknown';
+  const feedUrl = feed.originalUrl;
 
   try {
     // Parse the RSS feed from the original URL
@@ -184,6 +201,7 @@ async function reparseSingleFeed(feed: {
         success: false,
         feedId: feed.id,
         title: feedTitle,
+        url: feedUrl,
         newTracks: 0,
         updatedTracks: 0,
         error: errorMessage
@@ -364,6 +382,7 @@ async function reparseSingleFeed(feed: {
       success: true,
       feedId: feed.id,
       title: feedTitle,
+      url: feedUrl,
       newTracks: newTracksAdded,
       updatedTracks: tracksUpdated,
       error: ''
@@ -371,7 +390,7 @@ async function reparseSingleFeed(feed: {
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`  ❌ ${feedTitle}: ${errorMessage}`);
+    console.error(`  ❌ ${feedTitle} (${feedUrl}): ${errorMessage}`);
 
     // Try to update feed with error status
     try {
@@ -391,11 +410,52 @@ async function reparseSingleFeed(feed: {
       success: false,
       feedId: feed.id,
       title: feedTitle,
+      url: feedUrl,
       newTracks: 0,
       updatedTracks: 0,
       error: errorMessage
     };
   }
+}
+
+/**
+ * Categorize an error message into a type
+ */
+function categorizeError(error: string): string {
+  const errorLower = error.toLowerCase();
+
+  if (errorLower.includes('enotfound') || errorLower.includes('getaddrinfo')) {
+    return 'DNS_LOOKUP_FAILED';
+  }
+  if (errorLower.includes('econnrefused')) {
+    return 'CONNECTION_REFUSED';
+  }
+  if (errorLower.includes('econnreset') || errorLower.includes('socket hang up')) {
+    return 'CONNECTION_RESET';
+  }
+  if (errorLower.includes('etimedout') || errorLower.includes('timeout')) {
+    return 'TIMEOUT';
+  }
+  if (errorLower.includes('404') || errorLower.includes('not found')) {
+    return 'NOT_FOUND_404';
+  }
+  if (errorLower.includes('403') || errorLower.includes('forbidden')) {
+    return 'FORBIDDEN_403';
+  }
+  if (errorLower.includes('500') || errorLower.includes('internal server')) {
+    return 'SERVER_ERROR_5XX';
+  }
+  if (errorLower.includes('ssl') || errorLower.includes('certificate') || errorLower.includes('cert')) {
+    return 'SSL_ERROR';
+  }
+  if (errorLower.includes('parse') || errorLower.includes('xml') || errorLower.includes('invalid')) {
+    return 'PARSE_ERROR';
+  }
+  if (errorLower.includes('no items') || errorLower.includes('empty')) {
+    return 'EMPTY_FEED';
+  }
+
+  return 'OTHER';
 }
 
 /**
