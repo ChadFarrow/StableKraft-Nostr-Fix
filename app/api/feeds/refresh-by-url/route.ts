@@ -441,7 +441,7 @@ export async function POST(request: NextRequest) {
         parsedFeed.items.map((item, index) => [item.guid, { item, order: index + 1 }])
       );
       
-      // Update trackOrder AND v4v data for ALL existing tracks based on current RSS feed
+      // Update ALL track metadata for existing tracks based on current RSS feed
       // Match tracks by GUID first, then by title+audioUrl for tracks without GUIDs
       const updatePromises: Promise<any>[] = [];
       let v4vUpdatedCount = 0;
@@ -477,19 +477,39 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        if (order !== null) {
-          // Build update data with trackOrder and v4v data if available
-          const updateData: any = { trackOrder: order };
+        if (order !== null && matchedItem) {
+          // Build update data with all track metadata fields
+          const updateData: any = {
+            trackOrder: order,
+            // Metadata fields
+            title: matchedItem.title,
+            subtitle: matchedItem.subtitle,
+            description: matchedItem.description,
+            artist: matchedItem.artist,
+            audioUrl: matchedItem.audioUrl,
+            duration: matchedItem.duration,
+            explicit: matchedItem.explicit,
+            image: matchedItem.image,
+            publishedAt: matchedItem.publishedAt,
+            // iTunes fields
+            itunesAuthor: matchedItem.itunesAuthor,
+            itunesSummary: matchedItem.itunesSummary,
+            itunesImage: matchedItem.itunesImage,
+            itunesDuration: matchedItem.itunesDuration,
+            itunesKeywords: matchedItem.itunesKeywords || [],
+            itunesCategories: matchedItem.itunesCategories || [],
+            // V4V fields
+            v4vRecipient: matchedItem.v4vRecipient,
+            v4vValue: matchedItem.v4vValue,
+            // Time fields
+            startTime: matchedItem.startTime,
+            endTime: matchedItem.endTime,
+            // Update timestamp
+            updatedAt: new Date()
+          };
 
-          // Update v4v data from the parsed feed item
-          if (matchedItem) {
-            if (matchedItem.v4vRecipient) {
-              updateData.v4vRecipient = matchedItem.v4vRecipient;
-              v4vUpdatedCount++;
-            }
-            if (matchedItem.v4vValue) {
-              updateData.v4vValue = matchedItem.v4vValue;
-            }
+          if (matchedItem.v4vRecipient) {
+            v4vUpdatedCount++;
           }
 
           updatePromises.push(
@@ -503,7 +523,7 @@ export async function POST(request: NextRequest) {
       
       if (updatePromises.length > 0) {
         await Promise.all(updatePromises);
-        console.log(`✅ Updated ${updatePromises.length} existing tracks (${v4vUpdatedCount} with v4v data)`);
+        console.log(`✅ Updated metadata for ${updatePromises.length} existing tracks (${v4vUpdatedCount} with v4v data)`);
       } else {
         console.log(`⚠️ No tracks matched for update`);
       }
