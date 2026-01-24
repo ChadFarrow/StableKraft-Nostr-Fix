@@ -89,6 +89,157 @@ async function linkAlbumsToPublisher(
 }
 
 /**
+ * Import missing album feeds from a publisher's remote items
+ * This fetches and creates album feeds that don't exist in the database yet
+ */
+async function importMissingAlbums(
+  publisherId: string,
+  remoteItems: Array<{ feedGuid: string; feedUrl: string }>
+): Promise<{ imported: number; failed: number; skipped: number }> {
+  let imported = 0;
+  let failed = 0;
+  let skipped = 0;
+
+  for (const item of remoteItems) {
+    if (!item.feedUrl) {
+      skipped++;
+      continue;
+    }
+
+    try {
+      // Check if album already exists by URL or GUID
+      const conditions: any[] = [{ originalUrl: item.feedUrl }];
+      if (item.feedGuid) {
+        conditions.push({ id: item.feedGuid });
+        conditions.push({ guid: item.feedGuid });
+        conditions.push({ originalUrl: { contains: item.feedGuid } });
+      }
+
+      const existing = await prisma.feed.findFirst({
+        where: { OR: conditions }
+      });
+
+      if (existing) {
+        // Just link it if not already linked
+        if (!existing.publisherId) {
+          await prisma.feed.update({
+            where: { id: existing.id },
+            data: { publisherId }
+          });
+        }
+        skipped++;
+        continue;
+      }
+
+      // Fetch and parse the album feed
+      console.log(`📥 Importing album: ${item.feedUrl}`);
+      const parsedFeed = await parseRSSFeedWithSegments(item.feedUrl);
+
+      // Generate feed ID
+      let feedId = generateFeedId(parsedFeed.artist, parsedFeed.title);
+
+      // Check for ID collision
+      const idExists = await prisma.feed.findUnique({ where: { id: feedId } });
+      if (idExists) {
+        feedId = `${feedId}-${Date.now()}`;
+      }
+
+      // Check for GUID collision
+      if (parsedFeed.podcastGuid) {
+        const guidExists = await prisma.feed.findFirst({
+          where: { guid: parsedFeed.podcastGuid }
+        });
+        if (guidExists) {
+          // Link existing and skip
+          if (!guidExists.publisherId) {
+            await prisma.feed.update({
+              where: { id: guidExists.id },
+              data: { publisherId }
+            });
+          }
+          skipped++;
+          continue;
+        }
+      }
+
+      // Create the album feed
+      const feed = await prisma.feed.create({
+        data: {
+          id: feedId,
+          guid: parsedFeed.podcastGuid || null,
+          originalUrl: normalizeUrl(item.feedUrl),
+          cdnUrl: normalizeUrl(item.feedUrl),
+          type: 'album',
+          priority: 'normal',
+          title: parsedFeed.title,
+          description: parsedFeed.description,
+          artist: parsedFeed.artist,
+          image: parsedFeed.image,
+          language: parsedFeed.language,
+          category: parsedFeed.category,
+          podcastCategories: parsedFeed.podcastCategories || [],
+          explicit: parsedFeed.explicit,
+          v4vRecipient: parsedFeed.v4vRecipient || null,
+          v4vValue: parsedFeed.v4vValue || null,
+          publisherId: publisherId,
+          lastFetched: new Date(),
+          status: 'active',
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }
+      });
+
+      // Create tracks
+      if (parsedFeed.items.length > 0) {
+        const tracksData = parsedFeed.items.map((track, index) => ({
+          id: `${feed.id}-${track.guid || `track-${index}-${Date.now()}`}`,
+          feedId: feed.id,
+          guid: track.guid,
+          title: track.title,
+          subtitle: track.subtitle,
+          description: track.description,
+          artist: track.artist,
+          audioUrl: track.audioUrl,
+          duration: track.duration,
+          explicit: track.explicit,
+          image: track.image,
+          publishedAt: track.publishedAt,
+          itunesAuthor: track.itunesAuthor,
+          itunesSummary: track.itunesSummary,
+          itunesImage: track.itunesImage,
+          itunesDuration: track.itunesDuration,
+          itunesKeywords: track.itunesKeywords || [],
+          itunesCategories: track.itunesCategories || [],
+          podcastCategories: parsedFeed.podcastCategories || [],
+          v4vRecipient: track.v4vRecipient,
+          v4vValue: track.v4vValue,
+          startTime: track.startTime,
+          endTime: track.endTime,
+          trackOrder: track.episode ? calculateTrackOrder(track.episode, track.season) : index + 1,
+          updatedAt: new Date()
+        }));
+
+        await prisma.track.createMany({
+          data: tracksData,
+          skipDuplicates: true
+        });
+      }
+
+      console.log(`✅ Imported: ${parsedFeed.title} (${parsedFeed.items.length} tracks)`);
+      imported++;
+
+      // Small delay to avoid overwhelming external servers
+      await new Promise(r => setTimeout(r, 100));
+    } catch (error) {
+      console.error(`❌ Failed to import ${item.feedUrl}:`, error instanceof Error ? error.message : error);
+      failed++;
+    }
+  }
+
+  return { imported, failed, skipped };
+}
+
+/**
  * Generate a URL-friendly feed ID from artist and title
  */
 function generateFeedId(artist: string | undefined, title: string): string {
@@ -310,10 +461,10 @@ export async function POST(request: NextRequest) {
         }
       });
 
-      // Auto-link albums when a publisher feed is added
+      // Auto-import and link albums when a publisher feed is added
       let linkedAlbumsInfo = null;
       if (type === 'publisher') {
-        console.log('🔗 Auto-linking albums to publisher feed...');
+        console.log('🔗 Auto-importing and linking albums to publisher feed...');
 
         try {
           // Re-fetch the XML to extract remoteItems (we already have parsedFeed but need raw XML)
@@ -328,20 +479,27 @@ export async function POST(request: NextRequest) {
             // Get artist name from parsed feed
             const artistName = parsedFeed.artist || parsedFeed.title;
 
-            // Link albums by GUID/URL and artist name
+            console.log(`📋 Found ${remoteItems.length} album references in publisher feed`);
+
+            // First, import any missing albums
+            const importResult = await importMissingAlbums(feed.id, remoteItems);
+            console.log(`📥 Import result: ${importResult.imported} imported, ${importResult.skipped} skipped, ${importResult.failed} failed`);
+
+            // Then link any remaining albums by artist name
             const linkResult = await linkAlbumsToPublisher(feed.id, remoteItems, artistName);
 
             linkedAlbumsInfo = {
               remoteItemsFound: remoteItems.length,
+              imported: importResult.imported,
               linkedByGuid: linkResult.linkedByGuid,
               linkedByArtist: linkResult.linkedByArtist,
-              totalLinked: linkResult.linkedByGuid + linkResult.linkedByArtist
+              totalLinked: importResult.imported + linkResult.linkedByGuid + linkResult.linkedByArtist
             };
 
-            console.log(`✅ Linked ${linkedAlbumsInfo.totalLinked} albums to publisher (${linkResult.linkedByGuid} by GUID, ${linkResult.linkedByArtist} by artist)`);
+            console.log(`✅ Total: ${linkedAlbumsInfo.totalLinked} albums (${importResult.imported} imported, ${linkResult.linkedByGuid} linked by GUID, ${linkResult.linkedByArtist} by artist)`);
           }
         } catch (linkError) {
-          console.error('⚠️ Error auto-linking albums to publisher:', linkError);
+          console.error('⚠️ Error auto-importing/linking albums to publisher:', linkError);
         }
       }
 
