@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { generateAlbumSlug } from '@/lib/url-utils';
+import { generateAlbumSlug, normalizeArtistName } from '@/lib/url-utils';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -119,6 +119,9 @@ export async function GET(request: Request) {
     let publisherRemoteGuids: Set<string> | null = null;
     let publisherDbId: string | null = null; // Database publisher ID for publisherId-based filtering
 
+    // Track artist name for fallback matching
+    let publisherArtistName: string | null = null;
+
     if (publisher) {
       publisherRemoteGuids = await getPublisherRemoteItemUrls(publisher);
 
@@ -132,27 +135,47 @@ export async function GET(request: Request) {
             OR: [
               { id: publisher },
               { id: { contains: publisher } },
-              { title: { equals: publisher.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '), mode: 'insensitive' } }
+              { title: { equals: publisher.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '), mode: 'insensitive' } },
+              { artist: { equals: publisher.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '), mode: 'insensitive' } }
             ]
           },
-          select: { id: true, title: true }
+          select: { id: true, title: true, artist: true }
         });
 
         if (publisherFeed) {
           publisherDbId = publisherFeed.id;
-          console.log(`✅ Found publisher in database: ${publisherFeed.title} (${publisherDbId})`);
+          publisherArtistName = publisherFeed.artist || publisherFeed.title;
+          console.log(`✅ Found publisher in database: ${publisherFeed.title} (${publisherDbId}), artist: ${publisherArtistName}`);
         } else {
-          console.warn(`⚠️  Publisher "${publisher}" not found in database either`);
-          // Return empty result early
-          return NextResponse.json({
-            albums: [],
-            totalCount: 0,
-            hasMore: false,
-            offset,
-            limit,
-            publisherStats: [],
-            lastUpdated: new Date().toISOString()
+          // If no publisher feed exists, try to infer artist name from slug and find albums directly
+          const inferredArtistName = publisher.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+          console.log(`⚠️  No publisher feed for "${publisher}", trying artist name match: "${inferredArtistName}"`);
+
+          // Check if any albums exist with this artist name
+          const artistAlbumCount = await prisma.feed.count({
+            where: {
+              type: { in: ['album', 'music'] },
+              status: 'active',
+              artist: { equals: inferredArtistName, mode: 'insensitive' }
+            }
           });
+
+          if (artistAlbumCount > 0) {
+            publisherArtistName = inferredArtistName;
+            console.log(`✅ Found ${artistAlbumCount} albums by artist "${publisherArtistName}"`);
+          } else {
+            console.warn(`⚠️  Publisher "${publisher}" not found in database either`);
+            // Return empty result early
+            return NextResponse.json({
+              albums: [],
+              totalCount: 0,
+              hasMore: false,
+              offset,
+              limit,
+              publisherStats: [],
+              lastUpdated: new Date().toISOString()
+            });
+          }
         }
       } else {
         console.log(`🔍 Will filter ${publisherRemoteGuids.size} GUIDs in-memory for publisher "${publisher}"`);
@@ -167,14 +190,28 @@ export async function GET(request: Request) {
     let tracksByFeed: Record<string, any[]> = {};
 
     // Use database publisherId filtering when available (much simpler and faster)
-    if (publisher && publisherDbId) {
-      console.log(`🚀 Using database publisherId filtering for ${publisherDbId}`);
+    // Also include artist name matching for albums not linked by publisherId
+    if (publisher && (publisherDbId || publisherArtistName)) {
+      console.log(`🚀 Using database filtering for publisherId: ${publisherDbId || 'none'}, artist: ${publisherArtistName || 'none'}`);
 
-      // Query albums directly by publisherId
+      // Build OR conditions for matching
+      const matchConditions: any[] = [];
+
+      // Match by publisherId if available
+      if (publisherDbId) {
+        matchConditions.push({ publisherId: publisherDbId });
+      }
+
+      // Match by artist name (case-insensitive exact match)
+      if (publisherArtistName) {
+        matchConditions.push({ artist: { equals: publisherArtistName, mode: 'insensitive' } });
+      }
+
+      // Query albums by publisherId OR artist name
       const matchedFeeds = await prisma.feed.findMany({
         where: {
           ...feedWhere,
-          publisherId: publisherDbId
+          OR: matchConditions
         },
         orderBy: [
           { priority: 'asc' },
@@ -182,7 +219,7 @@ export async function GET(request: Request) {
         ]
       });
 
-      console.log(`✅ Found ${matchedFeeds.length} albums via publisherId`);
+      console.log(`✅ Found ${matchedFeeds.length} albums via publisherId/artist match`);
 
       // Load tracks for matched feeds
       if (matchedFeeds.length > 0) {

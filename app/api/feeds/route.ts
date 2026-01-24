@@ -2,7 +2,91 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { parseRSSFeedWithSegments, calculateTrackOrder } from '@/lib/rss-parser-db';
 import { findPublisherFeed } from '@/lib/publisher-detector';
-import { generateAlbumSlug, isValidFeedUrl, normalizeUrl } from '@/lib/url-utils';
+import { generateAlbumSlug, isValidFeedUrl, normalizeUrl, normalizeArtistName } from '@/lib/url-utils';
+
+/**
+ * Extract remoteItem tags from publisher feed XML
+ */
+function extractRemoteItemsFromXML(xml: string): Array<{ feedGuid: string; feedUrl: string }> {
+  const items: Array<{ feedGuid: string; feedUrl: string }> = [];
+
+  const remoteItemRegex = /<podcast:remoteItem[^>]*>/gi;
+  const matches = xml.match(remoteItemRegex) || [];
+
+  for (const match of matches) {
+    const feedGuidMatch = match.match(/feedGuid=["']([^"']+)["']/i);
+    const feedUrlMatch = match.match(/feedUrl=["']([^"']+)["']/i);
+    const mediumMatch = match.match(/medium=["']([^"']+)["']/i);
+
+    // Only include music/album references, not publisher references
+    const medium = mediumMatch?.[1] || '';
+    if (medium === 'publisher') continue;
+
+    if (feedGuidMatch || feedUrlMatch) {
+      items.push({
+        feedGuid: feedGuidMatch?.[1] || '',
+        feedUrl: feedUrlMatch?.[1] || ''
+      });
+    }
+  }
+
+  return items;
+}
+
+/**
+ * Link albums to publisher by updating publisherId field
+ */
+async function linkAlbumsToPublisher(
+  publisherId: string,
+  remoteItems: Array<{ feedGuid: string; feedUrl: string }>,
+  artistName?: string | null
+): Promise<{ linkedByGuid: number; linkedByArtist: number }> {
+  let linkedByGuid = 0;
+  let linkedByArtist = 0;
+
+  // Link by remote item GUIDs/URLs
+  for (const item of remoteItems) {
+    const conditions: any[] = [];
+    if (item.feedGuid) {
+      conditions.push({ id: item.feedGuid });
+      conditions.push({ guid: item.feedGuid });
+      // Also try matching GUID in originalUrl
+      conditions.push({ originalUrl: { contains: item.feedGuid } });
+    }
+    if (item.feedUrl) {
+      conditions.push({ originalUrl: item.feedUrl });
+    }
+
+    if (conditions.length === 0) continue;
+
+    const result = await prisma.feed.updateMany({
+      where: {
+        OR: conditions,
+        type: { in: ['album', 'music'] },
+        publisherId: null
+      },
+      data: { publisherId }
+    });
+
+    linkedByGuid += result.count;
+  }
+
+  // Link by artist name match (exact, case-insensitive)
+  if (artistName) {
+    const result = await prisma.feed.updateMany({
+      where: {
+        artist: { equals: artistName, mode: 'insensitive' },
+        type: { in: ['album', 'music'] },
+        publisherId: null
+      },
+      data: { publisherId }
+    });
+
+    linkedByArtist = result.count;
+  }
+
+  return { linkedByGuid, linkedByArtist };
+}
 
 /**
  * Generate a URL-friendly feed ID from artist and title
@@ -226,6 +310,41 @@ export async function POST(request: NextRequest) {
         }
       });
 
+      // Auto-link albums when a publisher feed is added
+      let linkedAlbumsInfo = null;
+      if (type === 'publisher') {
+        console.log('🔗 Auto-linking albums to publisher feed...');
+
+        try {
+          // Re-fetch the XML to extract remoteItems (we already have parsedFeed but need raw XML)
+          const xmlResponse = await fetch(originalUrl, {
+            signal: AbortSignal.timeout(15000)
+          });
+
+          if (xmlResponse.ok) {
+            const xmlText = await xmlResponse.text();
+            const remoteItems = extractRemoteItemsFromXML(xmlText);
+
+            // Get artist name from parsed feed
+            const artistName = parsedFeed.artist || parsedFeed.title;
+
+            // Link albums by GUID/URL and artist name
+            const linkResult = await linkAlbumsToPublisher(feed.id, remoteItems, artistName);
+
+            linkedAlbumsInfo = {
+              remoteItemsFound: remoteItems.length,
+              linkedByGuid: linkResult.linkedByGuid,
+              linkedByArtist: linkResult.linkedByArtist,
+              totalLinked: linkResult.linkedByGuid + linkResult.linkedByArtist
+            };
+
+            console.log(`✅ Linked ${linkedAlbumsInfo.totalLinked} albums to publisher (${linkResult.linkedByGuid} by GUID, ${linkResult.linkedByArtist} by artist)`);
+          }
+        } catch (linkError) {
+          console.error('⚠️ Error auto-linking albums to publisher:', linkError);
+        }
+      }
+
       // Check for publisher feed if this is an album and auto-import it
       let publisherFeedInfo = null;
       let importedPublisherFeed = null;
@@ -386,7 +505,8 @@ export async function POST(request: NextRequest) {
         message: 'Feed added successfully',
         feed: feedWithCount,
         publisherFeed: publisherFeedInfo,
-        importedPublisherFeed
+        importedPublisherFeed,
+        linkedAlbums: linkedAlbumsInfo
       }, { status: 201 });
       
     } catch (parseError) {

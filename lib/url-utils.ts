@@ -551,13 +551,13 @@ export function getPublisherInfo(slug: string): { feedGuid: string; feedUrl: str
   if (KNOWN_PUBLISHERS[slug]) {
     return KNOWN_PUBLISHERS[slug];
   }
-  
+
   // Try without -publisher suffix (e.g., "ollie-publisher" -> "ollie")
   const normalizedSlug = slug.replace(/-publisher$/, '');
   if (normalizedSlug !== slug && KNOWN_PUBLISHERS[normalizedSlug]) {
     return KNOWN_PUBLISHERS[normalizedSlug];
   }
-  
+
   // Try to find by partial UUID match
   for (const [, publisher] of Object.entries(KNOWN_PUBLISHERS)) {
     if (publisher.feedGuid.startsWith(slug) || slug.startsWith(publisher.feedGuid.split('-')[0])) {
@@ -568,8 +568,95 @@ export function getPublisherInfo(slug: string): { feedGuid: string; feedUrl: str
       return publisher;
     }
   }
-  
+
   return null;
+}
+
+/**
+ * Async version that also checks database for publisher info
+ * Use this when you need database fallback after static mapping check
+ */
+export async function getPublisherInfoAsync(
+  slug: string,
+  prisma: any
+): Promise<{ feedGuid: string; feedUrl: string; name?: string } | null> {
+  // First try static mapping
+  const staticInfo = getPublisherInfo(slug);
+  if (staticInfo) {
+    return staticInfo;
+  }
+
+  const normalizedSlug = slug.replace(/-publisher$/, '');
+
+  // Convert slug to title case for matching (e.g., "chris-nichols" -> "Chris Nichols")
+  const possibleTitle = slug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  const normalizedTitle = normalizedSlug.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
+  try {
+    // Query database for publisher feed
+    const publisherFeed = await prisma.feed.findFirst({
+      where: {
+        type: 'publisher',
+        status: 'active',
+        OR: [
+          { id: slug },
+          { id: { contains: slug, mode: 'insensitive' } },
+          { title: { equals: possibleTitle, mode: 'insensitive' } },
+          { title: { equals: normalizedTitle, mode: 'insensitive' } },
+          { artist: { equals: possibleTitle, mode: 'insensitive' } },
+          { artist: { equals: normalizedTitle, mode: 'insensitive' } }
+        ]
+      },
+      select: {
+        id: true,
+        title: true,
+        artist: true,
+        originalUrl: true
+      }
+    });
+
+    if (publisherFeed) {
+      return {
+        feedGuid: publisherFeed.id,
+        feedUrl: publisherFeed.originalUrl || '',
+        name: publisherFeed.title || publisherFeed.artist || slug
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Error querying database for publisher:', error);
+    return null;
+  }
+}
+
+/**
+ * Normalize artist name for consistent matching
+ * Handles case differences, special characters, and common variations
+ */
+export function normalizeArtistName(name: string): string {
+  if (!name) return '';
+
+  return name
+    .toLowerCase()
+    .trim()
+    // Replace special characters with their equivalents
+    .replace(/&/g, 'and')
+    .replace(/\+/g, 'plus')
+    .replace(/@/g, 'at')
+    // Remove most special characters but keep letters, numbers, spaces
+    .replace(/[^a-z0-9\s]/g, '')
+    // Collapse multiple spaces
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Check if two artist names match (case-insensitive, normalized)
+ */
+export function artistNamesMatch(name1: string | null | undefined, name2: string | null | undefined): boolean {
+  if (!name1 || !name2) return false;
+  return normalizeArtistName(name1) === normalizeArtistName(name2);
 }
 
 /**
