@@ -507,7 +507,58 @@ async function loadPublisherData(publisherId: string) {
       }
     }
 
-    // Artist matching: Find additional albums not linked via remote items
+    // First, find albums linked via publisherId (most reliable)
+    const publisherIdFeeds = await prisma.feed.findMany({
+      where: {
+        publisherId: publisherFeed.id,
+        type: { in: ['album', 'music'] },
+        status: 'active'
+      },
+      select: {
+        id: true,
+        title: true,
+        artist: true,
+        description: true,
+        image: true,
+        lastFetched: true,
+        createdAt: true,
+        originalUrl: true,
+        Track: {
+          where: {
+            audioUrl: { not: '' }
+          },
+          orderBy: [
+            { trackOrder: 'asc' },
+            { publishedAt: 'asc' },
+            { createdAt: 'asc' }
+          ],
+          select: {
+            id: true,
+            title: true,
+            duration: true,
+            audioUrl: true,
+            trackOrder: true,
+            publishedAt: true
+          }
+        }
+      },
+      orderBy: [
+        { title: 'asc' }
+      ]
+    });
+
+    console.log(`✅ Found ${publisherIdFeeds.length} albums via publisherId`);
+
+    // Merge publisherId feeds with GUID-matched feeds (deduplicate by id)
+    const existingIds = new Set(relatedFeeds.map(f => f.id));
+    for (const feed of publisherIdFeeds) {
+      if (!existingIds.has(feed.id)) {
+        relatedFeeds.push(feed);
+        existingIds.add(feed.id);
+      }
+    }
+
+    // Artist matching: Find additional albums not linked via remote items or publisherId
     // Use artist from the publisher feed we found, OR from the known publisher mapping
     let artistOnlyFeeds: typeof relatedFeeds = [];
     if (artistName) {
