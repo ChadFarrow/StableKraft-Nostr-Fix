@@ -80,6 +80,7 @@ export async function POST(request: NextRequest) {
       skipped: number;
       failed: number;
       errors: string[];
+      skippedDetails: string[];
     }> = [];
 
     for (const publisher of publishers) {
@@ -90,7 +91,8 @@ export async function POST(request: NextRequest) {
         imported: 0,
         skipped: 0,
         failed: 0,
-        errors: [] as string[]
+        errors: [] as string[],
+        skippedDetails: [] as string[]
       };
 
       if (!publisher.originalUrl) {
@@ -122,6 +124,7 @@ export async function POST(request: NextRequest) {
         // Import each album
         for (const item of remoteItems) {
           if (!item.feedUrl) {
+            result.skippedDetails.push('no-feedUrl');
             result.skipped++;
             continue;
           }
@@ -140,11 +143,14 @@ export async function POST(request: NextRequest) {
             });
 
             if (existing) {
+              console.log(`   ⏭️ Skipping (exists): ${existing.title} (${existing.id})`);
+              result.skippedDetails.push(`exists:${existing.id}|${existing.title}|pubId:${existing.publisherId}`);
               if (!existing.publisherId) {
                 await prisma.feed.update({
                   where: { id: existing.id },
                   data: { publisherId: publisher.id }
                 });
+                console.log(`   🔗 Linked to publisher: ${publisher.id}`);
               }
               result.skipped++;
               continue;
@@ -162,6 +168,7 @@ export async function POST(request: NextRequest) {
                 where: { guid: parsedFeed.podcastGuid }
               });
               if (guidExists) {
+                result.skippedDetails.push(`guid:${guidExists.id}|${guidExists.title}|pubId:${guidExists.publisherId}`);
                 if (!guidExists.publisherId) {
                   await prisma.feed.update({
                     where: { id: guidExists.id },
