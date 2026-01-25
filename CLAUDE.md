@@ -1,49 +1,117 @@
-# Stablekraft App - Architecture Guide
+# Stablekraft App
 
-## Two-Repo Architecture
+## Commands
 
-This app follows a **separation of concerns** architecture with two repositories:
+### Development
+npm install          # Install dependencies
+npm run dev          # Start dev server
+npm run build        # Build for production
+npm run start        # Start production server
 
-### 1. Playlist Generator Repo (musicL-playlist-updater)
-- **Repo**: https://github.com/ChadFarrow/musicL-playlist-updater
-- **Purpose**: Generates and updates playlist XML feeds
-- **Output**: https://github.com/ChadFarrow/chadf-musicl-playlists
-- **Schedule**: Runs daily via GitHub Actions
-- **Playlists Generated**: MMM, SAS, HGH, IAM, ITDV, MMT, B4TS, Upbeats, and more
+### Database
+npm run db:generate  # Generate Prisma client
+npm run db:migrate   # Run migrations (production)
+npm run db:migrate:dev  # Run migrations (dev)
+npm run db:studio    # Open Prisma Studio
+npm run db:push      # Push schema changes
 
-### 2. This Repo (stablekraft-app)
-- **Purpose**: Consumes playlist feeds and displays them in the app
-- **Does NOT generate playlists** - only fetches and caches them
-- **Feed Sync**: Daily at 2 AM UTC via `.github/workflows/refresh-playlists.yml`
-- **Endpoints**: `/api/playlist/{playlist-id}` (e.g., `/api/playlist/mmm`)
+### Deployment
+npm run deploy       # Deploy via script
+npm run auto-deploy  # Auto-deploy with version bump
 
-## Feed Consumption Workflow
+### Utilities
+npm run test-feeds   # Test RSS feed parsing
+npm run fix-all      # Run all fix scripts
+npm run update-music # Update music workflow
 
-1. **GitHub Actions** (`.github/workflows/refresh-playlists.yml`) runs daily at 2 AM UTC
-2. Calls `/api/playlist-cache?refresh=all` to clear cache
-3. Calls each playlist endpoint with `?refresh=true` parameter
-4. Calls `/api/playlist/parse-feeds` to import new tracks to database
-5. Tracks are stored in PostgreSQL database with v4v payment data
+## Project Structure
 
-## Podcast Index API
+stablekraft-app/
+├── app/                    # Next.js App Router
+│   ├── api/               # API routes
+│   ├── album/             # Album pages
+│   ├── playlist/          # Playlist pages
+│   ├── publisher/         # Publisher pages
+│   ├── favorites/         # User favorites
+│   ├── library/           # User library
+│   ├── search/            # Search functionality
+│   ├── settings/          # User settings
+│   └── radio/             # Radio feature
+├── components/            # React components
+│   ├── favorites/
+│   ├── Lightning/
+│   ├── Nostr/
+│   ├── Radio/
+│   └── Settings/
+├── contexts/              # React contexts
+├── lib/                   # Shared libraries
+│   ├── api/
+│   ├── hooks/
+│   ├── lightning/
+│   ├── nostr/
+│   ├── playlist/
+│   └── rss-parser/
+├── prisma/                # Database schema & migrations
+├── public/                # Static assets
+├── scripts/               # Utility scripts
+└── types/                 # TypeScript types
 
-- **Always use the Podcast Index API** to look up and parse RSS feeds
-- API keys are in `.env` file (check there for `PODCASTINDEX_API_KEY` and `PODCASTINDEX_API_SECRET`)
-- **Always use Podcast Index API** instead of Wavlake website to get feed info
-- All items in music playlists came from the Podcast Index
-- API Documentation: https://podcastindex-org.github.io/docs-api/#overview
+## Tech Stack
 
-## Feed Parsing
+### Core
+- Next.js 15.5.9 (App Router)
+- React 18
+- TypeScript 5
+- Node.js >= 18.0.0
 
-When working with playlists:
-- Playlists use `<podcast:remoteItem>` tags with `feedGuid` and `itemGuid` attributes
-- Tracks are resolved in two phases:
-  1. Database lookup (fast)
-  2. Podcast Index API resolution (slower, for missing tracks)
-- Tracks without valid `audioUrl` are filtered out (unavailable content)
-- **Expected behavior**: Some tracks from XML feeds may not resolve (API doesn't have them)
-- https://podcastindex-org.github.io/docs-api/#overview--example-code
-- any time we fix an issue make sure the change is added to the main code base
-- all feeds that get added to the site need to be parsed including publisher feeds. This site cant display anything if the feed isnt parsed.
-- this was changed from FUCKIT to stablekraft-app
-- coinos supports keysend now
+### Database
+- PostgreSQL
+- Prisma 6.16.2
+
+### Styling
+- Tailwind CSS 3.4.19
+
+### Integrations
+- Podcast Index API - Feed resolution and track lookup
+- nostr-tools 2.15.0 - Nostr protocol for auth/social
+- @getalby/bitcoin-connect 3.11.0 - Lightning wallet
+- WebLN 0.3.2 - Lightning payments
+- HLS.js 1.6.7 - Audio streaming
+
+### Infrastructure
+- Bunny CDN (re-podtards-cdn.b-cdn.net)
+- PM2 (process manager)
+- next-pwa 5.6.0 (offline support)
+- Capacitor 7.4.2 (Android builds)
+
+## Git Workflow
+
+### Branches
+- `main` - Production branch
+
+### GitHub Actions
+- **Refresh Playlists** (`.github/workflows/refresh-playlists.yml`)
+  - Runs daily at 4 AM EST (9 AM UTC)
+  - Refreshes playlist cache
+  - Reparses music feeds for new tracks
+  - Parses publisher feeds for album relationships
+
+### Workflow Steps
+1. Clear playlist cache (`/api/playlist-cache?refresh=all`)
+2. Reparse all music feeds (`/api/admin/reparse-feeds`)
+3. Refresh each playlist (`/api/playlist/{id}?refresh=true`)
+4. Parse newly discovered feeds (`/api/playlist/parse-feeds`)
+5. Parse publisher feeds (`/api/parse-feeds?action=parse-publishers`)
+6. Final playlist refresh to include new tracks
+
+### Two-Repo Architecture
+- **musicL-playlist-updater** - Generates playlist XML feeds (separate repo)
+- **stablekraft-app** (this repo) - Consumes and displays playlists
+
+## API Notes
+
+- Always use Podcast Index API for feed lookups (not Wavlake)
+- API keys: `PODCASTINDEX_API_KEY`, `PODCASTINDEX_API_SECRET` in `.env`
+- Docs: https://podcastindex-org.github.io/docs-api/#overview
+- Playlists use `<podcast:remoteItem>` tags with `feedGuid` and `itemGuid`
+- All feeds must be parsed before they can be displayed
