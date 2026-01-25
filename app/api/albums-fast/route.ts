@@ -412,9 +412,14 @@ export async function GET(request: Request) {
           filteredAlbums = [];
           break;
         case 'videos':
-          // Filter albums that have at least one video track
+          // Filter albums that have at least one video track (either mediaType is video or has video in alternateEnclosures)
           filteredAlbums = deduplicatedAlbums.filter(album =>
-            album.tracks && album.tracks.some((track: any) => track.mediaType === 'video')
+            album.tracks && album.tracks.some((track: any) =>
+              track.mediaType === 'video' ||
+              (track.alternateEnclosures && track.alternateEnclosures.some((enc: any) =>
+                enc.type?.includes('video')
+              ))
+            )
           );
           break;
       }

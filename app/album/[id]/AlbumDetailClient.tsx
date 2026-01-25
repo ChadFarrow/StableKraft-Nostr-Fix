@@ -1163,7 +1163,7 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
                         <div className="md:hidden">
                           <p className="font-medium line-clamp-2 text-sm">
                             {track.title}
-                            {(track as any).mediaType === 'video' && (
+                            {((track as any).mediaType === 'video' || (track as any).alternateEnclosures?.some((enc: any) => enc.type?.includes('video'))) && (
                               <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
                                 <Video className="w-2.5 h-2.5 mr-0.5" />
                                 Video
@@ -1178,7 +1178,7 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
                         <div className="hidden md:block">
                           <p className="font-medium text-base line-clamp-2 whitespace-normal break-words">
                             {track.title}
-                            {(track as any).mediaType === 'video' && (
+                            {((track as any).mediaType === 'video' || (track as any).alternateEnclosures?.some((enc: any) => enc.type?.includes('video'))) && (
                               <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
                                 <Video className="w-2.5 h-2.5 mr-0.5" />
                                 Video

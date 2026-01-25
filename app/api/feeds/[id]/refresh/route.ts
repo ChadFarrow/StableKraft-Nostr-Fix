@@ -65,16 +65,45 @@ export async function POST(
       // Get existing track GUIDs to avoid duplicates
       const existingTracks = await prisma.track.findMany({
         where: { feedId: id },
-        select: { guid: true }
+        select: { guid: true, id: true }
       });
-      
+
       const existingGuids = new Set(existingTracks.map(t => t.guid).filter(Boolean));
-      
+      const guidToId = new Map(existingTracks.filter(t => t.guid).map(t => [t.guid, t.id]));
+
       // Filter out tracks that already exist
-      const newItems = parsedFeed.items.filter(item => 
+      const newItems = parsedFeed.items.filter(item =>
         !item.guid || !existingGuids.has(item.guid)
       );
-      
+
+      // Update existing tracks with video metadata (mediaType, alternateEnclosures)
+      const existingItems = parsedFeed.items.filter(item =>
+        item.guid && existingGuids.has(item.guid)
+      );
+
+      let updatedCount = 0;
+      for (const item of existingItems) {
+        if (item.guid && (item.alternateEnclosures?.length || item.mediaType === 'video')) {
+          const trackId = guidToId.get(item.guid);
+          if (trackId) {
+            await prisma.track.update({
+              where: { id: trackId },
+              data: {
+                mediaType: item.mediaType || 'audio',
+                mimeType: item.mimeType,
+                alternateEnclosures: item.alternateEnclosures ? JSON.parse(JSON.stringify(item.alternateEnclosures)) : undefined,
+                updatedAt: new Date()
+              }
+            });
+            updatedCount++;
+          }
+        }
+      }
+
+      if (updatedCount > 0) {
+        console.log(`✅ Updated ${updatedCount} existing tracks with video metadata`);
+      }
+
       // Add new tracks
       if (newItems.length > 0) {
         const tracksData = newItems.map((item, index) => ({
@@ -126,7 +155,8 @@ export async function POST(
       return NextResponse.json({
         message: 'Feed refreshed successfully',
         feed: updatedFeed,
-        newTracks: newItems.length
+        newTracks: newItems.length,
+        updatedTracks: updatedCount
       });
       
     } catch (parseError) {

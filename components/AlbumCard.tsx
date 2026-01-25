@@ -304,7 +304,10 @@ function AlbumCard({ album, isPlaying = false, onPlay, className = '' }: AlbumCa
               ? `${(album as any).albumCount || 0} ${((album as any).albumCount || 0) !== 1 ? 'releases' : 'release'}`
               : (() => {
                   const count = (album as any).trackCount || album.tracks?.length || 0;
-                  const hasVideo = album.tracks?.some((t: any) => t.mediaType === 'video');
+                  const hasVideo = album.tracks?.some((t: any) =>
+                    t.mediaType === 'video' ||
+                    (t.alternateEnclosures && t.alternateEnclosures.some((enc: any) => enc.type?.includes('video')))
+                  );
                   const label = hasVideo ? (count !== 1 ? 'videos' : 'video') : (count !== 1 ? 'tracks' : 'track');
                   return `${count} ${label}`;
                 })()
