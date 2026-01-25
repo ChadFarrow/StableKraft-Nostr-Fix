@@ -1246,19 +1246,28 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     const isVideo = isVideoUrl(originalUrl, mediaType);
     const isHls = isHlsUrl(originalUrl);
     const mediaElement = isVideo ? videoRef.current : audioRef.current;
-    
+
     if (!mediaElement) {
       console.error(`❌ ${isVideo ? 'Video' : 'Audio'} element reference is null`);
       return false;
     }
-    
+
     // Update video mode state
     setIsVideoMode(isVideo);
-    
+
     if (isVideo) {
       console.log('🎬 Video URL detected, switching to video mode:', originalUrl);
+      // For video HLS content, open fullscreen mode BEFORE attempting playback
+      // This ensures the video element is moved to a visible container,
+      // which is required for HLS playback on some browsers that throttle hidden videos
+      if (isHls) {
+        console.log('🖥️ Opening fullscreen mode for video HLS playback');
+        setIsFullscreenMode(true);
+        // Wait for React to re-render and move the video element to visible container
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
     }
-    
+
     if (isHls) {
       console.log('📺 HLS stream detected, using hls.js:', originalUrl);
       return attemptHlsPlayback(originalUrl, context);
