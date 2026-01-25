@@ -881,9 +881,39 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
 
     // If we have multiple matches, prefer the one with the most tracks (full album over single)
     if (potentialMatches.length > 0) {
-      const bestMatchData = potentialMatches.reduce((best, current) =>
-        current.trackCount > best.trackCount ? current : best
-      );
+      // Get filter parameter to check if coming from videos filter
+      const { searchParams } = new URL(request.url);
+      const filterParam = searchParams.get('filter');
+
+      // Helper to check if a feed has video content
+      const hasVideoContent = (feed: any) =>
+        feed.Track?.some((t: any) =>
+          t.mediaType === 'video' ||
+          (t.alternateEnclosures && Array.isArray(t.alternateEnclosures) &&
+            t.alternateEnclosures.some((enc: any) => enc.type?.includes('video')))
+        );
+
+      let bestMatchData;
+      if (filterParam === 'videos') {
+        // When coming from videos filter, prefer albums with video content
+        const videoMatches = potentialMatches.filter(m => hasVideoContent(m.feed));
+        if (videoMatches.length > 0) {
+          bestMatchData = videoMatches.reduce((best, current) =>
+            current.trackCount > best.trackCount ? current : best
+          );
+          console.log(`🎬 Videos filter: found ${videoMatches.length} video matches, selected one with ${bestMatchData.trackCount} tracks`);
+        } else {
+          bestMatchData = potentialMatches.reduce((best, current) =>
+            current.trackCount > best.trackCount ? current : best
+          );
+          console.log(`🎬 Videos filter: no video matches found, falling back to most tracks`);
+        }
+      } else {
+        // Default: prefer album with most tracks
+        bestMatchData = potentialMatches.reduce((best, current) =>
+          current.trackCount > best.trackCount ? current : best
+        );
+      }
 
       const feed = bestMatchData.feed;
       console.log(`✅ Selected best match: "${feed.title}" with ${feed.Track.length} tracks (type: ${feed.type})`);
