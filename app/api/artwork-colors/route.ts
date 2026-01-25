@@ -218,12 +218,14 @@ export async function POST(request: NextRequest) {
         updatedAt: new Date()
       },
       create: {
+        id: crypto.randomUUID(),
         imageUrl,
         originalColor,
         enhancedColor,
         backgroundColor: contrastColors.backgroundColor,
         textColor: contrastColors.textColor,
-        isAppealing: true
+        isAppealing: true,
+        updatedAt: new Date()
       }
     });
 
