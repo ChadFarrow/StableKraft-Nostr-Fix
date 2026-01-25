@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { parseRSSFeedWithSegments, calculateTrackOrder } from '@/lib/rss-parser-db';
+import { parseRSSFeedWithSegments, calculateTrackOrder, detectTrackMediaType } from '@/lib/rss-parser-db';
 
 interface RemoteItemResult {
   added: number;
@@ -124,23 +124,26 @@ async function processRemoteItems(feedUrl: string, publisherFeedId: string): Pro
             description: item.description,
             artist: item.artist,
             audioUrl: item.audioUrl,
-            duration: item.duration,
-            explicit: item.explicit,
-            image: item.image,
-            publishedAt: item.publishedAt,
-            itunesAuthor: item.itunesAuthor,
-            itunesSummary: item.itunesSummary,
-            itunesImage: item.itunesImage,
-            itunesDuration: item.itunesDuration,
-            itunesKeywords: item.itunesKeywords || [],
-            itunesCategories: item.itunesCategories || [],
-            v4vRecipient: item.v4vRecipient,
-            v4vValue: item.v4vValue,
-            startTime: item.startTime,
-            endTime: item.endTime,
-            trackOrder: item.episode ? calculateTrackOrder(item.episode, item.season) : index + 1,
-            updatedAt: new Date()
-          }));
+            mediaType: detectTrackMediaType(item),
+            mimeType: item.mimeType,
+            alternateEnclosures: item.alternateEnclosures ? JSON.parse(JSON.stringify(item.alternateEnclosures)) : undefined,
+              duration: item.duration,
+              explicit: item.explicit,
+              image: item.image,
+              publishedAt: item.publishedAt,
+              itunesAuthor: item.itunesAuthor,
+              itunesSummary: item.itunesSummary,
+              itunesImage: item.itunesImage,
+              itunesDuration: item.itunesDuration,
+              itunesKeywords: item.itunesKeywords || [],
+              itunesCategories: item.itunesCategories || [],
+              v4vRecipient: item.v4vRecipient,
+              v4vValue: item.v4vValue,
+              startTime: item.startTime,
+              endTime: item.endTime,
+              trackOrder: item.episode ? calculateTrackOrder(item.episode, item.season) : index + 1,
+              updatedAt: new Date()
+            }));
 
           await prisma.track.createMany({
             data: tracksData,
@@ -267,38 +270,41 @@ export async function POST(request: NextRequest) {
         // Use episode numbers for trackOrder if available, otherwise use RSS position
         if (parsedFeed.items.length > 0) {
           const tracksData = parsedFeed.items.map((item, index) => ({
-            id: `${newFeed.id}-${item.guid || `track-${index}-${Date.now()}`}`,
-            feedId: newFeed.id,
-            guid: item.guid,
-            title: item.title,
-            subtitle: item.subtitle,
-            description: item.description,
-            artist: item.artist,
-            audioUrl: item.audioUrl,
-            duration: item.duration,
-            explicit: item.explicit,
-            image: item.image,
-            publishedAt: item.publishedAt,
-            itunesAuthor: item.itunesAuthor,
-            itunesSummary: item.itunesSummary,
-            itunesImage: item.itunesImage,
-            itunesDuration: item.itunesDuration,
-            itunesKeywords: item.itunesKeywords || [],
-            itunesCategories: item.itunesCategories || [],
-            v4vRecipient: item.v4vRecipient,
-            v4vValue: item.v4vValue,
-            startTime: item.startTime,
-            endTime: item.endTime,
-            trackOrder: item.episode ? calculateTrackOrder(item.episode, item.season) : index + 1, // Use season/episode if available
-            updatedAt: new Date()
-          }));
-          
+              id: `${newFeed.id}-${item.guid || `track-${index}-${Date.now()}`}`,
+              feedId: newFeed.id,
+              guid: item.guid,
+              title: item.title,
+              subtitle: item.subtitle,
+              description: item.description,
+              artist: item.artist,
+              audioUrl: item.audioUrl,
+              mediaType: detectTrackMediaType(item),
+              mimeType: item.mimeType,
+              alternateEnclosures: item.alternateEnclosures ? JSON.parse(JSON.stringify(item.alternateEnclosures)) : undefined,
+              duration: item.duration,
+              explicit: item.explicit,
+              image: item.image,
+              publishedAt: item.publishedAt,
+              itunesAuthor: item.itunesAuthor,
+              itunesSummary: item.itunesSummary,
+              itunesImage: item.itunesImage,
+              itunesDuration: item.itunesDuration,
+              itunesKeywords: item.itunesKeywords || [],
+              itunesCategories: item.itunesCategories || [],
+              v4vRecipient: item.v4vRecipient,
+              v4vValue: item.v4vValue,
+              startTime: item.startTime,
+              endTime: item.endTime,
+              trackOrder: item.episode ? calculateTrackOrder(item.episode, item.season) : index + 1,
+              updatedAt: new Date()
+            }));
+
           await prisma.track.createMany({
             data: tracksData,
             skipDuplicates: true
           });
         }
-        
+
         // Return early for newly created feeds
         let newFeedWithCount = await prisma.feed.findUnique({
           where: { id: newFeed.id },
@@ -572,7 +578,7 @@ export async function POST(request: NextRequest) {
           const order = parsedItem?.episode
             ? calculateTrackOrder(parsedItem.episode, parsedItem.season)
             : (fullIndex >= 0 ? fullIndex + 1 : maxOrder + index + 1);
-          
+
           return {
             id: `${feedId}-${item.guid || `track-${index}-${Date.now()}`}`,
             feedId: feedId,
@@ -582,6 +588,9 @@ export async function POST(request: NextRequest) {
             description: item.description,
             artist: item.artist,
             audioUrl: item.audioUrl,
+            mediaType: detectTrackMediaType(item),
+            mimeType: item.mimeType,
+            alternateEnclosures: item.alternateEnclosures ? JSON.parse(JSON.stringify(item.alternateEnclosures)) : undefined,
             duration: item.duration,
             explicit: item.explicit,
             image: item.image,
@@ -596,7 +605,7 @@ export async function POST(request: NextRequest) {
             v4vValue: item.v4vValue,
             startTime: item.startTime,
             endTime: item.endTime,
-            trackOrder: order, // Use episode number if available, otherwise use RSS position
+            trackOrder: order,
             updatedAt: new Date()
           };
         });

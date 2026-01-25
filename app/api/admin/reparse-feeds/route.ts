@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { parseRSSFeedWithSegments, calculateTrackOrder, ParsedItem } from '@/lib/rss-parser-db';
+import { parseRSSFeedWithSegments, calculateTrackOrder, ParsedItem, detectTrackMediaType } from '@/lib/rss-parser-db';
 
 /**
  * POST /api/admin/reparse-feeds
@@ -280,7 +280,7 @@ async function reparseSingleFeed(feed: {
           podcastCategories: parsedFeed.podcastCategories || []
         };
 
-        // Update v4v data from the parsed feed item
+        // Update v4v data and video metadata from the parsed feed item
         if (matchedItem) {
           if (matchedItem.v4vRecipient) {
             updateData.v4vRecipient = matchedItem.v4vRecipient;
@@ -288,6 +288,13 @@ async function reparseSingleFeed(feed: {
           if (matchedItem.v4vValue) {
             updateData.v4vValue = matchedItem.v4vValue;
           }
+          if (matchedItem.mimeType) {
+            updateData.mimeType = matchedItem.mimeType;
+          }
+          if (matchedItem.alternateEnclosures?.length) {
+            updateData.alternateEnclosures = JSON.parse(JSON.stringify(matchedItem.alternateEnclosures));
+          }
+          updateData.mediaType = detectTrackMediaType(matchedItem);
         }
 
         updatePromises.push(
@@ -349,7 +356,7 @@ async function reparseSingleFeed(feed: {
           description: item.description,
           artist: item.artist,
           audioUrl: item.audioUrl,
-          mediaType: item.mediaType || 'audio',
+          mediaType: detectTrackMediaType(item),
           mimeType: item.mimeType,
           alternateEnclosures: item.alternateEnclosures ? JSON.parse(JSON.stringify(item.alternateEnclosures)) : undefined,
           duration: item.duration,

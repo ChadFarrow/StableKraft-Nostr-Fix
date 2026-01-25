@@ -54,7 +54,22 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
   // Track URL parameter for deep linking
   const searchParams = useSearchParams();
   const trackParam = searchParams?.get('track') ?? null;
+  const filterParam = searchParams?.get('filter') ?? null;
   const hasAutoPlayedRef = useRef(false);
+
+  // Filter tracks based on filterParam (e.g., 'videos' to show only video tracks)
+  const filteredTracks = useMemo(() => {
+    if (!album?.tracks) return [];
+    if (filterParam === 'videos') {
+      return album.tracks.filter((track: any) =>
+        track.mediaType === 'video' ||
+        (track.alternateEnclosures && track.alternateEnclosures.some((enc: any) =>
+          enc.type?.includes('video')
+        ))
+      );
+    }
+    return album.tracks;
+  }, [album?.tracks, filterParam]);
   const { shouldPreventClick } = useScrollDetectionContext();
   const lightning = useLightning(); // Initialize Lightning context
 
@@ -1088,13 +1103,15 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
                   showViewToggle={false}
                   onShuffle={shuffleAllTracks}
                   showShuffle={true}
-                  resultCount={album.tracks.length}
-                  resultLabel="tracks"
+                  resultCount={filteredTracks.length}
+                  resultLabel={filterParam === 'videos' ? 'video tracks' : 'tracks'}
                   className="flex-shrink-0"
                 />
               </div>
               <div className="space-y-2">
-                {album.tracks.map((track, displayIndex) => {
+                {filteredTracks.map((track, displayIndex) => {
+                  // Find the original index in album.tracks for correct playback
+                  const originalIndex = album.tracks.findIndex(t => t === track);
                   const isUnavailable = track.status && track.status !== 'active';
                   return (
                   <div
@@ -1104,9 +1121,9 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
                         ? 'opacity-50 cursor-not-allowed'
                         : 'hover:bg-white/10 cursor-pointer'
                     } ${
-                      globalTrackIndex === displayIndex && currentPlayingAlbum?.title === album?.title ? 'bg-white/20' : ''
+                      globalTrackIndex === originalIndex && currentPlayingAlbum?.title === album?.title ? 'bg-white/20' : ''
                     }`}
-                    onClick={() => !isUnavailable && playTrack(displayIndex)}
+                    onClick={() => !isUnavailable && playTrack(originalIndex)}
                     title={isUnavailable ? 'This track is currently unavailable' : undefined}
                   >
                     {/* Row 1: Artwork + Track Info */}
@@ -1147,10 +1164,10 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
                             className="bg-white text-black rounded-full p-1 transform hover:scale-110 transition-all duration-200 shadow-lg"
                             onClick={(e) => {
                               e.stopPropagation();
-                              playTrack(displayIndex);
+                              playTrack(originalIndex);
                             }}
                           >
-                            {globalTrackIndex === displayIndex && globalIsPlaying && currentPlayingAlbum?.title === album?.title ? (
+                            {globalTrackIndex === originalIndex && globalIsPlaying && currentPlayingAlbum?.title === album?.title ? (
                               <Pause className="h-3 w-3" />
                             ) : (
                               <Play className="h-3 w-3" />

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { parseRSSFeedWithSegments } from '@/lib/rss-parser-db';
+import { parseRSSFeedWithSegments, detectTrackMediaType } from '@/lib/rss-parser-db';
 import { discoverAndStorePublisher, extractPublisherFromXML } from '@/lib/publisher-discovery';
 
 // POST /api/feeds/[id]/refresh - Refresh a specific feed (Railway fix)
@@ -38,6 +38,8 @@ export async function POST(
           language: parsedFeed.language,
           category: parsedFeed.category,
           explicit: parsedFeed.explicit,
+          v4vRecipient: parsedFeed.v4vRecipient || undefined,
+          v4vValue: parsedFeed.v4vValue ? JSON.parse(JSON.stringify(parsedFeed.v4vValue)) : undefined,
           lastFetched: new Date(),
           status: 'active',
           lastError: null
@@ -83,15 +85,18 @@ export async function POST(
 
       let updatedCount = 0;
       for (const item of existingItems) {
-        if (item.guid && (item.alternateEnclosures?.length || item.mediaType === 'video')) {
+        // Update tracks that have video, alternateEnclosures, or v4v data
+        if (item.guid && (item.alternateEnclosures?.length || item.mediaType === 'video' || item.v4vRecipient || item.v4vValue)) {
           const trackId = guidToId.get(item.guid);
           if (trackId) {
             await prisma.track.update({
               where: { id: trackId },
               data: {
-                mediaType: item.mediaType || 'audio',
+                mediaType: detectTrackMediaType(item),
                 mimeType: item.mimeType,
                 alternateEnclosures: item.alternateEnclosures ? JSON.parse(JSON.stringify(item.alternateEnclosures)) : undefined,
+                v4vRecipient: item.v4vRecipient || undefined,
+                v4vValue: item.v4vValue ? JSON.parse(JSON.stringify(item.v4vValue)) : undefined,
                 updatedAt: new Date()
               }
             });
@@ -115,7 +120,7 @@ export async function POST(
           description: item.description,
           artist: item.artist,
           audioUrl: item.audioUrl,
-          mediaType: item.mediaType || 'audio',
+          mediaType: detectTrackMediaType(item),
           mimeType: item.mimeType,
           alternateEnclosures: item.alternateEnclosures ? JSON.parse(JSON.stringify(item.alternateEnclosures)) : undefined,
           duration: item.duration,

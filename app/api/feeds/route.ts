@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { parseRSSFeedWithSegments, calculateTrackOrder } from '@/lib/rss-parser-db';
+import { parseRSSFeedWithSegments, calculateTrackOrder, detectTrackMediaType } from '@/lib/rss-parser-db';
 import { findPublisherFeed } from '@/lib/publisher-detector';
 import { generateAlbumSlug, isValidFeedUrl, normalizeUrl, normalizeArtistName } from '@/lib/url-utils';
 
@@ -200,23 +200,26 @@ async function importMissingAlbums(
           description: track.description,
           artist: track.artist,
           audioUrl: track.audioUrl,
-          duration: track.duration,
-          explicit: track.explicit,
-          image: track.image,
-          publishedAt: track.publishedAt,
-          itunesAuthor: track.itunesAuthor,
-          itunesSummary: track.itunesSummary,
-          itunesImage: track.itunesImage,
-          itunesDuration: track.itunesDuration,
-          itunesKeywords: track.itunesKeywords || [],
-          itunesCategories: track.itunesCategories || [],
-          podcastCategories: parsedFeed.podcastCategories || [],
-          v4vRecipient: track.v4vRecipient,
-          v4vValue: track.v4vValue,
-          startTime: track.startTime,
-          endTime: track.endTime,
-          trackOrder: track.episode ? calculateTrackOrder(track.episode, track.season) : index + 1,
-          updatedAt: new Date()
+          mediaType: detectTrackMediaType(track),
+          mimeType: track.mimeType,
+          alternateEnclosures: track.alternateEnclosures ? JSON.parse(JSON.stringify(track.alternateEnclosures)) : undefined,
+            duration: track.duration,
+            explicit: track.explicit,
+            image: track.image,
+            publishedAt: track.publishedAt,
+            itunesAuthor: track.itunesAuthor,
+            itunesSummary: track.itunesSummary,
+            itunesImage: track.itunesImage,
+            itunesDuration: track.itunesDuration,
+            itunesKeywords: track.itunesKeywords || [],
+            itunesCategories: track.itunesCategories || [],
+            podcastCategories: parsedFeed.podcastCategories || [],
+            v4vRecipient: track.v4vRecipient,
+            v4vValue: track.v4vValue,
+            startTime: track.startTime,
+            endTime: track.endTime,
+            trackOrder: track.episode ? calculateTrackOrder(track.episode, track.season) : index + 1,
+            updatedAt: new Date()
         }));
 
         await prisma.track.createMany({
@@ -426,7 +429,7 @@ export async function POST(request: NextRequest) {
           description: item.description,
           artist: item.artist,
           audioUrl: item.audioUrl,
-          mediaType: item.mediaType || 'audio',
+          mediaType: detectTrackMediaType(item),
           mimeType: item.mimeType,
           alternateEnclosures: item.alternateEnclosures ? JSON.parse(JSON.stringify(item.alternateEnclosures)) : undefined,
           duration: item.duration,
@@ -444,10 +447,10 @@ export async function POST(request: NextRequest) {
           v4vValue: item.v4vValue,
           startTime: item.startTime,
           endTime: item.endTime,
-          trackOrder: item.episode ? calculateTrackOrder(item.episode, item.season) : index + 1, // Use season/episode if available
+          trackOrder: item.episode ? calculateTrackOrder(item.episode, item.season) : index + 1,
           updatedAt: new Date()
         }));
-        
+
         await prisma.track.createMany({
           data: tracksData,
           skipDuplicates: true
@@ -589,7 +592,7 @@ export async function POST(request: NextRequest) {
                     subtitle: item.subtitle,
                     description: item.description,
                     audioUrl: item.audioUrl,
-                    mediaType: item.mediaType || 'audio',
+                    mediaType: detectTrackMediaType(item),
                     mimeType: item.mimeType,
                     alternateEnclosures: item.alternateEnclosures ? JSON.parse(JSON.stringify(item.alternateEnclosures)) : undefined,
                     duration: item.duration,

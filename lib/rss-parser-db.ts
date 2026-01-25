@@ -154,10 +154,47 @@ export function detectMediaType(mimeType: string | undefined, url: string | unde
     urlLower.includes('.webm') ||
     urlLower.includes('.m3u8') ||
     urlLower.includes('.mov') ||
+    urlLower.includes('.moov') ||
     urlLower.includes('cloudflarestream.com')
   ) {
     return 'video';
   }
+  return 'audio';
+}
+
+// Helper function to detect media type from a track object, including alternateEnclosures
+// Use this when creating/updating tracks to properly detect video content
+export function detectTrackMediaType(track: {
+  mediaType?: string;
+  mimeType?: string;
+  audioUrl?: string;
+  alternateEnclosures?: Array<{ type?: string; url?: string }>;
+}): 'audio' | 'video' {
+  // If already marked as video, keep it
+  if (track.mediaType === 'video') {
+    return 'video';
+  }
+
+  // Check main enclosure
+  if (detectMediaType(track.mimeType, track.audioUrl) === 'video') {
+    return 'video';
+  }
+
+  // Check alternateEnclosures for video content
+  if (track.alternateEnclosures?.length) {
+    const hasVideoAlt = track.alternateEnclosures.some((enc) =>
+      enc.type?.toLowerCase().includes('video') ||
+      enc.type?.toLowerCase().includes('mpegurl') ||
+      enc.url?.toLowerCase().includes('.mp4') ||
+      enc.url?.toLowerCase().includes('.m3u8') ||
+      enc.url?.toLowerCase().includes('.webm') ||
+      enc.url?.toLowerCase().includes('.moov')
+    );
+    if (hasVideoAlt) {
+      return 'video';
+    }
+  }
+
   return 'audio';
 }
 

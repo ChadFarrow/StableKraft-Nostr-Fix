@@ -18,6 +18,7 @@ const AlbumCard = dynamic(() => import('./AlbumCard'), {
 interface AlbumCardLazyProps {
   album: any;
   onPlay: (album: any, e: any) => void;
+  linkFilter?: string;
 }
 
 export default function AlbumCardLazy(props: AlbumCardLazyProps) {

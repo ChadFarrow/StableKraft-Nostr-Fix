@@ -58,9 +58,10 @@ interface AlbumCardProps {
   isPlaying?: boolean;
   onPlay: (album: RSSAlbum, e: React.MouseEvent | React.TouchEvent) => void;
   className?: string;
+  linkFilter?: string; // Optional filter param to append to album URL (e.g., 'videos')
 }
 
-function AlbumCard({ album, isPlaying = false, onPlay, className = '' }: AlbumCardProps) {
+function AlbumCard({ album, isPlaying = false, onPlay, className = '', linkFilter }: AlbumCardProps) {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null);
@@ -152,8 +153,13 @@ function AlbumCard({ album, isPlaying = false, onPlay, className = '' }: AlbumCa
       albumUrl = generateAlbumUrl(album.title);
     }
 
+    // Append filter param if provided (e.g., ?filter=videos for video albums)
+    if (linkFilter && !isPublisherCard && !isPlaylistCard) {
+      albumUrl = `${albumUrl}?filter=${linkFilter}`;
+    }
+
     return { isPlaylistCard, isPublisherCard, albumUrl };
-  }, [album.title, album.id, (album as any).isPlaylistCard, (album as any).playlistUrl, (album as any).isPublisherCard, (album as any).publisherUrl]);
+  }, [album.title, album.id, (album as any).isPlaylistCard, (album as any).playlistUrl, (album as any).isPublisherCard, (album as any).publisherUrl, linkFilter]);
 
   const hasV4V = checkHasV4V(album as any);
   

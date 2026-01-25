@@ -868,9 +868,11 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   }, []); // Run only once on mount
 
   // Helper function to detect if URL is a video
-  const isVideoUrl = (url: string): boolean => {
+  const isVideoUrl = (url: string, mediaType?: string): boolean => {
     if (!url || typeof url !== 'string') return false;
-    const videoExtensions = ['.mp4', '.webm', '.ogg', '.m3u8', '.m4v', '.mov', '.avi', '.mkv'];
+    // If mediaType explicitly says video, trust it
+    if (mediaType === 'video') return true;
+    const videoExtensions = ['.mp4', '.webm', '.ogg', '.m3u8', '.m4v', '.mov', '.avi', '.mkv', '.moov'];
     const urlLower = url.toLowerCase();
     return videoExtensions.some(ext => urlLower.includes(ext));
   };
@@ -1223,9 +1225,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   };
 
   // Helper function to attempt media playback with fallback URLs
-  const attemptAudioPlayback = async (originalUrl: string, context = 'playback', sessionId?: number): Promise<boolean> => {
-    console.log('🎵 Attempting audio playback:', { originalUrl, context });
-    const isVideo = isVideoUrl(originalUrl);
+  const attemptAudioPlayback = async (originalUrl: string, context = 'playback', sessionId?: number, mediaType?: string): Promise<boolean> => {
+    console.log('🎵 Attempting audio playback:', { originalUrl, context, mediaType });
+    const isVideo = isVideoUrl(originalUrl, mediaType);
     const isHls = isHlsUrl(originalUrl);
     const mediaElement = isVideo ? videoRef.current : audioRef.current;
     
@@ -1393,8 +1395,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
 
   // Seamless playback for track transitions - keeps iOS audio session warm
   // by directly swapping source without pause/clear/delay
-  const attemptSeamlessPlayback = async (audioUrl: string, context: string, sessionId?: number): Promise<boolean> => {
-    const isVideo = isVideoUrl(audioUrl);
+  const attemptSeamlessPlayback = async (audioUrl: string, context: string, sessionId?: number, mediaType?: string): Promise<boolean> => {
+    const isVideo = isVideoUrl(audioUrl, mediaType);
     const currentElement = isVideo ? videoRef.current : audioRef.current;
 
     if (!currentElement) {
@@ -1609,7 +1611,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
           // Preload next track to ensure smooth mobile playback
           if (nextTrack && (nextTrack.url || nextTrack.alternateEnclosures?.length > 0)) {
             const nextTrackUrl = getTrackPlaybackUrl(nextTrack);
-            const nextElement = isVideoUrl(nextTrackUrl) ? videoRef.current : audioRef.current;
+            const nextElement = isVideoUrl(nextTrackUrl, nextTrack.mediaType) ? videoRef.current : audioRef.current;
             if (nextElement && nextElement !== currentElement) {
               // Use URL strategy to get the best URL (proxy for CORS-problematic domains)
               const urlsToTry = getAudioUrlsToTry(nextTrackUrl);
@@ -2048,7 +2050,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         isAutoTransitioning: isAutoTransitioningRef.current
       });
       // Try seamless playback first for iOS background compatibility
-      const seamlessSuccess = await attemptSeamlessPlayback(getTrackPlaybackUrl(track), 'Track transition', sessionId);
+      const seamlessSuccess = await attemptSeamlessPlayback(getTrackPlaybackUrl(track), 'Track transition', sessionId, track.mediaType);
       // Clear auto-transitioning flag after attempt
       isAutoTransitioningRef.current = false;
       if (seamlessSuccess) {
@@ -2070,7 +2072,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     isAutoTransitioningRef.current = false;
 
     // Try to play the track (full playback for fresh starts or fallback)
-    const success = await attemptAudioPlayback(getTrackPlaybackUrl(track), 'Album playback', sessionId);
+    const success = await attemptAudioPlayback(getTrackPlaybackUrl(track), 'Album playback', sessionId, track.mediaType);
 
     // Check if session is still current before updating state
     if (playbackSessionRef.current !== sessionId) {
@@ -2136,7 +2138,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         isPlaying,
         isAutoTransitioning: isAutoTransitioningRef.current
       });
-      const seamlessSuccess = await attemptSeamlessPlayback(getTrackPlaybackUrl(track), 'Shuffle track transition', sessionId);
+      const seamlessSuccess = await attemptSeamlessPlayback(getTrackPlaybackUrl(track), 'Shuffle track transition', sessionId, track.mediaType);
       // Clear auto-transitioning flag after attempt
       isAutoTransitioningRef.current = false;
       if (seamlessSuccess) {
@@ -2152,7 +2154,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
       console.log('⚠️ Seamless playback failed, trying full playback');
     }
 
-    const success = await attemptAudioPlayback(getTrackPlaybackUrl(track), 'Shuffled track playback', sessionId);
+    const success = await attemptAudioPlayback(getTrackPlaybackUrl(track), 'Shuffled track playback', sessionId, track.mediaType);
     // Check if session is still current before updating state
     if (playbackSessionRef.current !== sessionId) {
       console.log(`⏭️ Session ${sessionId} completed but newer session active, skipping state update`);
@@ -2276,7 +2278,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     setCurrentShuffleIndex(0);
     setHasUserInteracted(true);
 
-    const success = await attemptAudioPlayback(getTrackPlaybackUrl(track), 'Shuffled track playback', sessionId);
+    const success = await attemptAudioPlayback(getTrackPlaybackUrl(track), 'Shuffled track playback', sessionId, track.mediaType);
 
     // Check if session is still current before updating state
     if (playbackSessionRef.current !== sessionId) {
@@ -2394,7 +2396,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     setCurrentShuffleIndex(0);
     setHasUserInteracted(true);
 
-    const success = await attemptAudioPlayback(getTrackPlaybackUrl(track), 'Shuffled track playback', sessionId);
+    const success = await attemptAudioPlayback(getTrackPlaybackUrl(track), 'Shuffled track playback', sessionId, track.mediaType);
 
     // Check if session is still current before updating state
     if (playbackSessionRef.current !== sessionId) {
