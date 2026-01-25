@@ -17,6 +17,7 @@ interface MusicTrackListProps {
 
 type SortOption = 'date-desc' | 'date-asc' | 'title-asc' | 'title-desc' | 'artist-asc' | 'artist-desc';
 type FilterSource = 'all' | 'chapter' | 'value-split' | 'description' | 'external-feed';
+type FilterMediaType = 'all' | 'audio' | 'video';
 
 export default function MusicTrackList({ initialFeedUrls = [], onPlayTrack, selectable = false, onToggleSelect, selectedIds }: MusicTrackListProps) {
   const router = useRouter();
@@ -29,6 +30,7 @@ export default function MusicTrackList({ initialFeedUrls = [], onPlayTrack, sele
   const [filterSource, setFilterSource] = useState<FilterSource>('all');
   const [filterEpisode, setFilterEpisode] = useState<string>('all');
   const [filterFeed, setFilterFeed] = useState<string>('all');
+  const [filterMediaType, setFilterMediaType] = useState<FilterMediaType>('all');
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
@@ -160,6 +162,11 @@ export default function MusicTrackList({ initialFeedUrls = [], onPlayTrack, sele
       filtered = filtered.filter(track => track.feedUrl === filterFeed);
     }
 
+    // Apply media type filter
+    if (filterMediaType !== 'all') {
+      filtered = filtered.filter(track => (track as any).mediaType === filterMediaType);
+    }
+
     // Sort tracks
     const sorted = [...filtered].sort((a, b) => {
       switch (sortBy) {
@@ -181,7 +188,7 @@ export default function MusicTrackList({ initialFeedUrls = [], onPlayTrack, sele
     });
 
     return sorted;
-  }, [tracks, searchQuery, sortBy, filterSource, filterEpisode, filterFeed]);
+  }, [tracks, searchQuery, sortBy, filterSource, filterEpisode, filterFeed, filterMediaType]);
 
   // Pagination
   const totalPages = Math.ceil(filteredAndSortedTracks.length / itemsPerPage);
@@ -193,7 +200,7 @@ export default function MusicTrackList({ initialFeedUrls = [], onPlayTrack, sele
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, filterSource, filterEpisode, filterFeed, sortBy]);
+  }, [searchQuery, filterSource, filterEpisode, filterFeed, filterMediaType, sortBy]);
 
   const handleViewTrackDetails = (track: MusicTrack) => {
     router.push(`/music-tracks/${track.id}`);
@@ -204,6 +211,7 @@ export default function MusicTrackList({ initialFeedUrls = [], onPlayTrack, sele
     setFilterSource('all');
     setFilterEpisode('all');
     setFilterFeed('all');
+    setFilterMediaType('all');
     setSortBy('date-desc');
   };
 
@@ -291,9 +299,9 @@ export default function MusicTrackList({ initialFeedUrls = [], onPlayTrack, sele
           >
             <Filter className="w-4 h-4" />
             Filters
-            {(filterSource !== 'all' || filterEpisode !== 'all' || filterFeed !== 'all') && (
+            {(filterSource !== 'all' || filterEpisode !== 'all' || filterFeed !== 'all' || filterMediaType !== 'all') && (
               <span className="px-2 py-0.5 text-xs bg-blue-500 rounded-full">
-                {[filterSource !== 'all', filterEpisode !== 'all', filterFeed !== 'all'].filter(Boolean).length}
+                {[filterSource !== 'all', filterEpisode !== 'all', filterFeed !== 'all', filterMediaType !== 'all'].filter(Boolean).length}
               </span>
             )}
             <ChevronDown className={`w-4 h-4 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
@@ -312,7 +320,7 @@ export default function MusicTrackList({ initialFeedUrls = [], onPlayTrack, sele
             <option value="artist-desc">Artist Z-A</option>
           </select>
 
-          {(searchQuery || filterSource !== 'all' || filterEpisode !== 'all' || filterFeed !== 'all') && (
+          {(searchQuery || filterSource !== 'all' || filterEpisode !== 'all' || filterFeed !== 'all' || filterMediaType !== 'all') && (
             <button
               onClick={resetFilters}
               className="flex items-center gap-1 px-3 py-2 text-sm text-gray-400 hover:text-white transition-colors"
@@ -325,7 +333,7 @@ export default function MusicTrackList({ initialFeedUrls = [], onPlayTrack, sele
 
         {/* Expanded Filters */}
         {showFilters && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 rounded-lg bg-white/5 border border-white/10">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 rounded-lg bg-white/5 border border-white/10">
             <div>
               <label className="block text-sm font-medium mb-2">Source Type</label>
               <select
@@ -370,6 +378,19 @@ export default function MusicTrackList({ initialFeedUrls = [], onPlayTrack, sele
                     {new URL(feed).hostname}
                   </option>
                 ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Media Type</label>
+              <select
+                value={filterMediaType}
+                onChange={(e) => setFilterMediaType(e.target.value as FilterMediaType)}
+                className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/20 focus:border-blue-500 focus:outline-none"
+              >
+                <option value="all">All Media</option>
+                <option value="audio">Audio Only</option>
+                <option value="video">Video Only</option>
               </select>
             </div>
           </div>

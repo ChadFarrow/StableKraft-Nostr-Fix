@@ -137,6 +137,9 @@ try {
 const nextConfig = {
   // Domain configuration for stablekraft.app deployment
   basePath: '',
+
+  // Fix workspace root detection (bun.lock in parent directory was causing issues)
+  outputFileTracingRoot: path.join(__dirname),
   
   // Inject version from package.json as environment variable
   env: {

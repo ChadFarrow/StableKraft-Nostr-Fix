@@ -1,5 +1,15 @@
 // Unified music track types for components
 
+export interface AlternateEnclosure {
+  type: string;       // MIME type
+  url: string;        // Media URL
+  length?: number;    // File size in bytes
+  bitrate?: number;
+  height?: number;    // Video height for quality
+  title?: string;     // Human-readable (max 32 chars)
+  default?: boolean;
+}
+
 export interface BaseMusicTrack {
   id: string;
   title: string;
@@ -14,6 +24,10 @@ export interface BaseMusicTrack {
   feedUrl?: string;
   createdAt?: string;
   pubDate?: string;
+  // Media type fields for video support
+  mediaType?: 'audio' | 'video';
+  mimeType?: string;
+  alternateEnclosures?: AlternateEnclosure[];
 }
 
 export interface V4VMusicTrack extends BaseMusicTrack {

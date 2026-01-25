@@ -2,6 +2,16 @@
  * Type definitions for RSS parsing
  */
 
+export interface AlternateEnclosure {
+  type: string;       // MIME type
+  url: string;        // Media URL
+  length?: number;    // File size in bytes
+  bitrate?: number;
+  height?: number;    // Video height for quality
+  title?: string;     // Human-readable (max 32 chars)
+  default?: boolean;
+}
+
 export interface RSSTrack {
   id?: string; // Database primary key or track identifier
   title: string;
@@ -26,6 +36,10 @@ export interface RSSTrack {
   v4vRecipient?: string;
   v4vValue?: any;
   status?: string; // 'active' | 'unavailable' | 'error'
+  // Media type fields for video support
+  mediaType?: 'audio' | 'video';
+  mimeType?: string;
+  alternateEnclosures?: AlternateEnclosure[];
   // RSS parser custom fields
   'podcast:valueRecipient'?: any;
   'podcast:value'?: any;

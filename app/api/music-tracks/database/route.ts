@@ -17,6 +17,7 @@ export async function GET(request: NextRequest) {
     const episodeId = searchParams.get('episodeId');
     const source = searchParams.get('source') as any;
     const hasV4VData = searchParams.get('hasV4VData');
+    const mediaType = searchParams.get('mediaType');
     const page = parseInt(searchParams.get('page') || '1');
     const pageSize = parseInt(searchParams.get('pageSize') || '20');
     const extractFromFeed = searchParams.get('extractFromFeed');
@@ -137,6 +138,10 @@ export async function GET(request: NextRequest) {
     
     if (hasV4VData !== null && hasV4VData === 'true') {
       where.v4vValue = { not: Prisma.JsonNull };
+    }
+
+    if (mediaType && mediaType !== 'all') {
+      where.mediaType = mediaType;
     }
 
     logger.info('Searching tracks with filters', { where, page, pageSize });

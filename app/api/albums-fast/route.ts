@@ -181,6 +181,8 @@ export async function GET(request: Request) {
                 startTime: true,
                 endTime: true,
                 trackOrder: true,
+                mediaType: true,
+                alternateEnclosures: true,
               },
               orderBy: [
                 { trackOrder: 'asc' },
@@ -298,7 +300,9 @@ export async function GET(request: Request) {
           v4vRecipient: track.v4vRecipient,
           v4vValue: track.v4vValue,
           startTime: track.startTime,
-          endTime: track.endTime
+          endTime: track.endTime,
+          mediaType: track.mediaType || 'audio',
+          alternateEnclosures: track.alternateEnclosures
         })),
       // Include V4V payment data from feed (preferred) or first track (fallback)
       v4vRecipient: feed.v4vRecipient || feed.Track?.[0]?.v4vRecipient || null,
@@ -406,6 +410,12 @@ export async function GET(request: Request) {
         case 'playlist':
           // Start with empty array for playlist filter - playlists will be added after this
           filteredAlbums = [];
+          break;
+        case 'videos':
+          // Filter albums that have at least one video track
+          filteredAlbums = deduplicatedAlbums.filter(album =>
+            album.tracks && album.tracks.some((track: any) => track.mediaType === 'video')
+          );
           break;
       }
     }

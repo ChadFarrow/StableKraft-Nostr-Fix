@@ -524,6 +524,10 @@ export class RSSParser {
 
     const enclosureElement = item.getElementsByTagName('enclosure')[0];
     const url = enclosureElement ? RSSUtils.getElementAttribute(enclosureElement, 'url') : '';
+    const mimeType = enclosureElement ? RSSUtils.getElementAttribute(enclosureElement, 'type') : undefined;
+
+    // Detect media type from MIME type or URL
+    const mediaType = this.detectMediaType(mimeType, url);
 
     const subtitleElement = item.getElementsByTagName('itunes:subtitle')[0];
     const subtitle = RSSUtils.cleanHtmlContent(RSSUtils.getElementText(subtitleElement));
@@ -552,8 +556,29 @@ export class RSSParser {
       image: RSSUtils.sanitizeUrl(image),
       explicit,
       keywords,
-      musicTrack: true
+      musicTrack: true,
+      mediaType,
+      mimeType: mimeType || undefined
     };
+  }
+
+  private static detectMediaType(mimeType: string | undefined | null, url: string | undefined): 'audio' | 'video' {
+    const type = mimeType?.toLowerCase() || '';
+    const urlLower = url?.toLowerCase() || '';
+
+    if (
+      type.includes('video') ||
+      type.includes('mpegurl') ||
+      type.includes('x-mpegurl') ||
+      urlLower.includes('.mp4') ||
+      urlLower.includes('.webm') ||
+      urlLower.includes('.m3u8') ||
+      urlLower.includes('.mov') ||
+      urlLower.includes('cloudflarestream.com')
+    ) {
+      return 'video';
+    }
+    return 'audio';
   }
 
   private static extractFunding(channel: Element): any[] {

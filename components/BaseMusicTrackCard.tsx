@@ -13,7 +13,8 @@ import {
   Copy,
   Check,
   Heart,
-  Share2
+  Share2,
+  Video
 } from 'lucide-react';
 import type { MusicTrackCardProps, V4VMusicTrack } from '@/types/music-track';
 import { BoostButton } from '@/components/Lightning/BoostButton';
@@ -244,9 +245,17 @@ function BaseMusicTrackCard({
           </div>
         )}
 
+        {/* Video Badge */}
+        {(track as any).mediaType === 'video' && (
+          <div className="absolute top-2 left-2 px-2 py-1 rounded-full text-xs font-medium border backdrop-blur-sm bg-purple-500/20 text-purple-300 border-purple-500/30">
+            <Video className="w-3 h-3 inline mr-1" />
+            Video
+          </div>
+        )}
+
         {/* Source Badge */}
         {track.source && (
-          <div className={`absolute top-2 left-2 px-2 py-1 rounded-full text-xs font-medium border backdrop-blur-sm ${getSourceColor(track.source)}`}>
+          <div className={`absolute ${(track as any).mediaType === 'video' ? 'bottom-2' : 'top-2'} left-2 px-2 py-1 rounded-full text-xs font-medium border backdrop-blur-sm ${getSourceColor(track.source)}`}>
             {track.source}
           </div>
         )}

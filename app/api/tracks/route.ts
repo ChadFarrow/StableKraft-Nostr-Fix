@@ -14,7 +14,8 @@ export async function GET(request: NextRequest) {
     const album = searchParams.get('album');
     const explicit = searchParams.get('explicit');
     const hasV4V = searchParams.get('hasV4V');
-    
+    const mediaType = searchParams.get('mediaType');
+
     // Pagination
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '50');
@@ -61,7 +62,12 @@ export async function GET(request: NextRequest) {
     if (hasV4V === 'true') {
       where.v4vValue = { not: Prisma.JsonNull };
     }
-    
+
+    // Filter by media type
+    if (mediaType && mediaType !== 'all') {
+      where.mediaType = mediaType;
+    }
+
     // Execute query
     const [tracks, total] = await Promise.all([
       prisma.track.findMany({

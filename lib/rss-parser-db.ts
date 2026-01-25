@@ -102,6 +102,16 @@ export interface ParsedFeed {
   };
 }
 
+export interface AlternateEnclosure {
+  type: string;       // MIME type
+  url: string;        // Media URL
+  length?: number;    // File size in bytes
+  bitrate?: number;
+  height?: number;    // Video height for quality
+  title?: string;     // Human-readable (max 32 chars)
+  default?: boolean;
+}
+
 export interface ParsedItem {
   guid?: string;
   title: string;
@@ -125,6 +135,116 @@ export interface ParsedItem {
   endTime?: number;
   episode?: number; // podcast:episode or itunes:episode number for track ordering
   season?: number; // podcast:season or itunes:season number for track ordering
+  // Media type fields for video support
+  mediaType?: 'audio' | 'video';
+  mimeType?: string;
+  alternateEnclosures?: AlternateEnclosure[];
+}
+
+// Helper function to detect media type from MIME type or URL
+export function detectMediaType(mimeType: string | undefined, url: string | undefined): 'audio' | 'video' {
+  const type = mimeType?.toLowerCase() || '';
+  const urlLower = url?.toLowerCase() || '';
+
+  if (
+    type.includes('video') ||
+    type.includes('mpegurl') ||
+    type.includes('x-mpegurl') ||
+    urlLower.includes('.mp4') ||
+    urlLower.includes('.webm') ||
+    urlLower.includes('.m3u8') ||
+    urlLower.includes('.mov') ||
+    urlLower.includes('cloudflarestream.com')
+  ) {
+    return 'video';
+  }
+  return 'audio';
+}
+
+// Helper function to parse alternate enclosures from XML for a specific item
+export function parseAlternateEnclosures(xmlText: string, itemGuid: string): AlternateEnclosure[] {
+  const enclosures: AlternateEnclosure[] = [];
+
+  try {
+    // Find the item block containing this GUID
+    const guidEscaped = itemGuid.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // Try to find the item containing this GUID
+    // Match from <item> to </item>
+    const itemRegex = new RegExp(`<item[^>]*>(?:(?!</item>)[\\s\\S])*?<guid[^>]*>\\s*${guidEscaped}\\s*</guid>(?:(?!</item>)[\\s\\S])*?</item>`, 'i');
+    const itemMatch = xmlText.match(itemRegex);
+
+    if (!itemMatch) {
+      return enclosures;
+    }
+
+    const itemContent = itemMatch[0];
+
+    // Parse podcast:alternateEnclosure tags
+    // Pattern: <podcast:alternateEnclosure type="..." length="..." ...> ... </podcast:alternateEnclosure>
+    const altEnclosureRegex = /<podcast:alternateEnclosure([^>]*)>([\s\S]*?)<\/podcast:alternateEnclosure>/gi;
+    let match;
+
+    while ((match = altEnclosureRegex.exec(itemContent)) !== null) {
+      const attributes = match[1];
+      const innerContent = match[2];
+
+      // Extract attributes
+      const typeMatch = attributes.match(/type="([^"]*)"/);
+      const lengthMatch = attributes.match(/length="([^"]*)"/);
+      const bitrateMatch = attributes.match(/bitrate="([^"]*)"/);
+      const heightMatch = attributes.match(/height="([^"]*)"/);
+      const titleMatch = attributes.match(/title="([^"]*)"/);
+      const defaultMatch = attributes.match(/default="([^"]*)"/);
+
+      // Extract nested source URI
+      const sourceMatch = innerContent.match(/<podcast:source[^>]*uri="([^"]*)"/);
+
+      if (typeMatch && sourceMatch) {
+        const enclosure: AlternateEnclosure = {
+          type: typeMatch[1],
+          url: sourceMatch[1],
+          length: lengthMatch ? parseInt(lengthMatch[1], 10) : undefined,
+          bitrate: bitrateMatch ? parseInt(bitrateMatch[1], 10) : undefined,
+          height: heightMatch ? parseInt(heightMatch[1], 10) : undefined,
+          title: titleMatch ? titleMatch[1].substring(0, 32) : undefined,
+          default: defaultMatch ? defaultMatch[1].toLowerCase() === 'true' : undefined,
+        };
+        enclosures.push(enclosure);
+      }
+    }
+
+    // Also handle self-closing alternate enclosures with uri attribute
+    const selfClosingRegex = /<podcast:alternateEnclosure([^>]*)\/>/gi;
+    while ((match = selfClosingRegex.exec(itemContent)) !== null) {
+      const attributes = match[1];
+
+      const typeMatch = attributes.match(/type="([^"]*)"/);
+      const uriMatch = attributes.match(/uri="([^"]*)"/);
+      const lengthMatch = attributes.match(/length="([^"]*)"/);
+      const bitrateMatch = attributes.match(/bitrate="([^"]*)"/);
+      const heightMatch = attributes.match(/height="([^"]*)"/);
+      const titleMatch = attributes.match(/title="([^"]*)"/);
+      const defaultMatch = attributes.match(/default="([^"]*)"/);
+
+      if (typeMatch && uriMatch) {
+        const enclosure: AlternateEnclosure = {
+          type: typeMatch[1],
+          url: uriMatch[1],
+          length: lengthMatch ? parseInt(lengthMatch[1], 10) : undefined,
+          bitrate: bitrateMatch ? parseInt(bitrateMatch[1], 10) : undefined,
+          height: heightMatch ? parseInt(heightMatch[1], 10) : undefined,
+          title: titleMatch ? titleMatch[1].substring(0, 32) : undefined,
+          default: defaultMatch ? defaultMatch[1].toLowerCase() === 'true' : undefined,
+        };
+        enclosures.push(enclosure);
+      }
+    }
+  } catch (error) {
+    console.warn(`⚠️ Error parsing alternate enclosures for item ${itemGuid}:`, error);
+  }
+
+  return enclosures;
 }
 
 // Helper function to parse V4V data from XML directly
@@ -679,29 +799,24 @@ export async function parseRSSFeed(feedUrl: string): Promise<ParsedFeed> {
     if (feed.items) {
       console.log(`🔍 DEBUG: Processing ${feed.items.length} total items from RSS feed...`);
       let skippedCount = 0;
-      let videoSkippedCount = 0;
+      let videoCount = 0;
       for (const item of feed.items) {
         // Skip items without enclosures
         if (!item.enclosure?.url) {
           skippedCount++;
           continue;
         }
-        
-        // Skip video streams (HLS, MP4, etc.) - only include audio
-        const enclosureType = item.enclosure.type?.toLowerCase() || '';
-        const enclosureUrl = item.enclosure.url.toLowerCase();
-        if (
-          enclosureType.includes('video') ||
-          enclosureType.includes('mpegurl') ||
-          enclosureType.includes('x-mpegurl') ||
-          enclosureUrl.includes('.m3u8') ||
-          enclosureUrl.includes('cloudflarestream.com')
-        ) {
-          console.log(`⏭️  Skipping video item: ${item.title || 'Untitled'}`);
-          videoSkippedCount++;
-          continue;
+
+        // Detect media type (audio or video) instead of skipping video
+        const enclosureType = item.enclosure.type || undefined;
+        const enclosureUrl = item.enclosure.url;
+        const mediaType = detectMediaType(enclosureType, enclosureUrl);
+
+        if (mediaType === 'video') {
+          console.log(`🎬 Found video item: ${item.title || 'Untitled'}`);
+          videoCount++;
         }
-        
+
         // Extract episode and season numbers from itunes or from XML (for podcast: namespace)
         let episodeNumber: number | undefined = undefined;
         let seasonNumber: number | undefined = undefined;
@@ -729,6 +844,9 @@ export async function parseRSSFeed(feedUrl: string): Promise<ParsedFeed> {
           }
         }
 
+        // Parse alternate enclosures for this item if available
+        const alternateEnclosures = item.guid ? parseAlternateEnclosures(xmlText, item.guid) : [];
+
         const parsedItem: ParsedItem = {
           guid: item.guid || undefined,
           title: item.title || 'Untitled',
@@ -750,7 +868,11 @@ export async function parseRSSFeed(feedUrl: string): Promise<ParsedFeed> {
           itunesKeywords: parseKeywords(item.itunes?.keywords),
           itunesCategories: feedCategories, // Inherit from feed
           episode: episodeNumber,
-          season: seasonNumber
+          season: seasonNumber,
+          // Video support fields
+          mediaType,
+          mimeType: enclosureType,
+          alternateEnclosures: alternateEnclosures.length > 0 ? alternateEnclosures : undefined,
         };
         
         // Parse V4V (Value for Value) information if present
@@ -867,7 +989,7 @@ export async function parseRSSFeed(feedUrl: string): Promise<ParsedFeed> {
         items.push(parsedItem);
       }
       
-      console.log(`✅ DEBUG: Parsed ${items.length} audio items from feed (skipped ${skippedCount} without enclosures, ${videoSkippedCount} video items)`);
+      console.log(`✅ DEBUG: Parsed ${items.length} items from feed (skipped ${skippedCount} without enclosures, found ${videoCount} video items)`);
     }
     
     // Parse feed-level V4V data

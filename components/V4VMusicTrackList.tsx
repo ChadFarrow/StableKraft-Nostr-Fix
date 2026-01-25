@@ -28,6 +28,7 @@ interface V4VMusicTrackListProps {
 
 type SortOption = 'date-desc' | 'date-asc' | 'title-asc' | 'title-desc' | 'artist-asc' | 'artist-desc' | 'v4v-first';
 type FilterSource = 'all' | 'chapter' | 'value-split' | 'description' | 'external-feed' | 'v4v-data';
+type FilterMediaType = 'all' | 'audio' | 'video';
 
 interface DatabaseStats {
   totalSegments: number;
@@ -55,6 +56,7 @@ export default function V4VMusicTrackList({
   const [filterEpisode, setFilterEpisode] = useState<string>('all');
   const [filterFeed, setFilterFeed] = useState<string>('all');
   const [filterV4V, setFilterV4V] = useState<boolean | null>(null);
+  const [filterMediaType, setFilterMediaType] = useState<FilterMediaType>('all');
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -87,6 +89,7 @@ export default function V4VMusicTrackList({
       if (filterEpisode !== 'all') params.append('episodeId', filterEpisode);
       if (filterFeed !== 'all') params.append('feedId', filterFeed);
       if (filterV4V !== null) params.append('hasV4VData', filterV4V.toString());
+      if (filterMediaType !== 'all') params.append('mediaType', filterMediaType);
 
       const response = await fetch(`/api/music-tracks/database?${params.toString()}`);
       
@@ -109,7 +112,7 @@ export default function V4VMusicTrackList({
     } finally {
       setIsLoading(false);
     }
-  }, [currentPage, searchQuery, filterSource, filterEpisode, filterFeed, filterV4V, itemsPerPage]);
+  }, [currentPage, searchQuery, filterSource, filterEpisode, filterFeed, filterV4V, filterMediaType, itemsPerPage]);
 
   // Extract tracks from feeds and store in database
   const extractAndStoreTracks = useCallback(async () => {
@@ -150,7 +153,7 @@ export default function V4VMusicTrackList({
 
   useEffect(() => {
     loadMusicTracks();
-  }, [loadMusicTracks, currentPage, searchQuery, filterSource, filterEpisode, filterFeed, filterV4V]);
+  }, [loadMusicTracks, currentPage, searchQuery, filterSource, filterEpisode, filterFeed, filterV4V, filterMediaType]);
 
   // Auto-extract on mount if enabled
   useEffect(() => {
@@ -190,11 +193,12 @@ export default function V4VMusicTrackList({
     setFilterEpisode('all');
     setFilterFeed('all');
     setFilterV4V(null);
+    setFilterMediaType('all');
     setCurrentPage(1);
   };
 
-  const hasActiveFilters = searchQuery || filterSource !== 'all' || filterEpisode !== 'all' || 
-                          filterFeed !== 'all' || filterV4V !== null;
+  const hasActiveFilters = searchQuery || filterSource !== 'all' || filterEpisode !== 'all' ||
+                          filterFeed !== 'all' || filterV4V !== null || filterMediaType !== 'all';
 
   return (
     <div className="space-y-6">
@@ -346,6 +350,20 @@ export default function V4VMusicTrackList({
                 <option value="all">All Tracks</option>
                 <option value="true">V4V Only</option>
                 <option value="false">Non-V4V Only</option>
+              </select>
+            </div>
+
+            {/* Media Type Filter */}
+            <div>
+              <label className="block text-sm font-medium mb-2">Media Type</label>
+              <select
+                value={filterMediaType}
+                onChange={(e) => setFilterMediaType(e.target.value as FilterMediaType)}
+                className="w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg focus:outline-none focus:border-blue-500"
+              >
+                <option value="all">All Media</option>
+                <option value="audio">Audio Only</option>
+                <option value="video">Video Only</option>
               </select>
             </div>
 

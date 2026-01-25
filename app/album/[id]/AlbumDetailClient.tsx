@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
-import { Play, Pause, SkipBack, SkipForward, Volume2 } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Volume2, Video } from 'lucide-react';
 import { RSSAlbum } from '@/lib/rss-parser';
 import { getAlbumArtworkUrl, getPlaceholderImageUrl } from '@/lib/cdn-utils';
 import { generateAlbumUrl, generateAlbumSlug, generatePublisherSlug, generatePublisherUrl, getPublisherInfo } from '@/lib/url-utils';
@@ -1161,7 +1161,15 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
                       <div className="min-w-0 flex-1">
                         {/* Mobile: stacked layout, Desktop: single line */}
                         <div className="md:hidden">
-                          <p className="font-medium line-clamp-2 text-sm">{track.title}</p>
+                          <p className="font-medium line-clamp-2 text-sm">
+                            {track.title}
+                            {(track as any).mediaType === 'video' && (
+                              <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                <Video className="w-2.5 h-2.5 mr-0.5" />
+                                Video
+                              </span>
+                            )}
+                          </p>
                           {track.subtitle && (
                             <p className="text-xs text-gray-400 italic truncate">{track.subtitle}</p>
                           )}
@@ -1170,6 +1178,12 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
                         <div className="hidden md:block">
                           <p className="font-medium text-base line-clamp-2 whitespace-normal break-words">
                             {track.title}
+                            {(track as any).mediaType === 'video' && (
+                              <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                <Video className="w-2.5 h-2.5 mr-0.5" />
+                                Video
+                              </span>
+                            )}
                             <span className="text-gray-400 font-normal"> • {album?.artist}</span>
                             {track.subtitle && (
                               <span className="text-gray-400 font-normal italic"> — {track.subtitle}</span>

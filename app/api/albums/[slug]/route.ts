@@ -667,7 +667,29 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
           { trackOrder: 'asc' as const },
           { publishedAt: 'asc' as const },
           { createdAt: 'asc' as const }
-        ]
+        ],
+        select: {
+          id: true,
+          guid: true,
+          title: true,
+          subtitle: true,
+          description: true,
+          artist: true,
+          audioUrl: true,
+          duration: true,
+          image: true,
+          explicit: true,
+          itunesKeywords: true,
+          itunesDuration: true,
+          v4vRecipient: true,
+          v4vValue: true,
+          status: true,
+          trackOrder: true,
+          publishedAt: true,
+          createdAt: true,
+          mediaType: true,
+          alternateEnclosures: true
+        }
       }
     };
 
@@ -915,7 +937,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         keywords: track.itunesKeywords || [],
         v4vRecipient: track.v4vRecipient,
         v4vValue: parseV4VValue(track.v4vValue),
-        status: track.status || 'active'
+        status: track.status || 'active',
+        mediaType: track.mediaType || 'audio',
+        alternateEnclosures: track.alternateEnclosures
       }));
       
       // Determine if this is a playlist based on track variety
@@ -1005,6 +1029,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
                   v4vRecipient: track.v4vRecipient,
                   v4vValue: parseV4VValue(track.v4vValue),
                   status: track.status || 'active',
+                  mediaType: track.mediaType || 'audio',
+                  alternateEnclosures: track.alternateEnclosures,
                   albumTitle: album.title,
                   feedId: album.id
                 });
@@ -1107,6 +1133,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
                         v4vRecipient: track.v4vRecipient,
                         v4vValue: parseV4VValue(track.v4vValue),
                         status: track.status || 'active',
+                        mediaType: track.mediaType || 'audio',
+                        alternateEnclosures: track.alternateEnclosures,
                         albumTitle: track.Feed?.title,
                         feedId: track.Feed?.id
                       });
@@ -1265,7 +1293,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         keywords: track.itunesKeywords || [],
         v4vRecipient: track.v4vRecipient,
         v4vValue: parseV4VValue(track.v4vValue),
-        status: track.status || 'active'
+        status: track.status || 'active',
+        mediaType: track.mediaType || 'audio',
+        alternateEnclosures: track.alternateEnclosures
         }));
 
         const isPlaylist = tracks.length > 1 &&

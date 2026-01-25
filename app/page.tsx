@@ -148,26 +148,21 @@ function HomePageContent() {
   // Static background state - Bloodshot Lies album art
   const [backgroundImageLoaded, setBackgroundImageLoaded] = useState(false);
 
-  // Controls state - Initialize from URL params if available
-  const getInitialFilter = (): FilterType => {
-    if (typeof window === 'undefined') return 'all';
-    const urlFilter = searchParams?.get('filter');
-    const validFilters: FilterType[] = ['all', 'albums', 'eps', 'singles', 'publishers', 'playlist'];
-    if (urlFilter && validFilters.includes(urlFilter as FilterType)) {
-      return urlFilter as FilterType;
-    }
-    return 'all';
-  };
-  const [activeFilter, setActiveFilter] = useState<FilterType>(getInitialFilter());
+  // Controls state - Initialize from URL params (works on both server and client)
+  const validFilters: FilterType[] = ['all', 'albums', 'eps', 'singles', 'publishers', 'playlist', 'videos'];
+  const urlFilter = searchParams?.get('filter');
+  const initialFilter = (urlFilter && validFilters.includes(urlFilter as FilterType))
+    ? (urlFilter as FilterType)
+    : 'all';
+  const [activeFilter, setActiveFilter] = useState<FilterType>(initialFilter);
 
   // Store handleFilterChange in a ref to avoid dependency issues
   const handleFilterChangeRef = useRef<((newFilter: FilterType, skipUrlUpdate?: boolean) => Promise<void>) | null>(null);
   
   // Sync filter from URL params when URL changes (e.g., browser back button)
   useEffect(() => {
-    const urlFilter = searchParams?.get('filter');
-    const validFilters: FilterType[] = ['all', 'albums', 'eps', 'singles', 'publishers', 'playlist'];
-    const newFilter = (urlFilter && validFilters.includes(urlFilter as FilterType))
+    const currentUrlFilter = searchParams?.get('filter');
+    const newFilter = (currentUrlFilter && validFilters.includes(currentUrlFilter as FilterType))
       ? (urlFilter as FilterType)
       : 'all';
 
@@ -957,7 +952,10 @@ function HomePageContent() {
           guid: track.guid,
           id: track.id,
           startTime: track.startTime,
-          endTime: track.endTime
+          endTime: track.endTime,
+          // Include video fields
+          mediaType: track.mediaType,
+          alternateEnclosures: track.alternateEnclosures
         })),
         publisher: album.publisher,
         podroll: album.podroll,
@@ -1361,6 +1359,7 @@ function HomePageContent() {
                 <option value="singles">Singles</option>
                 <option value="publishers">Publishers</option>
                 <option value="playlist">Playlists</option>
+                <option value="videos">Videos</option>
               </select>
 
               {/* Desktop: Button tabs */}
@@ -1372,6 +1371,7 @@ function HomePageContent() {
                   { value: 'singles', label: 'Singles' },
                   { value: 'publishers', label: 'Publishers' },
                   { value: 'playlist', label: 'Playlists' },
+                  { value: 'videos', label: 'Videos' },
                 ].map((filter) => (
                   <button
                     key={filter.value}

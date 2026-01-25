@@ -38,6 +38,8 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
     toggleShuffle,
     isFullscreenMode,
     setFullscreenMode,
+    isVideoMode,
+    videoRef,
   } = useAudio();
 
   const [isDragging, setIsDragging] = useState(false);
@@ -49,9 +51,55 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
 
   const progressRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const videoContainerRef = useRef<HTMLDivElement>(null);
+
+  // Use isFullscreenMode from AudioContext if isOpen prop is not provided
+  const shouldShow = isOpen !== undefined ? isOpen : isFullscreenMode;
 
   // Get current track info
   const currentTrack = currentPlayingAlbum?.tracks?.[currentTrackIndex];
+
+  // Move video element into visible container when in video mode
+  useEffect(() => {
+    const videoElement = videoRef?.current;
+    const container = videoContainerRef.current;
+
+    if (shouldShow && isVideoMode && videoElement && container) {
+      // Store original parent and styles to restore later
+      const originalParent = videoElement.parentElement;
+      const originalStyles = {
+        position: videoElement.style.position,
+        left: videoElement.style.left,
+        top: videoElement.style.top,
+        width: videoElement.style.width,
+        height: videoElement.style.height,
+        pointerEvents: videoElement.style.pointerEvents,
+      };
+
+      // Move video into container and make visible
+      container.appendChild(videoElement);
+      videoElement.style.position = 'relative';
+      videoElement.style.left = '0';
+      videoElement.style.top = '0';
+      videoElement.style.width = '100%';
+      videoElement.style.height = '100%';
+      videoElement.style.pointerEvents = 'auto';
+      videoElement.controls = false; // Hide native controls
+
+      return () => {
+        // Restore original position when unmounting or switching modes
+        if (originalParent && videoElement.parentElement === container) {
+          originalParent.appendChild(videoElement);
+          videoElement.style.position = originalStyles.position;
+          videoElement.style.left = originalStyles.left;
+          videoElement.style.top = originalStyles.top;
+          videoElement.style.width = originalStyles.width;
+          videoElement.style.height = originalStyles.height;
+          videoElement.style.pointerEvents = originalStyles.pointerEvents;
+        }
+      };
+    }
+  }, [shouldShow, isVideoMode, videoRef]);
 
   // Debug: Log V4V data availability
   useEffect(() => {
@@ -221,10 +269,6 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
-  // Use isFullscreenMode from AudioContext if isOpen prop is not provided
-  const shouldShow = isOpen !== undefined ? isOpen : isFullscreenMode;
-
-
   if (!shouldShow || !currentPlayingAlbum || !currentTrack) {
     return null;
   }
@@ -310,17 +354,27 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
           <UserMenu />
         </div>
 
-        {/* Album Art */}
+        {/* Album Art or Video */}
         <div className="flex items-start justify-center px-8 pt-12">
           <div className="relative w-full max-w-sm aspect-square">
-            <img
-              src={albumArt}
-              alt={currentPlayingAlbum.title}
-              className="w-full h-full object-cover rounded-2xl shadow-2xl pointer-events-none"
-              style={{
-                boxShadow: `0 25px 50px ${dominantColor}30`
-              }}
-            />
+            {isVideoMode ? (
+              <div
+                ref={videoContainerRef}
+                className="w-full h-full rounded-2xl shadow-2xl overflow-hidden bg-black"
+                style={{
+                  boxShadow: `0 25px 50px ${dominantColor}30`
+                }}
+              />
+            ) : (
+              <img
+                src={albumArt}
+                alt={currentPlayingAlbum.title}
+                className="w-full h-full object-cover rounded-2xl shadow-2xl pointer-events-none"
+                style={{
+                  boxShadow: `0 25px 50px ${dominantColor}30`
+                }}
+              />
+            )}
 
             {/* Boost Button - Top-left corner overlay - always show */}
             <button

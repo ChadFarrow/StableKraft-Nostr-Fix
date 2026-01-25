@@ -8,7 +8,7 @@ datasource db {
 }
 
 model ArtworkColor {
-  id              String   @id @default(cuid())
+  id              String   @id
   imageUrl        String   @unique
   originalColor   String
   enhancedColor   String
@@ -16,49 +16,146 @@ model ArtworkColor {
   textColor       String
   isAppealing     Boolean  @default(true)
   createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  updatedAt       DateTime
 
-  @@index([imageUrl])
   @@index([createdAt])
   @@index([createdAt, isAppealing])
+  @@index([imageUrl])
+}
+
+model BoostEvent {
+  id          String   @id
+  userId      String
+  trackId     String?
+  eventId     String   @unique
+  amount      Int
+  message     String?
+  paymentHash String?
+  relayUrls   String[] @default([])
+  createdAt   DateTime @default(now())
+  nostrPubkey String?
+  User        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([nostrPubkey])
+  @@index([trackId, createdAt])
+  @@index([trackId])
+  @@index([userId, createdAt])
+  @@index([userId])
+}
+
+model FavoriteAlbum {
+  id           String   @id
+  sessionId    String?
+  userId       String?
+  feedId       String
+  type         String   @default("album")
+  nostrEventId String?
+  nip51Format  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  User         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, feedId])
+  @@unique([userId, feedId])
+  @@index([feedId])
+  @@index([nostrEventId])
+  @@index([sessionId, createdAt])
+  @@index([sessionId])
+  @@index([userId, createdAt])
+  @@index([userId])
+}
+
+model FavoriteTrack {
+  id           String   @id
+  sessionId    String?
+  userId       String?
+  trackId      String
+  nostrEventId String?
+  nip51Format  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  User         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, trackId])
+  @@unique([userId, trackId])
+  @@index([nostrEventId])
+  @@index([sessionId, createdAt])
+  @@index([sessionId])
+  @@index([trackId])
+  @@index([userId, createdAt])
+  @@index([userId])
 }
 
 model Feed {
-  id           String    @id
-  guid         String?   @unique
-  title        String
-  description  String?
-  originalUrl  String    @unique
-  cdnUrl       String?
-  type         String    @default("album")
-  artist       String?
-  image        String?
-  language     String?
+  id                String    @id
+  title             String
+  description       String?
+  originalUrl       String    @unique
+  cdnUrl            String?
+  type              String    @default("album")
+  artist            String?
+  image             String?
+  language          String?
   category          String?
-  podcastCategories String[]  @default([])
   explicit          Boolean   @default(false)
-  priority     String    @default("normal")
-  status       String    @default("active")
-  lastFetched  DateTime?
-  lastError    String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime
-  v4vRecipient String?
-  v4vValue     Json?
-  publisherId  String?
-  Track        Track[]
-  publisher    Feed?     @relation("PublisherAlbums", fields: [publisherId], references: [id])
-  albums       Feed[]    @relation("PublisherAlbums")
+  priority          String    @default("normal")
+  status            String    @default("active")
+  lastFetched       DateTime?
+  lastError         String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime
+  guid              String?   @unique
+  publisherId       String?
+  v4vRecipient      String?
+  v4vValue          Json?
+  podcastCategories String[]  @default([])
+  Feed              Feed?     @relation("FeedToFeed", fields: [publisherId], references: [id])
+  other_Feed        Feed[]    @relation("FeedToFeed")
+  Track             Track[]
 
   @@index([guid])
   @@index([lastFetched])
+  @@index([publisherId])
   @@index([status])
   @@index([status, lastFetched])
+  @@index([status, priority, createdAt])
   @@index([status, priority])
   @@index([status, type])
   @@index([type])
-  @@index([publisherId])
-  @@index([status, priority, createdAt])
+}
+
+model Follow {
+  id                            String   @id
+  followerId                    String
+  followingId                   String
+  createdAt                     DateTime @default(now())
+  User_Follow_followerIdToUser  User     @relation("Follow_followerIdToUser", fields: [followerId], references: [id], onDelete: Cascade)
+  User_Follow_followingIdToUser User     @relation("Follow_followingIdToUser", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followerId, createdAt])
+  @@index([followerId])
+  @@index([followingId])
+}
+
+model NostrPost {
+  id          String   @id
+  userId      String
+  eventId     String   @unique
+  kind        Int
+  content     String
+  trackId     String?
+  feedId      String?
+  createdAt   DateTime @default(now())
+  nostrPubkey String?
+  User        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+  @@index([feedId])
+  @@index([kind])
+  @@index([nostrPubkey])
+  @@index([trackId])
+  @@index([userId, createdAt])
+  @@index([userId])
 }
 
 model PlaylistTrack {
@@ -74,53 +171,106 @@ model PlaylistTrack {
   @@index([playlistId, position])
 }
 
+model SystemPlaylist {
+  id                  String                @id
+  title               String
+  description         String?
+  artwork             String?
+  link                String?
+  updatedAt           DateTime
+  SystemPlaylistTrack SystemPlaylistTrack[]
+
+  @@index([updatedAt])
+}
+
+model SystemPlaylistTrack {
+  id             String         @id
+  playlistId     String
+  trackId        String
+  position       Int
+  episodeId      String?
+  SystemPlaylist SystemPlaylist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  Track          Track          @relation(fields: [trackId], references: [id], onDelete: Cascade)
+
+  @@unique([playlistId, trackId])
+  @@index([playlistId, episodeId])
+  @@index([playlistId, position])
+}
+
 model Track {
-  id               String    @id
-  guid             String?   @unique
-  title            String
-  subtitle         String?
-  description      String?
-  artist           String?
-  album            String?
-  audioUrl         String
-  duration         Int?
-  explicit         Boolean   @default(false)
-  image            String?
-  publishedAt      DateTime?
-  itunesAuthor     String?
-  itunesSummary    String?
-  itunesImage      String?
-  itunesDuration   String?
-  itunesKeywords   String[]  @default([])
-  itunesCategories  String[]  @default([])
-  podcastCategories String[]  @default([])
-  v4vRecipient      String?
-  v4vValue         Json?
-  startTime        Float?
-  endTime          Float?
-  searchVector     String?
-  feedId           String
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime
-  trackOrder       Int?
-  status           String    @default("active")
-  Feed             Feed      @relation(fields: [feedId], references: [id], onDelete: Cascade)
-  systemPlaylists  SystemPlaylistTrack[]
+  id                  String                @id
+  guid                String?               @unique
+  title               String
+  subtitle            String?
+  description         String?
+  artist              String?
+  album               String?
+  audioUrl            String
+  duration            Int?
+  explicit            Boolean               @default(false)
+  image               String?
+  publishedAt         DateTime?
+  itunesAuthor        String?
+  itunesSummary       String?
+  itunesImage         String?
+  itunesDuration      String?
+  itunesKeywords      String[]              @default([])
+  itunesCategories    String[]              @default([])
+  v4vRecipient        String?
+  v4vValue            Json?
+  startTime           Float?
+  endTime             Float?
+  searchVector        String?
+  feedId              String
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime
+  trackOrder          Int?
+  status              String                @default("active")
+  podcastCategories   String[]              @default([])
+  alternateEnclosures Json?
+  mediaType           String                @default("audio")
+  mimeType            String?
+  SystemPlaylistTrack SystemPlaylistTrack[]
+  Feed                Feed                  @relation(fields: [feedId], references: [id], onDelete: Cascade)
 
   @@index([album])
   @@index([artist, album])
   @@index([artist])
   @@index([feedId])
-  @@index([feedId, trackOrder])
   @@index([feedId, publishedAt])
   @@index([feedId, status])
-  @@index([guid])
+  @@index([feedId, trackOrder])
   @@index([guid, feedId])
+  @@index([guid])
   @@index([guid, status])
+  @@index([mediaType])
   @@index([publishedAt])
   @@index([status])
   @@index([title])
   @@index([trackOrder])
+}
+
+model User {
+  id                              String          @id
+  nostrPubkey                     String          @unique
+  nostrNpub                       String          @unique
+  displayName                     String?
+  avatar                          String?
+  bio                             String?
+  lightningAddress                String?
+  relays                          String[]        @default([])
+  createdAt                       DateTime        @default(now())
+  updatedAt                       DateTime
+  BoostEvent                      BoostEvent[]
+  FavoriteAlbum                   FavoriteAlbum[]
+  FavoriteTrack                   FavoriteTrack[]
+  Follow_Follow_followerIdToUser  Follow[]        @relation("Follow_followerIdToUser")
+  Follow_Follow_followingIdToUser Follow[]        @relation("Follow_followingIdToUser")
+  NostrPost                       NostrPost[]
+
+  @@index([createdAt])
+  @@index([nostrNpub])
+  @@index([nostrPubkey])
 }
 
 model UserPlaylist {
@@ -136,152 +286,4 @@ model UserPlaylist {
 
   @@index([createdBy])
   @@index([isPublic])
-}
-
-model User {
-  id              String         @id @default(cuid())
-  nostrPubkey     String         @unique
-  nostrNpub       String         @unique
-  displayName     String?
-  avatar          String?
-  bio             String?
-  lightningAddress String?
-  relays          String[]       @default([])
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  favoriteTracks  FavoriteTrack[]
-  favoriteAlbums FavoriteAlbum[]
-  follows         Follow[]       @relation("Follower")
-  followers       Follow[]       @relation("Following")
-  posts           NostrPost[]
-  boostEvents     BoostEvent[]
-
-  @@index([nostrPubkey])
-  @@index([nostrNpub])
-  @@index([createdAt])
-}
-
-model Follow {
-  id          String   @id @default(cuid())
-  followerId String
-  followingId String
-  createdAt   DateTime @default(now())
-  follower    User     @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
-  following   User     @relation("Following", fields: [followingId], references: [id], onDelete: Cascade)
-
-  @@unique([followerId, followingId])
-  @@index([followerId])
-  @@index([followingId])
-  @@index([followerId, createdAt])
-}
-
-model NostrPost {
-  id          String   @id @default(cuid())
-  userId      String
-  eventId     String   @unique
-  kind        Int
-  content     String
-  trackId     String?
-  feedId      String?
-  nostrPubkey String?  // NEW
-  createdAt   DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([eventId])
-  @@index([kind])
-  @@index([trackId])
-  @@index([feedId])
-  @@index([nostrPubkey]) // NEW
-  @@index([userId, createdAt])
-}
-
-model BoostEvent {
-  id          String   @id @default(cuid())
-  userId      String
-  trackId     String?
-  eventId     String   @unique
-  amount      Int
-  message     String?
-  paymentHash String?
-  relayUrls   String[] @default([])
-  nostrPubkey String?  // NEW
-  createdAt   DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([trackId])
-  @@index([eventId])
-  @@index([nostrPubkey]) // NEW
-  @@index([userId, createdAt])
-  @@index([trackId, createdAt])
-}
-
-model FavoriteTrack {
-  id           String   @id @default(cuid())
-  sessionId    String?
-  userId       String?
-  trackId      String
-  nostrEventId String?
-  nip51Format  Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([sessionId, trackId])
-  @@unique([userId, trackId])
-  @@index([sessionId])
-  @@index([userId])
-  @@index([trackId])
-  @@index([nostrEventId])
-  @@index([sessionId, createdAt])
-  @@index([userId, createdAt])
-}
-
-model FavoriteAlbum {
-  id           String   @id @default(cuid())
-  sessionId    String?
-  userId       String?
-  feedId       String
-  type         String   @default("album")
-  nostrEventId String?
-  nip51Format  Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([sessionId, feedId])
-  @@unique([userId, feedId])
-  @@index([sessionId])
-  @@index([userId])
-  @@index([feedId])
-  @@index([nostrEventId])
-  @@index([sessionId, createdAt])
-  @@index([userId, createdAt])
-}
-
-model SystemPlaylist {
-  id          String   @id
-  title       String
-  description String?
-  artwork     String?
-  link        String?
-  updatedAt   DateTime @updatedAt
-
-  tracks      SystemPlaylistTrack[]
-
-  @@index([updatedAt])
-}
-
-model SystemPlaylistTrack {
-  id         String   @id @default(cuid())
-  playlistId String
-  trackId    String
-  position   Int
-  episodeId  String?
-
-  playlist   SystemPlaylist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
-  track      Track          @relation(fields: [trackId], references: [id], onDelete: Cascade)
-
-  @@unique([playlistId, trackId])
-  @@index([playlistId, position])
-  @@index([playlistId, episodeId])
 }
