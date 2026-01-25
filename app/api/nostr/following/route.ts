@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
     const follows = await prisma.follow.findMany({
       where: { followerId: userId },
       include: {
-        following: {
+        User_Follow_followingIdToUser: {
           select: {
             id: true,
             nostrPubkey: true,
@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     const normalized = [];
 
     for (const follow of follows) {
-      const user = follow.following;
+      const user = follow.User_Follow_followingIdToUser;
 
       if (!user) continue;
 

@@ -156,6 +156,7 @@ export async function POST(request: NextRequest) {
     // --- STORE IN DATABASE ---
     const post = await prisma.nostrPost.create({
       data: {
+        id: event.id, // Use eventId as ID since it's unique
         userId,
         eventId: event.id,
         kind: 1,

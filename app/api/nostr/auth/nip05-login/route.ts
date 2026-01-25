@@ -101,13 +101,15 @@ export async function POST(request: NextRequest) {
     if (!user) {
       user = await prisma.user.create({
         data: {
+          id: hexPubkey, // Use pubkey as ID since it's unique
           nostrPubkey: hexPubkey,
           nostrNpub: npub,
           displayName,
           avatar,
           bio,
           lightningAddress,
-          relays
+          relays,
+          updatedAt: new Date()
         }
       });
     } else {

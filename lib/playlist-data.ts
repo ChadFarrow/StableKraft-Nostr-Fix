@@ -37,10 +37,10 @@ export async function getPlaylistData(playlistId: string): Promise<SystemPlaylis
     const playlist = await prisma.systemPlaylist.findUnique({
       where: { id: playlistId },
       include: {
-        tracks: {
+        SystemPlaylistTrack: {
           orderBy: { position: 'asc' },
           include: {
-            track: {
+            Track: {
               select: {
                 id: true,
                 title: true,
@@ -67,20 +67,20 @@ export async function getPlaylistData(playlistId: string): Promise<SystemPlaylis
     }
 
     // Transform the data into the expected format
-    const tracks: PlaylistTrackData[] = playlist.tracks.map(pt => ({
-      id: pt.track.id,
-      title: pt.track.title,
-      artist: pt.track.artist,
-      album: pt.track.album,
-      description: pt.track.description,
-      image: pt.track.image,
-      audioUrl: pt.track.audioUrl,
-      duration: pt.track.duration,
-      publishedAt: pt.track.publishedAt,
-      feedId: pt.track.feedId,
-      guid: pt.track.guid,
-      v4vRecipient: pt.track.v4vRecipient,
-      v4vValue: pt.track.v4vValue,
+    const tracks: PlaylistTrackData[] = playlist.SystemPlaylistTrack.map(pt => ({
+      id: pt.Track.id,
+      title: pt.Track.title,
+      artist: pt.Track.artist,
+      album: pt.Track.album,
+      description: pt.Track.description,
+      image: pt.Track.image,
+      audioUrl: pt.Track.audioUrl,
+      duration: pt.Track.duration,
+      publishedAt: pt.Track.publishedAt,
+      feedId: pt.Track.feedId,
+      guid: pt.Track.guid,
+      v4vRecipient: pt.Track.v4vRecipient,
+      v4vValue: pt.Track.v4vValue,
       position: pt.position,
       episodeId: pt.episodeId,
     }));

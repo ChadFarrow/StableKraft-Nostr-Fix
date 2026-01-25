@@ -118,6 +118,7 @@ export async function POST(request: NextRequest) {
     if (!user) {
       user = await prisma.user.create({
         data: {
+          id: hexPubkey, // Use pubkey as ID since it's unique
           nostrPubkey: hexPubkey,
           nostrNpub: calculatedNpub,
           displayName,
@@ -125,6 +126,7 @@ export async function POST(request: NextRequest) {
           bio,
           lightningAddress,
           relays: relayList || [],
+          updatedAt: new Date(),
         },
       });
     } else {

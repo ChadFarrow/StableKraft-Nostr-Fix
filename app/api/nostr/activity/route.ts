@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     const boosts = await prisma.boostEvent.findMany({
       where: { userId },
       include: {
-        user: {
+        User: {
           select: {
             id: true,
             nostrNpub: true,
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
         OR: [{ trackId: { not: null } }, { feedId: { not: null } }],
       },
       include: {
-        user: {
+        User: {
           select: {
             id: true,
             nostrNpub: true,
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
     const follows = await prisma.follow.findMany({
       where: { followerId: userId },
       include: {
-        following: {
+        User_Follow_followingIdToUser: {
           select: {
             id: true,
             nostrNpub: true,

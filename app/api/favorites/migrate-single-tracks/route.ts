@@ -98,14 +98,23 @@ export async function POST(request: NextRequest) {
 
       if (!existingTrack) {
         // Create track favorite
+        const createData: any = {
+          trackId,
+          createdAt: favorite.createdAt // Preserve original favorite date
+        };
+        
+        if (userId) {
+          createData.userId = userId;
+        }
+        if (sessionId) {
+          createData.sessionId = sessionId;
+        }
+        if (favorite.nostrEventId) {
+          createData.nostrEventId = favorite.nostrEventId;
+        }
+        
         await prisma.favoriteTrack.create({
-          data: {
-            ...(userId ? { userId } : {}),
-            ...(sessionId ? { sessionId } : {}),
-            trackId,
-            nostrEventId: favorite.nostrEventId,
-            createdAt: favorite.createdAt // Preserve original favorite date
-          }
+          data: createData
         });
       }
 

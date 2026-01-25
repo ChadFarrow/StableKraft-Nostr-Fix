@@ -145,6 +145,7 @@ export async function POST(request: NextRequest) {
     // --- STORE NOSTR POST ---
     const nostrPost = await prisma.nostrPost.create({
       data: {
+        id: noteEvent.id, // Use eventId as ID since it's unique
         userId,
         eventId: noteEvent.id,
         kind: 1,
@@ -158,6 +159,7 @@ export async function POST(request: NextRequest) {
     // --- STORE BOOST EVENT ---
     const boostEvent = await prisma.boostEvent.create({
       data: {
+        id: noteEvent.id, // Use eventId as ID since it's unique
         userId,
         trackId: trackId || null,
         eventId: noteEvent.id,

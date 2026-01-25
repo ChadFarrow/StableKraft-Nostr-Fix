@@ -213,10 +213,10 @@ export async function getPlaylistFromDatabase(config: PlaylistConfig): Promise<{
     const dbPlaylist = await prisma.systemPlaylist.findUnique({
       where: { id: config.id },
       include: {
-        tracks: {
+        SystemPlaylistTrack: {
           orderBy: { position: 'asc' },
           include: {
-            track: {
+            Track: {
               select: {
                 id: true,
                 guid: true,
@@ -244,32 +244,32 @@ export async function getPlaylistFromDatabase(config: PlaylistConfig): Promise<{
       }
     });
 
-    if (!dbPlaylist || dbPlaylist.tracks.length === 0) {
+    if (!dbPlaylist || dbPlaylist.SystemPlaylistTrack.length === 0) {
       return { found: false };
     }
 
-    console.log(`⚡ [${config.shortName}] Using database playlist (${dbPlaylist.tracks.length} tracks)`);
+    console.log(`⚡ [${config.shortName}] Using database playlist (${dbPlaylist.SystemPlaylistTrack.length} tracks)`);
 
     // Transform to expected response format
-    const tracks = dbPlaylist.tracks.map((pt, index) => ({
-      id: pt.track.id,
-      title: pt.track.title,
-      artist: pt.track.artist || pt.track.Feed?.artist || 'Unknown Artist',
-      album: pt.track.album || pt.track.Feed?.title || 'Unknown Album',
-      audioUrl: pt.track.audioUrl,
-      duration: pt.track.duration || 0,
-      image: pt.track.image || pt.track.Feed?.image,
-      publishedAt: pt.track.publishedAt?.toISOString(),
-      v4vRecipient: pt.track.v4vRecipient,
-      v4vValue: pt.track.v4vValue,
-      feedGuid: pt.track.guid,
-      itemGuid: pt.track.guid,
-      guid: pt.track.guid,
+    const tracks = dbPlaylist.SystemPlaylistTrack.map((pt, index) => ({
+      id: pt.Track.id,
+      title: pt.Track.title,
+      artist: pt.Track.artist || pt.Track.Feed?.artist || 'Unknown Artist',
+      album: pt.Track.album || pt.Track.Feed?.title || 'Unknown Album',
+      audioUrl: pt.Track.audioUrl,
+      duration: pt.Track.duration || 0,
+      image: pt.Track.image || pt.Track.Feed?.image,
+      publishedAt: pt.Track.publishedAt?.toISOString(),
+      v4vRecipient: pt.Track.v4vRecipient,
+      v4vValue: pt.Track.v4vValue,
+      feedGuid: pt.Track.guid,
+      itemGuid: pt.Track.guid,
+      guid: pt.Track.guid,
       index,
       episodeId: pt.episodeId,
       playlistContext: {
         episodeTitle: pt.episodeId,
-        itemGuid: pt.track.guid,
+        itemGuid: pt.Track.guid,
         position: pt.position
       }
     }));
@@ -360,6 +360,7 @@ export async function savePlaylistToDatabase(
         id: config.id,
         title: config.name,
         description: config.description,
+        updatedAt: new Date(),
         artwork: artworkUrl,
         link: playlistLink,
       }
@@ -373,6 +374,7 @@ export async function savePlaylistToDatabase(
     // Insert tracks with positions
     const trackInserts = tracks
       .map((track, index) => ({
+        id: `${config.id}-${track.id}-${index}`, // Composite ID
         playlistId: config.id,
         trackId: track.id,
         position: index,

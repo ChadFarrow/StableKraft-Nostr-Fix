@@ -127,6 +127,7 @@ export async function POST(request: NextRequest) {
       // Create follow relationship
       const follow = await prisma.follow.create({
         data: {
+          id: `${userId}-${followingId}`, // Composite ID from follower and following
           followerId: userId,
           followingId,
         },
