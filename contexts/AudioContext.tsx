@@ -111,6 +111,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   const playbackSessionRef = useRef(0); // Session ID to cancel stale playback attempts
   const autoSkipTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Track pending auto-skip to cancel on manual skip
   const isAutoTransitioningRef = useRef(false); // Track when transitioning from ended track (for iOS)
+  const isInitializingHlsRef = useRef(false); // Prevent HLS cleanup during initialization
   const playNextTrackRef = useRef<() => Promise<void>>();
   const playPreviousTrackRef = useRef<() => Promise<void>>();
   const pauseRef = useRef<() => void>();
@@ -1079,11 +1080,14 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   // Helper function to attempt HLS playback
   const attemptHlsPlayback = async (hlsUrl: string, context = 'HLS playback'): Promise<boolean> => {
     const videoElement = videoRef.current;
-    
+
     if (!videoElement) {
       console.error('❌ Video element reference is null for HLS playback');
       return false;
     }
+
+    // Set flag to prevent useEffect cleanup from destroying HLS during initialization
+    isInitializingHlsRef.current = true;
 
     // Get URLs to try including proxied versions
     const urlsToTry = getAudioUrlsToTry(hlsUrl);
@@ -1165,8 +1169,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
 
             // Timeout after 10 seconds (reduced from 20s for faster fallback)
             setTimeout(() => {
-              console.warn(`⏰ ${context} timed out for URL ${i + 1}`);
               if (!hasResolved) {
+                console.warn(`⏰ ${context} timed out for URL ${i + 1}`);
                 hasResolved = true;
                 resolve(false);
               }
@@ -1180,6 +1184,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
           // Wait for manifest to be parsed and playback to start
           const success = await manifestParsed;
           if (success) {
+            isInitializingHlsRef.current = false;
             return true;
           }
           
@@ -1205,11 +1210,13 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
               initWebAudio();
               connectToCompressor(videoElement, true);
             }
+            isInitializingHlsRef.current = false;
             return true;
           }
         } else {
           console.error('❌ HLS not supported in this browser');
           toast.error('Video streaming not supported in this browser', { duration: 5000 });
+          isInitializingHlsRef.current = false;
           return false;
         }
         
@@ -1228,6 +1235,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     }
 
     console.error(`❌ All ${urlsToTry.length} HLS URLs failed for ${context}`);
+    isInitializingHlsRef.current = false;
     return false;
   };
 
@@ -1263,8 +1271,24 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
       if (isHls) {
         console.log('🖥️ Opening fullscreen mode for video HLS playback');
         setIsFullscreenMode(true);
-        // Wait for React to re-render and move the video element to visible container
-        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // CRITICAL: Don't rely on React's render cycle - directly make video element
+        // visible to prevent browser throttling of hidden video elements.
+        // NowPlayingScreen will take control of positioning once it renders.
+        const videoElement = videoRef.current;
+        if (videoElement) {
+          // Temporarily make video element visible (not off-screen)
+          // Use a small size so it doesn't flash visibly before fullscreen opens
+          videoElement.style.position = 'fixed';
+          videoElement.style.left = '0';
+          videoElement.style.top = '0';
+          videoElement.style.width = '1px';
+          videoElement.style.height = '1px';
+          videoElement.style.opacity = '0.01'; // Nearly invisible but not display:none
+        }
+
+        // Small delay for the style changes to take effect
+        await new Promise(resolve => setTimeout(resolve, 50));
       }
     }
 
@@ -1797,11 +1821,18 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         element.removeEventListener('waiting', handleWaiting);
       });
       
-      // Clean up HLS instance
-      if (hlsRef.current) {
+      // Clean up HLS instance - but NOT if:
+      // 1. We're in the middle of initializing HLS
+      // 2. Video is currently playing (don't destroy active HLS stream)
+      const videoElement = videoRef.current;
+      const isVideoPlaying = videoElement && !videoElement.paused && !videoElement.ended;
+
+      if (hlsRef.current && !isInitializingHlsRef.current && !isVideoPlaying) {
+        console.log('🧹 Cleaning up HLS instance in useEffect cleanup');
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
+      // Skip cleanup silently if HLS is initializing or video is playing
     };
   }, [isVideoMode, currentPlayingAlbum, currentTrackIndex, isShuffleMode, shuffledPlaylist, currentShuffleIndex, repeatMode, publishNip38StatusDebounced]); // Add necessary dependencies for preloading logic
 

@@ -74,6 +74,7 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
         width: videoElement.style.width,
         height: videoElement.style.height,
         pointerEvents: videoElement.style.pointerEvents,
+        opacity: videoElement.style.opacity,
       };
 
       // Move video into container and make visible
@@ -84,6 +85,7 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
       videoElement.style.width = '100%';
       videoElement.style.height = '100%';
       videoElement.style.pointerEvents = 'auto';
+      videoElement.style.opacity = '1'; // Reset opacity (may have been set to 0.01 during HLS init)
       videoElement.controls = false; // Hide native controls
 
       return () => {
@@ -96,6 +98,7 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
           videoElement.style.width = originalStyles.width;
           videoElement.style.height = originalStyles.height;
           videoElement.style.pointerEvents = originalStyles.pointerEvents;
+          videoElement.style.opacity = originalStyles.opacity;
         }
       };
     }
