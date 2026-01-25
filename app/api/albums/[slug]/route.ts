@@ -1097,6 +1097,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
                       v4vRecipient: true,
                       v4vValue: true,
                       status: true,
+                      mediaType: true,
+                      alternateEnclosures: true,
                       Feed: {
                         select: {
                           id: true,
@@ -1133,7 +1135,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
                         v4vRecipient: track.v4vRecipient,
                         v4vValue: parseV4VValue(track.v4vValue),
                         status: track.status || 'active',
-                        mediaType: track.mediaType || 'audio',
+                        mediaType: (track.mediaType as string) || 'audio',
                         alternateEnclosures: track.alternateEnclosures,
                         albumTitle: track.Feed?.title,
                         feedId: track.Feed?.id
