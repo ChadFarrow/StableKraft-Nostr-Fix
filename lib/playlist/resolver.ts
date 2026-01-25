@@ -372,6 +372,9 @@ export async function savePlaylistToDatabase(
     });
 
     // Insert tracks with positions
+    // Note: Due to @@unique([playlistId, trackId]), same track can only appear once
+    // We keep the first occurrence of each track
+    const seenTrackIds = new Set<string>();
     const trackInserts = tracks
       .map((track, index) => ({
         id: `${config.id}-${track.id}-${index}`, // Composite ID
@@ -380,7 +383,12 @@ export async function savePlaylistToDatabase(
         position: index,
         episodeId: track.episodeId || null,
       }))
-      .filter(t => t.trackId);
+      .filter(t => {
+        if (!t.trackId) return false;
+        if (seenTrackIds.has(t.trackId)) return false; // Skip duplicates
+        seenTrackIds.add(t.trackId);
+        return true;
+      });
 
     if (trackInserts.length > 0) {
       await prisma.systemPlaylistTrack.createMany({
@@ -389,7 +397,8 @@ export async function savePlaylistToDatabase(
       });
     }
 
-    console.log(`💾 [${config.shortName}] Saved ${trackInserts.length} tracks to SystemPlaylist`);
+    const skipped = tracks.length - trackInserts.length;
+    console.log(`💾 [${config.shortName}] Saved ${trackInserts.length} tracks to SystemPlaylist${skipped > 0 ? ` (${skipped} duplicates skipped)` : ''}`);
   } catch (dbError) {
     console.error(`❌ [${config.shortName}] Error saving to SystemPlaylist:`, dbError);
     // Don't fail the request if DB save fails
