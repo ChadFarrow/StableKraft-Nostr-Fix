@@ -17,8 +17,6 @@ import { useScrollDetectionContext } from '@/components/ScrollDetectionProvider'
 import { Play, Pause } from 'lucide-react';
 import AppLayout from '@/components/AppLayout';
 import FavoriteButton from '@/components/favorites/FavoriteButton';
-import { KeyboardShortcutsHelper } from '@/components/KeyboardShortcutsHelper';
-import { ShareButton } from '@/components/ShareButton';
 import { SkeletonGrid } from '@/components/SkeletonCard';
 
 
@@ -1452,11 +1450,6 @@ function HomePageContent() {
                   </button>
                 </div>
 
-                {/* Keyboard Shortcuts Helper */}
-                <KeyboardShortcutsHelper />
-
-                {/* Share Button */}
-                <ShareButton />
               </div>
             </div>
           </div>
