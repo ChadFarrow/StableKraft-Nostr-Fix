@@ -947,11 +947,19 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
 
       // Special handling for HLS streams
       if (isHls) {
-        // For HLS streams, try video proxy first, then audio proxy, then direct
-        console.log('📺 [URL Strategy] HLS stream detected - using proxy + direct fallback');
-        urlsToTry.push(`/api/proxy-video?url=${encodeURIComponent(effectiveUrl)}`);
-        urlsToTry.push(`/api/proxy-audio?url=${encodeURIComponent(effectiveUrl)}`);
-        urlsToTry.push(effectiveUrl);
+        // Cloudflare Stream has CORS enabled and uses relative URLs in manifests,
+        // so we MUST use direct URL (proxy breaks relative segment resolution)
+        const isCloudflareStream = url.hostname.includes('cloudflarestream.com');
+        if (isCloudflareStream) {
+          console.log('📺 [URL Strategy] Cloudflare Stream HLS - using direct URL (has CORS)');
+          urlsToTry.push(effectiveUrl);
+        } else {
+          // For other HLS streams, try proxy first, then direct
+          console.log('📺 [URL Strategy] HLS stream detected - using proxy + direct fallback');
+          urlsToTry.push(`/api/proxy-video?url=${encodeURIComponent(effectiveUrl)}`);
+          urlsToTry.push(`/api/proxy-audio?url=${encodeURIComponent(effectiveUrl)}`);
+          urlsToTry.push(effectiveUrl);
+        }
         console.log('📋 [URL Strategy] Final URLs to try:', urlsToTry.length, 'URLs');
         return urlsToTry;
       }
@@ -1100,10 +1108,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
           const hls = new Hls({
             enableWorker: true,
             lowLatencyMode: false,
-            xhrSetup: function(xhr, url) {
-              // Add any necessary headers for CORS
-              xhr.setRequestHeader('Access-Control-Allow-Origin', '*');
-            }
+            // No xhrSetup needed - Cloudflare Stream has proper CORS headers
           });
 
           hlsRef.current = hls;

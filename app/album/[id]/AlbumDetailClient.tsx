@@ -425,8 +425,13 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
   };
 
   const playAlbum = async () => {
-    if (album && album.tracks.length > 0) {
-      await playTrack(0);
+    if (album && filteredTracks.length > 0) {
+      // Find the original index of the first filtered track
+      const firstFilteredTrack = filteredTracks[0];
+      const originalIndex = album.tracks.findIndex(t => t === firstFilteredTrack);
+      if (originalIndex !== -1) {
+        await playTrack(originalIndex);
+      }
     }
   };
 
