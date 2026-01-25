@@ -93,6 +93,14 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
     const filter = searchParams.get('filter') || 'all'; // albums, eps, singles, all
+    const forceRefresh = searchParams.get('refresh') === 'true'; // Force cache refresh
+
+    // Clear cache if refresh requested
+    if (forceRefresh) {
+      cachedData = null;
+      cacheTimestamp = 0;
+      console.log('🔄 Cache cleared due to refresh=true parameter');
+    }
 
     // Redirect publisher filter requests to the publishers API
     if (filter === 'publishers') {

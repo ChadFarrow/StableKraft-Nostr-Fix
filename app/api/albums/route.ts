@@ -435,7 +435,10 @@ export async function GET(request: Request) {
         guid: track.guid,
         id: track.id,
         startTime: track.startTime,
-        endTime: track.endTime
+        endTime: track.endTime,
+        // Media type fields for video filtering
+        mediaType: track.mediaType || 'audio',
+        alternateEnclosures: track.alternateEnclosures
       }));
       
       // Determine if this is a playlist based on track variety
@@ -542,6 +545,16 @@ export async function GET(request: Request) {
           break;
         case 'playlist':
           filteredAlbums = publisherFilteredAlbums.filter(album => album.podroll !== null);
+          break;
+        case 'videos':
+          // Filter albums that have at least one video track
+          filteredAlbums = publisherFilteredAlbums.filter(album =>
+            album.tracks.some((track: any) =>
+              track.mediaType === 'video' ||
+              (track.alternateEnclosures && Array.isArray(track.alternateEnclosures) &&
+                track.alternateEnclosures.some((enc: any) => enc.type?.includes('video')))
+            )
+          );
           break;
         default:
           filteredAlbums = publisherFilteredAlbums;
