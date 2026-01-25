@@ -312,7 +312,9 @@ export default function PlaylistTemplateCompact({ config }: PlaylistTemplateComp
           timestamp: Date.now(),
           feedUrl: config.feedUrl || '',
           artwork: artworkUrl,
-          link: data.albums && data.albums[0] ? data.albums[0].link : null
+          link: data.albums && data.albums[0] ? data.albums[0].link : null,
+          episodes: data.albums?.[0]?.episodes || [],
+          hasEpisodeMarkers: data.albums?.[0]?.hasEpisodeMarkers || false
         };
         
         // Use IndexedDB for large playlists (1000+ tracks) to avoid quota issues
