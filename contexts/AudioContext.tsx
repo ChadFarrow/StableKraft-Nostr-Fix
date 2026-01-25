@@ -928,9 +928,20 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     }
 
     try {
-      const url = new URL(sanitizedUrl);
+      // Extract direct URL from op3.dev analytics wrapper FIRST (before HLS check)
+      // This ensures HLS streams wrapped in op3.dev are handled correctly
+      let effectiveUrl = sanitizedUrl;
+      if (sanitizedUrl.includes('op3.dev/e/') && sanitizedUrl.includes('/https://')) {
+        const directUrl = sanitizedUrl.split('/https://')[1];
+        if (directUrl) {
+          effectiveUrl = `https://${directUrl}`;
+          console.log('🔗 [URL Strategy] Extracted direct URL from op3.dev:', effectiveUrl);
+        }
+      }
+
+      const url = new URL(effectiveUrl);
       const isExternal = url.hostname !== window.location.hostname;
-      const isHls = isHlsUrl(sanitizedUrl);
+      const isHls = isHlsUrl(effectiveUrl);
 
       console.log(`🔍 [URL Strategy] Parsed - hostname: ${url.hostname}, isExternal: ${isExternal}, isHls: ${isHls}`);
 
@@ -938,15 +949,15 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
       if (isHls) {
         // For HLS streams, try video proxy first, then audio proxy, then direct
         console.log('📺 [URL Strategy] HLS stream detected - using proxy + direct fallback');
-        urlsToTry.push(`/api/proxy-video?url=${encodeURIComponent(sanitizedUrl)}`);
-        urlsToTry.push(`/api/proxy-audio?url=${encodeURIComponent(sanitizedUrl)}`);
-        urlsToTry.push(sanitizedUrl);
+        urlsToTry.push(`/api/proxy-video?url=${encodeURIComponent(effectiveUrl)}`);
+        urlsToTry.push(`/api/proxy-audio?url=${encodeURIComponent(effectiveUrl)}`);
+        urlsToTry.push(effectiveUrl);
         console.log('📋 [URL Strategy] Final URLs to try:', urlsToTry.length, 'URLs');
         return urlsToTry;
       }
 
-      // Special handling for op3.dev analytics URLs - extract direct URL
-      if (sanitizedUrl.includes('op3.dev/e,') && sanitizedUrl.includes('/https://')) {
+      // Special handling for op3.dev analytics URLs - extract direct URL (for non-HLS)
+      if (sanitizedUrl.includes('op3.dev/e/') && sanitizedUrl.includes('/https://')) {
         console.log('🔗 [URL Strategy] op3.dev analytics URL detected');
         const directUrl = sanitizedUrl.split('/https://')[1];
         if (directUrl) {
