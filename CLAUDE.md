@@ -24,6 +24,11 @@ npm run test-feeds   # Test RSS feed parsing
 npm run fix-all      # Run all fix scripts
 npm run update-music # Update music workflow
 
+## Boundaries
+
+- Never commit secrets or credentials (`.env`, API keys, passwords)
+- Run `npm run build` before committing to catch errors
+
 ## Project Structure
 
 stablekraft-app/
