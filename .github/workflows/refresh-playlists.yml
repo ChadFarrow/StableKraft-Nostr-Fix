@@ -33,13 +33,32 @@ jobs:
         
         # Wait a bit for cache to settle
         sleep 5
-        
-        # Step 2: Refresh playlists with full v4v parsing
-        echo ""
-        echo "📋 Step 2: Refreshing playlists with full RSS parsing (includes v4v payment data)..."
 
-        # Refresh each main playlist to ensure all feeds are discovered and fully parsed
+        # Playlist names used throughout
         PLAYLISTS=("hgh" "mmt" "sas" "mmm" "iam" "itdv" "b4ts" "upbeats")
+
+        # Step 2: Reparse ALL music feeds to detect new tracks FIRST
+        # This must run BEFORE playlist refresh to catch new tracks
+        echo ""
+        echo "📋 Step 2: Reparsing music feeds to detect new tracks..."
+
+        REPARSE_RESPONSE=$(curl -s -X POST -w "\n%{http_code}" "${BASE_URL}/api/admin/reparse-feeds?type=music&maxAgeHours=720&limit=5000")
+        HTTP_CODE=$(echo "$REPARSE_RESPONSE" | tail -n1)
+        RESPONSE_BODY=$(echo "$REPARSE_RESPONSE" | sed '$d')
+
+        if [ "$HTTP_CODE" -eq 200 ]; then
+          PROCESSED=$(echo "$RESPONSE_BODY" | jq -r '.stats.feedsProcessed // 0' 2>/dev/null || echo "?")
+          NEW_TRACKS=$(echo "$RESPONSE_BODY" | jq -r '.stats.newTracksAdded // 0' 2>/dev/null || echo "?")
+          FAILED=$(echo "$RESPONSE_BODY" | jq -r '.stats.feedsFailed // 0' 2>/dev/null || echo "?")
+          DURATION=$(echo "$RESPONSE_BODY" | jq -r '.duration // "?"' 2>/dev/null || echo "?")
+          echo "✅ Music feeds reparsed: ${PROCESSED} feeds, ${NEW_TRACKS} new tracks, ${FAILED} failed (${DURATION})"
+        else
+          echo "⚠️ Music feed reparse had issues (HTTP $HTTP_CODE) - continuing..."
+        fi
+
+        # Step 3: Refresh playlists with full v4v parsing
+        echo ""
+        echo "📋 Step 3: Refreshing playlists with full RSS parsing (includes v4v payment data)..."
 
         for PLAYLIST in "${PLAYLISTS[@]}"; do
           echo "  🔄 Refreshing $PLAYLIST playlist..."
@@ -58,9 +77,9 @@ jobs:
         echo ""
         echo "✅ All playlists refreshed with full v4v parsing"
 
-        # Step 3: Parse feeds to save tracks to database
+        # Step 4: Parse newly discovered feeds
         echo ""
-        echo "📋 Step 3: Parsing feeds to save tracks to database..."
+        echo "📋 Step 4: Parsing newly discovered feeds..."
 
         # Parse feeds multiple times to ensure all feeds are processed
         # (parse-feeds processes 50 feeds at a time)
@@ -96,9 +115,9 @@ jobs:
         echo ""
         echo "✅ Feed parsing completed - tracks saved to database"
 
-        # Step 4: Parse publisher feeds to update album relationships
+        # Step 5: Parse publisher feeds to update album relationships
         echo ""
-        echo "📋 Step 4: Parsing publisher feeds to update album relationships..."
+        echo "📋 Step 5: Parsing publisher feeds to update album relationships..."
 
         PUBLISHER_RESPONSE=$(curl -s -X POST -w "\n%{http_code}" "${BASE_URL}/api/parse-feeds?action=parse-publishers")
         HTTP_CODE=$(echo "$PUBLISHER_RESPONSE" | tail -n1)
@@ -110,25 +129,6 @@ jobs:
           echo "✅ Publisher feeds parsed: ${PARSED} feeds processed, ${LINKED} albums linked"
         else
           echo "⚠️ Publisher parsing had issues (HTTP $HTTP_CODE) - non-critical"
-        fi
-
-        # Step 5: Reparse album feeds to detect new tracks
-        echo ""
-        echo "📋 Step 5: Reparsing album feeds to detect new tracks..."
-
-        REPARSE_RESPONSE=$(curl -s -X POST -w "\n%{http_code}" "${BASE_URL}/api/admin/reparse-feeds?type=album&maxAgeHours=20&limit=3000")
-        HTTP_CODE=$(echo "$REPARSE_RESPONSE" | tail -n1)
-        RESPONSE_BODY=$(echo "$REPARSE_RESPONSE" | sed '$d')
-
-        if [ "$HTTP_CODE" -eq 200 ]; then
-          PROCESSED=$(echo "$RESPONSE_BODY" | jq -r '.stats.feedsProcessed // 0' 2>/dev/null || echo "?")
-          NEW_TRACKS=$(echo "$RESPONSE_BODY" | jq -r '.stats.newTracksAdded // 0' 2>/dev/null || echo "?")
-          FAILED=$(echo "$RESPONSE_BODY" | jq -r '.stats.feedsFailed // 0' 2>/dev/null || echo "?")
-          DURATION=$(echo "$RESPONSE_BODY" | jq -r '.duration // "?"' 2>/dev/null || echo "?")
-          echo "✅ Album feeds reparsed: ${PROCESSED} feeds processed, ${NEW_TRACKS} new tracks added, ${FAILED} failed (${DURATION})"
-        else
-          echo "⚠️ Album reparse had issues (HTTP $HTTP_CODE) - non-critical"
-          echo "$RESPONSE_BODY"
         fi
 
         # Step 6: Final playlist refresh to include newly parsed tracks

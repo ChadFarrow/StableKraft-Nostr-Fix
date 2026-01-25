@@ -9,7 +9,7 @@ export async function GET() {
     // Step 1: Find all feed IDs that have at least one track in a system playlist
     const feedsWithPlaylistTracks = await prisma.systemPlaylistTrack.findMany({
       select: {
-        track: {
+        Track: {
           select: {
             feedId: true
           }
@@ -19,7 +19,7 @@ export async function GET() {
 
     const feedIdsToKeep = [...new Set(
       feedsWithPlaylistTracks
-        .map(spt => spt.track?.feedId)
+        .map(spt => spt.Track?.feedId)
         .filter((id): id is string => !!id)
     )];
 
@@ -96,7 +96,7 @@ export async function DELETE() {
     // Step 1: Find all feed IDs that have at least one track in a system playlist
     const feedsWithPlaylistTracks = await prisma.systemPlaylistTrack.findMany({
       select: {
-        track: {
+        Track: {
           select: {
             feedId: true
           }
@@ -106,7 +106,7 @@ export async function DELETE() {
 
     const feedIdsToKeep = [...new Set(
       feedsWithPlaylistTracks
-        .map(spt => spt.track?.feedId)
+        .map(spt => spt.Track?.feedId)
         .filter((id): id is string => !!id)
     )];
 
