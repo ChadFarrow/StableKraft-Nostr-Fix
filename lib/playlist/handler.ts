@@ -5,6 +5,7 @@
 
 import { NextResponse } from 'next/server';
 import { playlistCache } from '@/lib/playlist-cache';
+import { processPlaylistFeedDiscovery } from '@/lib/feed-discovery';
 import type { PlaylistConfig, PlaylistAlbum, PlaylistResponse } from './types';
 import { fetchAndParsePlaylist } from './parser';
 import {
@@ -57,6 +58,22 @@ export function createPlaylistHandler(config: PlaylistConfig) {
       console.log(`🔍 [${config.shortName}] Resolving tracks from database...`);
       const resolvedTracks = await resolvePlaylistItems(remoteItems, config);
       console.log(`✅ [${config.shortName}] Resolved ${resolvedTracks.length} tracks`);
+
+      // On refresh, discover and add missing feeds to database
+      if (forceRefresh && resolvedTracks.length < remoteItems.length) {
+        const resolvedGuids = new Set(resolvedTracks.map(t => t.playlistContext?.itemGuid));
+        const unresolvedItems = remoteItems.filter(item => !resolvedGuids.has(item.itemGuid));
+
+        if (unresolvedItems.length > 0) {
+          console.log(`🔍 [${config.shortName}] Discovering ${unresolvedItems.length} missing feeds...`);
+          try {
+            const addedFeeds = await processPlaylistFeedDiscovery(unresolvedItems);
+            console.log(`✅ [${config.shortName}] Added ${addedFeeds} new feeds to database`);
+          } catch (error) {
+            console.warn(`⚠️ [${config.shortName}] Feed discovery error:`, error);
+          }
+        }
+      }
 
       // Build tracks with episode context and filtering
       const tracks = buildTracksWithContext(remoteItems, resolvedTracks, artworkUrl, config);
