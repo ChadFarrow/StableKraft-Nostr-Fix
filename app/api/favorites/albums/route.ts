@@ -4,6 +4,7 @@ import { getSessionIdFromRequest } from '@/lib/session-utils';
 import { getPublisherInfo } from '@/lib/url-utils';
 import { podcastIndexAPI } from '@/lib/podcast-index-api';
 import { normalizePubkey } from '@/lib/nostr/normalize';
+import { Prisma } from '@prisma/client';
 
 /**
  * GET /api/favorites/albums
@@ -310,14 +311,24 @@ export async function POST(request: NextRequest) {
     }
 
     // Add to favorites
+    const createData: any = {
+      feedId,
+      type: favoriteType
+    };
+    
+    if (userId) {
+      createData.userId = userId;
+    }
+    if (sessionId) {
+      createData.sessionId = sessionId;
+    }
+    if (nostrEventId) {
+      createData.nostrEventId = nostrEventId;
+      createData.nip51Format = true;
+    }
+    
     const favorite = await prisma.favoriteAlbum.create({
-      data: {
-        ...(userId ? { userId } : {}),
-        ...(sessionId ? { sessionId } : {}),
-        feedId,
-        type: favoriteType,
-        ...(nostrEventId ? { nostrEventId, nip51Format: true } : {})
-      }
+      data: createData
     });
 
     return NextResponse.json({
