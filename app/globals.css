@@ -33,7 +33,7 @@
   }
   
   body {
-    @apply text-gray-900;
+    color: #111827; /* gray-900 */
     background-color: var(--background-primary);
   }
   
@@ -81,28 +81,40 @@
 
 @layer components {
   .podcast-card {
-    @apply bg-white rounded-lg shadow-md hover:shadow-lg transition-all duration-200 overflow-hidden;
+    background-color: white;
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s;
+    overflow: hidden;
     border: 1px solid rgba(78, 205, 196, 0.2);
     transform: translateY(0);
   }
   
   .podcast-card:hover {
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
     transform: translateY(-2px);
   }
   
   .episode-card {
-    @apply bg-white rounded-lg shadow-sm hover:shadow-md transition-all duration-200 p-4 border border-gray-100;
+    background-color: white;
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    transition: all 0.2s;
+    padding: 1rem;
+    border: 1px solid #f3f4f6;
     transform: translateY(0);
   }
   
   .episode-card:hover {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     transform: translateY(-1px);
     border-color: rgba(78, 205, 196, 0.3);
   }
   
   /* Enhanced interactive elements */
   .interactive-element {
-    @apply transition-all duration-200 cursor-pointer;
+    transition: all 0.2s;
+    cursor: pointer;
     transform: translateY(0) scale(1);
   }
   
@@ -116,7 +128,12 @@
   
   .btn-primary {
     background-color: var(--stablekraft-teal);
-    @apply text-white font-medium py-2 px-4 rounded-lg transition-all duration-200 shadow-md;
+    color: white;
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    transition: all 0.2s;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     transform: translateY(0);
   }
   
@@ -132,7 +149,13 @@
   }
   
   .btn-secondary {
-    @apply bg-gray-100 text-gray-800 font-medium py-2 px-4 rounded-lg transition-all duration-200 shadow-sm;
+    background-color: #f3f4f6;
+    color: #1f2937;
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    transition: all 0.2s;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
     border: 1px solid rgba(78, 205, 196, 0.3);
     transform: translateY(0);
   }
@@ -269,4 +292,18 @@
 
 .animate-marquee:hover {
   animation-play-state: paused;
-} 
+}
+
+/* Shimmer animation for skeleton loaders */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+}

@@ -5,6 +5,7 @@ export { useImageLoader, useAvatarLoader } from './useImageLoader';
 export { useLocalStorage, useCachedStorage, usePreferences } from './useLocalStorage';
 export { useDebounce, useDebouncedCallback, useDebouncedSearch } from './useDebounce';
 export { useAutoSyncFavorites } from './useAutoSyncFavorites';
+export { useKeyboardShortcuts } from './useKeyboardShortcuts';
 
 // Type exports
 export type { AudioTrack, AudioPlayerState, AudioPlayerActions } from './useAudioPlayer';
@@ -34,4 +35,7 @@ export type { ImageLoaderState, ImageLoaderOptions } from './useImageLoader';
  * - useDebounce: Value debouncing for performance
  * - useDebouncedCallback: Function debouncing
  * - useDebouncedSearch: Complete search functionality with debouncing
+ *
+ * Accessibility:
+ * - useKeyboardShortcuts: Global keyboard shortcuts for playback controls
  */

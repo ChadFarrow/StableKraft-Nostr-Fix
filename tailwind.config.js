@@ -4,6 +4,7 @@ module.exports = {
     './pages/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
     './app/**/*.{js,ts,jsx,tsx,mdx}',
+    './contexts/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     extend: {
@@ -20,12 +21,23 @@ module.exports = {
           800: '#9d174d',
           900: '#831843',
         },
+        'stablekraft-teal': '#4ECDC4',
+        'stablekraft-orange': '#FF6B6B',
       },
       transitionDuration: {
         '2000': '2000ms',
         '3000': '3000ms',
       },
+      keyframes: {
+        shimmer: {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(100%)' },
+        },
+      },
+      animation: {
+        shimmer: 'shimmer 2s infinite',
+      },
     },
   },
   plugins: [],
-} 
+}

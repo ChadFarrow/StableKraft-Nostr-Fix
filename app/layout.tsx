@@ -18,6 +18,8 @@ import NowPlayingScreen from '@/components/NowPlayingScreen'
 import ScrollDetectionProvider from '@/components/ScrollDetectionProvider'
 import ScrollRestorationProvider from '@/components/ScrollRestorationProvider'
 import GlobalErrorHandler from '@/components/GlobalErrorHandler'
+import { BackToTop } from '@/components/BackToTop'
+import KeyboardShortcutsProvider from '@/components/KeyboardShortcutsProvider'
 
 
 
@@ -249,6 +251,7 @@ export default function RootLayout({
                       <SessionProvider>
                         <BatchedFavoritesProvider>
                         <AudioProvider>
+                          <KeyboardShortcutsProvider>
                           <div className="min-h-screen relative">
                             {/* Background Image - Lazy loaded for better performance */}
                             <div
@@ -276,8 +279,10 @@ export default function RootLayout({
                           </div>
                           <GlobalNowPlayingBar />
                           <NowPlayingScreen />
+                          <BackToTop />
                           <ToastContainer />
                           <ServiceWorkerRegistration />
+                          </KeyboardShortcutsProvider>
                         </AudioProvider>
                         </BatchedFavoritesProvider>
                       </SessionProvider>

@@ -17,6 +17,9 @@ import { useScrollDetectionContext } from '@/components/ScrollDetectionProvider'
 import { Play, Pause } from 'lucide-react';
 import AppLayout from '@/components/AppLayout';
 import FavoriteButton from '@/components/favorites/FavoriteButton';
+import { KeyboardShortcutsHelper } from '@/components/KeyboardShortcutsHelper';
+import { ShareButton } from '@/components/ShareButton';
+import { SkeletonGrid } from '@/components/SkeletonCard';
 
 
 
@@ -1427,9 +1430,10 @@ function HomePageContent() {
                         : 'text-gray-300 hover:text-white active:bg-gray-700'
                     }`}
                     title="Grid view"
+                    aria-label="Grid view"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 6v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
                     </svg>
                   </button>
                   <button
@@ -1440,12 +1444,19 @@ function HomePageContent() {
                         : 'text-gray-300 hover:text-white active:bg-gray-700'
                     }`}
                     title="List view"
+                    aria-label="List view"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
                     </svg>
                   </button>
                 </div>
+
+                {/* Keyboard Shortcuts Helper */}
+                <KeyboardShortcutsHelper />
+
+                {/* Share Button */}
+                <ShareButton />
               </div>
             </div>
           </div>
@@ -1468,7 +1479,7 @@ function HomePageContent() {
               </div>
               
               {/* Show skeleton while loading */}
-              <LoadingSkeleton count={12} />
+              <SkeletonGrid count={12} />
             </div>
           ) : error ? (
             <div className="text-center py-12">
