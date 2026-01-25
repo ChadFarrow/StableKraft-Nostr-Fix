@@ -131,6 +131,26 @@ jobs:
           echo "$RESPONSE_BODY"
         fi
 
+        # Step 6: Final playlist refresh to include newly parsed tracks
+        echo ""
+        echo "📋 Step 6: Final playlist refresh to include newly parsed tracks in SystemPlaylist..."
+
+        for PLAYLIST in "${PLAYLISTS[@]}"; do
+          echo "  🔄 Final refresh $PLAYLIST..."
+          curl -s "${BASE_URL}/api/playlist/${PLAYLIST}?refresh=true" > /dev/null
+
+          if [ $? -eq 0 ]; then
+            echo "  ✓ $PLAYLIST updated with new tracks"
+          else
+            echo "  ⚠️ $PLAYLIST final refresh had issues (non-critical)"
+          fi
+
+          sleep 2
+        done
+
+        echo ""
+        echo "✅ All playlists updated with newly parsed tracks"
+
         echo ""
         echo "✨ Playlist refresh workflow completed"
       env:
