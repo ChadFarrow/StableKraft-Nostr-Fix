@@ -144,3 +144,22 @@ Playlists reference tracks via `feedGuid` + `itemGuid` in XML. The resolution fl
 - `parsePlaylistFeeds(guids)` - Parse feeds immediately, import all tracks
 - `discoverAndParsePublishers(feedIds)` - Discover and link publisher feeds
 - `parseFeedByGuid(guid)` - Parse single feed via Podcast Index API
+
+### Fix: Missing Playlist Tracks (Jan 2026)
+
+**Problem**: Playlists showed fewer tracks than expected (e.g., HGH Episode 121 showed 6 of 13 tracks).
+
+**Root Cause**: When playlists were refreshed, newly discovered feeds were added to the database but not parsed until the nightly workflow ran. Tracks couldn't resolve because they didn't exist yet.
+
+**Solution**: Implemented immediate feed parsing during `?refresh`:
+1. After discovering missing feeds, parse them immediately (not waiting for nightly job)
+2. Import all tracks from each album with full metadata (title, audio URL, duration, V4V data)
+3. Discover and link publisher feeds for newly added albums
+4. Re-resolve tracks so they appear in the same request
+
+**Edge Case**: Some feeds exist in Podcast Index under different IDs than their `feedGuid`. When a feed URL changes, Podcast Index may create a new entry with a different ID. The fix handles this by:
+- Looking up feeds by GUID via Podcast Index API
+- Using the resolved feed data (including updated URLs) for parsing
+- Storing tracks with their correct GUIDs for future resolution
+
+**Result**: All playlist tracks now resolve on first refresh. HGH Episode 120 (10 tracks) and Episode 121 (13 tracks) fully resolved.
