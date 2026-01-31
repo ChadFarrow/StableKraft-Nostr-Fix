@@ -1568,7 +1568,7 @@ function HomePageContent() {
               )}
 
               {/* Controls Bar - Sort only (other controls in main menu) */}
-              {(activeFilter === 'albums' || activeFilter === 'eps' || activeFilter === 'singles') && (
+              {(activeFilter === 'albums' || activeFilter === 'eps' || activeFilter === 'singles' || activeFilter === 'publishers') && (
                 <ControlsBar
                   activeFilter={activeFilter}
                   onFilterChange={handleFilterChange}
