@@ -627,7 +627,16 @@ export class RSSParser {
   }
 
   private static extractReleaseDate(channel: Element, tracks: RSSTrack[]): string {
-    // Try to get from pubDate
+    // Try to get from lastBuildDate first (more accurate for album feeds)
+    const lastBuildDateElement = channel.getElementsByTagName('lastBuildDate')[0];
+    if (lastBuildDateElement) {
+      const buildDate = new Date(RSSUtils.getElementText(lastBuildDateElement));
+      if (!isNaN(buildDate.getTime())) {
+        return buildDate.toISOString().split('T')[0];
+      }
+    }
+
+    // Try pubDate as fallback
     const pubDateElement = channel.getElementsByTagName('pubDate')[0];
     if (pubDateElement) {
       const pubDate = new Date(RSSUtils.getElementText(pubDateElement));

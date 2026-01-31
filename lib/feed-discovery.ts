@@ -74,7 +74,7 @@ export async function resolveFeedGuid(feedGuid: string): Promise<string | null> 
 }
 
 // New function that returns full feed metadata including medium for type determination
-export async function resolveFeedGuidWithMetadata(feedGuid: string): Promise<{ url: string; title: string; artist: string; image: string | null; medium: string } | null> {
+export async function resolveFeedGuidWithMetadata(feedGuid: string): Promise<{ url: string; title: string; artist: string; image: string | null; medium: string; oldestItemPubdate: number | null } | null> {
   try {
     console.log(`🔍 Resolving feed GUID with metadata: ${feedGuid}`);
 
@@ -118,7 +118,8 @@ export async function resolveFeedGuidWithMetadata(feedGuid: string): Promise<{ u
         title: finalFeed.title || 'Unknown Feed',
         artist: finalFeed.author || finalFeed.ownerName || 'Unknown Artist',
         image: finalFeed.artwork || finalFeed.image || null,
-        medium: finalFeed.medium || 'music'
+        medium: finalFeed.medium || 'music',
+        oldestItemPubdate: finalFeed.oldestItemPubdate || null
       };
     } else {
       if (feed && !feed.url) {
@@ -175,6 +176,7 @@ export async function addUnresolvedFeeds(feedGuids: string[]): Promise<number> {
             status: 'active',
             artist: resolvedFeed.artist,
             image: resolvedFeed.image,
+            oldestItemPubdate: resolvedFeed.oldestItemPubdate ? new Date(resolvedFeed.oldestItemPubdate * 1000) : null,
             createdAt: new Date(),
             updatedAt: new Date()
           },

@@ -82,6 +82,7 @@ export async function autoPopulateFeeds(feedGuids: string[], playlistName: strin
                   category: feedData.categories ? Object.keys(feedData.categories)[0] : null,
                   podcastCategories: [], // Will be populated from RSS parsing
                   explicit: feedData.explicit || false,
+                  oldestItemPubdate: feedData.oldestItemPubdate ? new Date(feedData.oldestItemPubdate * 1000) : null,
                   status: 'active',
                   lastFetched: new Date(),
                   createdAt: new Date(),

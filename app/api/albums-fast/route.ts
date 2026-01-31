@@ -170,6 +170,7 @@ export async function GET(request: Request) {
             status: true,
             createdAt: true,
             updatedAt: true,
+            oldestItemPubdate: true,
             v4vRecipient: true,
             v4vValue: true,
             Track: {
@@ -280,7 +281,7 @@ export async function GET(request: Request) {
       artist: feed.artist || feed.title,
       description: feed.description || '',
       coverArt: feed.image || '',
-      releaseDate: feed.updatedAt || feed.createdAt,
+      releaseDate: feed.oldestItemPubdate || feed.createdAt, // Oldest item date from Podcast Index, fallback to when added
       feedUrl: feed.originalUrl, // For Helipad TLV
       feedGuid: feed.id,
       feedId: feed.id, // For Helipad TLV

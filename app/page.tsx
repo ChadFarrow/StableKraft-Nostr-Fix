@@ -190,7 +190,7 @@ function HomePageContent() {
   }, [searchParams, activeFilter, displayedAlbums.length, enhancedAlbums.length, criticalAlbums.length, isLoading]);
   
   const [viewType, setViewType] = useState<ViewType>('grid');
-  const [sortType, setSortType] = useState<SortType>('name');
+  const [sortType, setSortType] = useState<SortType>('name-asc');
   const [isFilterLoading, setIsFilterLoading] = useState(false);
   
   // Cache for filter data to avoid re-fetching
@@ -1233,26 +1233,78 @@ function HomePageContent() {
 
   // Shuffle functionality is now handled by the global AudioContext
 
+  // Sort helper function for albums
+  const sortAlbums = useCallback((albums: RSSAlbum[], sortBy: SortType): RSSAlbum[] => {
+    const sorted = [...albums];
+    switch (sortBy) {
+      case 'name-asc':
+        return sorted.sort((a, b) => a.title.toLowerCase().localeCompare(b.title.toLowerCase()));
+      case 'name-desc':
+        return sorted.sort((a, b) => b.title.toLowerCase().localeCompare(a.title.toLowerCase()));
+      case 'year-desc':
+        return sorted.sort((a, b) => {
+          const dateA = new Date(a.releaseDate || 0).getTime();
+          const dateB = new Date(b.releaseDate || 0).getTime();
+          return dateB - dateA; // Newest first
+        });
+      case 'year-asc':
+        return sorted.sort((a, b) => {
+          const dateA = new Date(a.releaseDate || 0).getTime();
+          const dateB = new Date(b.releaseDate || 0).getTime();
+          return dateA - dateB; // Oldest first
+        });
+      case 'tracks-desc':
+        return sorted.sort((a, b) => {
+          const tracksA = a.tracks?.length || a.totalTracks || 0;
+          const tracksB = b.tracks?.length || b.totalTracks || 0;
+          return tracksB - tracksA; // Most tracks first
+        });
+      case 'tracks-asc':
+        return sorted.sort((a, b) => {
+          const tracksA = a.tracks?.length || a.totalTracks || 0;
+          const tracksB = b.tracks?.length || b.totalTracks || 0;
+          return tracksA - tracksB; // Least tracks first
+        });
+      default:
+        return sorted;
+    }
+  }, []);
+
   // Albums are now sorted server-side, just use them directly
   const filteredAlbums = displayedAlbums.length > 0 ? displayedAlbums : (isEnhancedLoaded ? enhancedAlbums : criticalAlbums);
 
   // Memoize expensive filtering operations to prevent re-computation on every render
   const albumsWithMultipleTracks = useMemo(() =>
-    filteredAlbums.filter(album => (album.tracks?.length || album.totalTracks || 0) >= 6),
-    [filteredAlbums]
+    sortAlbums(
+      filteredAlbums.filter(album => (album.tracks?.length || album.totalTracks || 0) >= 6),
+      sortType
+    ),
+    [filteredAlbums, sortType, sortAlbums]
   );
 
   const epsOnly = useMemo(() =>
-    filteredAlbums.filter(album => {
-      const trackCount = album.tracks?.length || album.totalTracks || 0;
-      return trackCount >= 2 && trackCount <= 5;
-    }),
-    [filteredAlbums]
+    sortAlbums(
+      filteredAlbums.filter(album => {
+        const trackCount = album.tracks?.length || album.totalTracks || 0;
+        return trackCount >= 2 && trackCount <= 5;
+      }),
+      sortType
+    ),
+    [filteredAlbums, sortType, sortAlbums]
   );
 
   const singlesOnly = useMemo(() =>
-    filteredAlbums.filter(album => (album.tracks?.length || album.totalTracks || 0) === 1),
-    [filteredAlbums]
+    sortAlbums(
+      filteredAlbums.filter(album => (album.tracks?.length || album.totalTracks || 0) === 1),
+      sortType
+    ),
+    [filteredAlbums, sortType, sortAlbums]
+  );
+
+  // Sorted version of filteredAlbums for individual filter views (Albums, EPs, Singles tabs)
+  const sortedFilteredAlbums = useMemo(() =>
+    sortAlbums(filteredAlbums, sortType),
+    [filteredAlbums, sortType, sortAlbums]
   );
 
   // Debug filtered albums when activeFilter is 'publishers'
@@ -1501,6 +1553,23 @@ function HomePageContent() {
                     </span>
                   </div>
                 </div>
+              )}
+
+              {/* Controls Bar - Sort only (other controls in main menu) */}
+              {(activeFilter === 'albums' || activeFilter === 'eps' || activeFilter === 'singles') && (
+                <ControlsBar
+                  activeFilter={activeFilter}
+                  onFilterChange={handleFilterChange}
+                  sortType={sortType}
+                  onSortChange={setSortType}
+                  showFilters={false}
+                  showSort={true}
+                  viewType={viewType}
+                  onViewChange={setViewType}
+                  showViewToggle={false}
+                  showShuffle={false}
+                  className="mb-8"
+                />
               )}
 
               {/* Albums Display */}
@@ -1775,7 +1844,10 @@ function HomePageContent() {
                 // Unified layout for specific filters (Albums, EPs, Singles)
                 viewType === 'grid' ? (
                   <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
-                    {filteredAlbums
+                    {(activeFilter === 'albums' ? albumsWithMultipleTracks :
+                      activeFilter === 'eps' ? epsOnly :
+                      activeFilter === 'singles' ? singlesOnly :
+                      sortedFilteredAlbums)
                       .map((album) => (
                       <AlbumCard
                         key={album.feedId || album.feedGuid || album.title}
@@ -1787,7 +1859,10 @@ function HomePageContent() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {filteredAlbums
+                    {(activeFilter === 'albums' ? albumsWithMultipleTracks :
+                      activeFilter === 'eps' ? epsOnly :
+                      activeFilter === 'singles' ? singlesOnly :
+                      sortedFilteredAlbums)
                       .map((album) => (
                       <Link
                         key={album.feedId || album.feedGuid || album.title}

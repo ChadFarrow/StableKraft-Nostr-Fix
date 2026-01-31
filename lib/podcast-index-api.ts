@@ -33,6 +33,8 @@ interface PodcastIndexFeed {
   locked: number;
   imageUrlHash: number;
   value: any;
+  newestItemPubdate?: number;
+  oldestItemPubdate?: number;
 }
 
 interface PodcastIndexEpisode {

@@ -151,7 +151,7 @@ export default function PublisherDetailClient({ publisherId, initialData }: Publ
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [albumsLoading, setAlbumsLoading] = useState(false);
   const [viewType, setViewType] = useState<ViewType>('grid');
-  const [sortType, setSortType] = useState<SortType>('year'); // Default to newest first
+  const [sortType, setSortType] = useState<SortType>('year-desc'); // Default to newest first
   
   // Global audio context for shuffle functionality
   const { shuffleAlbums } = useAudio();
@@ -904,15 +904,23 @@ export default function PublisherDetailClient({ publisherId, initialData }: Publ
         filtered = albumsSortedByDate;
     }
 
-    // Apply additional sorting if user changes sort type
-    if (sortType === 'name') {
-      return [...filtered].sort((a, b) => a.title.toLowerCase().localeCompare(b.title.toLowerCase()));
-    } else if (sortType === 'tracks') {
-      return [...filtered].sort((a, b) => (b.tracks?.length || 0) - (a.tracks?.length || 0));
+    // Apply additional sorting based on sort type
+    switch (sortType) {
+      case 'name-asc':
+        return [...filtered].sort((a, b) => a.title.toLowerCase().localeCompare(b.title.toLowerCase()));
+      case 'name-desc':
+        return [...filtered].sort((a, b) => b.title.toLowerCase().localeCompare(a.title.toLowerCase()));
+      case 'year-asc':
+        return [...filtered].sort((a, b) => new Date(a.releaseDate || 0).getTime() - new Date(b.releaseDate || 0).getTime());
+      case 'year-desc':
+        return [...filtered].sort((a, b) => new Date(b.releaseDate || 0).getTime() - new Date(a.releaseDate || 0).getTime());
+      case 'tracks-desc':
+        return [...filtered].sort((a, b) => (b.tracks?.length || 0) - (a.tracks?.length || 0));
+      case 'tracks-asc':
+        return [...filtered].sort((a, b) => (a.tracks?.length || 0) - (b.tracks?.length || 0));
+      default:
+        return filtered;
     }
-
-    // Default is 'year' - already sorted by date, just return filtered
-    return filtered;
   };
 
   const filteredAlbums = getFilteredAlbums();

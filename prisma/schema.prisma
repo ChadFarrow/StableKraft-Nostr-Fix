@@ -86,28 +86,29 @@ model FavoriteTrack {
 }
 
 model Feed {
-  id                String    @id
-  title             String
-  description       String?
-  originalUrl       String    @unique
-  cdnUrl            String?
-  type              String    @default("album")
-  artist            String?
-  image             String?
-  language          String?
-  category          String?
-  explicit          Boolean   @default(false)
-  priority          String    @default("normal")
-  status            String    @default("active")
-  lastFetched       DateTime?
-  lastError         String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime
-  guid              String?   @unique
-  publisherId       String?
-  v4vRecipient      String?
-  v4vValue          Json?
-  podcastCategories String[]  @default([])
+  id                  String    @id
+  title               String
+  description         String?
+  originalUrl         String    @unique
+  cdnUrl              String?
+  type                String    @default("album")
+  artist              String?
+  image               String?
+  language            String?
+  category            String?
+  explicit            Boolean   @default(false)
+  priority            String    @default("normal")
+  status              String    @default("active")
+  lastFetched         DateTime?
+  lastError           String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime
+  guid                String?   @unique
+  publisherId         String?
+  v4vRecipient        String?
+  v4vValue            Json?
+  podcastCategories   String[]  @default([])
+  oldestItemPubdate   DateTime?
   Feed              Feed?     @relation("FeedToFeed", fields: [publisherId], references: [id])
   other_Feed        Feed[]    @relation("FeedToFeed")
   Track             Track[]
