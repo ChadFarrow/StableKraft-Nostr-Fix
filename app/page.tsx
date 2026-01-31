@@ -630,7 +630,8 @@ function HomePageContent() {
               duration: '0:00',
               url: publisher.originalUrl
             })),
-            releaseDate: new Date().toISOString(),
+            releaseDate: publisher.dateAdded || new Date().toISOString(),
+            dateAdded: publisher.dateAdded,
             link: `/publisher/${publisherSlug}`,
             feedUrl: publisher.originalUrl,
             isPublisherCard: true,

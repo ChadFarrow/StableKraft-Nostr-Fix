@@ -17,6 +17,7 @@ export async function GET() {
         title: true,
         artist: true,
         image: true,
+        createdAt: true,
         updatedAt: true,
         _count: {
           select: { Track: true }
@@ -53,6 +54,7 @@ export async function GET() {
       totalTracks: number;
       isPublisherCard: boolean;
       publisherUrl: string;
+      dateAdded: string;
     }[] = [];
 
     for (const [artistKey, albums] of artistAlbums) {
@@ -68,6 +70,12 @@ export async function GET() {
       );
       const image = sortedAlbums.find(a => a.image)?.image || '/placeholder-artist.png';
 
+      // Use the oldest album's createdAt as when the artist first appeared on the site
+      const oldestAlbum = albums.reduce((oldest, album) =>
+        new Date(album.createdAt).getTime() < new Date(oldest.createdAt).getTime() ? album : oldest
+      );
+      const dateAdded = oldestAlbum.createdAt.toISOString();
+
       publisherList.push({
         id: `artist-${artistKey.replace(/\s+/g, '-')}`,
         title: artistName,
@@ -79,7 +87,8 @@ export async function GET() {
         itemCount: albums.length,
         totalTracks: trackCount,
         isPublisherCard: true,
-        publisherUrl: `/publisher/${generateAlbumSlug(artistName)}`
+        publisherUrl: `/publisher/${generateAlbumSlug(artistName)}`,
+        dateAdded
       });
     }
 
