@@ -3,18 +3,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { toast } from '@/components/Toast';
 import { useNostr } from '@/contexts/NostrContext';
-import dynamic from 'next/dynamic';
-
-// Dynamically import LoginModal to avoid SSR issues
-const LoginModal = dynamic(() => import('@/components/Nostr/LoginModal'), {
-  ssr: false,
-});
+import { getUnifiedSigner } from '@/lib/nostr/signer';
 
 export default function AdminPanel() {
   const [loading, setLoading] = useState(true);
   const [addingFeed, setAddingFeed] = useState(false);
   const [newFeedUrl, setNewFeedUrl] = useState('');
-  const [showLoginModal, setShowLoginModal] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [recentFeeds, setRecentFeeds] = useState<any[]>([]);
   const [loadingRecent, setLoadingRecent] = useState(false);
@@ -74,9 +68,41 @@ export default function AdminPanel() {
   // Admin authentication state (separate from Nostr auth)
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
 
+  // Verify admin access - requires signing a challenge to prove key ownership
   const verifyAdminAccess = useCallback(async (npub: string, pubkey: string) => {
     setVerifying(true);
     try {
+      // Step 1: Verify key ownership by signing a challenge
+      const signer = getUnifiedSigner();
+      await signer.ensureInitialized();
+
+      if (!signer.isAvailable()) {
+        toast.error('No Nostr signer available. Please connect your extension or signer app.');
+        setVerifying(false);
+        setLoading(false);
+        return;
+      }
+
+      // Create and sign a challenge event
+      const challenge = `stablekraft-admin-verify-${Date.now()}`;
+      const eventTemplate = {
+        kind: 27235, // NIP-98 HTTP Auth kind
+        created_at: Math.floor(Date.now() / 1000),
+        tags: [['u', window.location.href], ['method', 'GET']],
+        content: challenge,
+        pubkey: pubkey,
+      };
+
+      const signedEvent = await signer.signEvent(eventTemplate as any);
+
+      if (!signedEvent?.sig || signedEvent.pubkey !== pubkey) {
+        toast.error('Key verification failed. Signature does not match.');
+        setVerifying(false);
+        setLoading(false);
+        return;
+      }
+
+      // Step 2: Check admin whitelist
       const response = await fetch('/api/admin/verify', {
         method: 'POST',
         headers: {
@@ -86,7 +112,7 @@ export default function AdminPanel() {
       });
 
       const data = await response.json();
-      
+
       if (data.success && data.authorized) {
         setIsAdminAuthenticated(true);
         localStorage.setItem('admin-authenticated', 'true');
@@ -95,7 +121,7 @@ export default function AdminPanel() {
         setIsAdminAuthenticated(false);
         localStorage.removeItem('admin-authenticated');
         localStorage.removeItem('admin-npub');
-        
+
         // Show specific error message if ADMIN_NPUBS is not configured
         if (response.status === 500 && data.error === 'No admin npubs configured') {
           toast.error('Admin access is not configured. Please set ADMIN_NPUBS environment variable.');
@@ -117,33 +143,19 @@ export default function AdminPanel() {
     }
   }, []);
 
-  // When Nostr user changes, check admin access
+  // When Nostr user logs in, automatically verify admin access
   useEffect(() => {
     if (nostrLoading) return;
-    
-    if (isNostrAuthenticated && nostrUser) {
-      // Check if already authenticated as admin
-      const savedAdminAuth = localStorage.getItem('admin-authenticated');
-      const savedNpub = localStorage.getItem('admin-npub');
-      
-      // If we have a saved admin auth and the npub matches, verify it's still valid
-      if (savedAdminAuth === 'true' && savedNpub === nostrUser.nostrNpub) {
-        verifyAdminAccess(nostrUser.nostrNpub, nostrUser.nostrPubkey);
-      } else if (savedAdminAuth !== 'true') {
-        // No saved admin auth, verify the current user
-        verifyAdminAccess(nostrUser.nostrNpub, nostrUser.nostrPubkey);
-      } else {
-        // Saved npub doesn't match current user, clear and verify
-        localStorage.removeItem('admin-authenticated');
-        localStorage.removeItem('admin-npub');
-        verifyAdminAccess(nostrUser.nostrNpub, nostrUser.nostrPubkey);
-      }
-    } else {
+
+    if (!isNostrAuthenticated || !nostrUser) {
       // Not authenticated, clear admin auth
       setIsAdminAuthenticated(false);
       localStorage.removeItem('admin-authenticated');
       localStorage.removeItem('admin-npub');
       setLoading(false);
+    } else {
+      // User is logged in, verify admin access (includes key ownership check)
+      verifyAdminAccess(nostrUser.nostrNpub, nostrUser.nostrPubkey);
     }
   }, [nostrLoading, isNostrAuthenticated, nostrUser?.nostrNpub, nostrUser?.nostrPubkey, verifyAdminAccess]);
 
@@ -151,7 +163,6 @@ export default function AdminPanel() {
     setIsAdminAuthenticated(false);
     localStorage.removeItem('admin-authenticated');
     localStorage.removeItem('admin-npub');
-    setShowLoginModal(false);
   };
 
   const fetchRecentFeeds = async () => {
@@ -584,62 +595,23 @@ export default function AdminPanel() {
     );
   }
 
-  // Show login screen if not authenticated
+  // Show access denied if not authenticated
   if (!isNostrAuthenticated || !isAdminAuthenticated) {
     return (
-      <>
-        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white flex items-center justify-center">
-          <div className="bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 p-8 w-full max-w-md">
-            <div className="text-center mb-6">
-              <h1 className="text-3xl font-bold mb-2">Admin Access</h1>
-              <p className="text-gray-400 mb-4">
-                Sign in with Nostr to access RSS feed management
-              </p>
-              {isNostrAuthenticated && !isAdminAuthenticated && (
-                <div className="mt-4 p-3 bg-yellow-500/20 border border-yellow-500/30 rounded-lg">
-                  <p className="text-sm text-yellow-400">
-                    ⚠️ Your Nostr account is not whitelisted for admin access.
-                  </p>
-                  <p className="text-xs text-yellow-500/80 mt-2">
-                    Your npub: <span className="font-mono break-all">{nostrUser?.nostrNpub}</span>
-                  </p>
-                  <p className="text-xs text-yellow-500/80 mt-2">
-                    Add this npub to the ADMIN_NPUBS environment variable to grant access.
-                  </p>
-                </div>
-              )}
-            </div>
-            
-            {!isNostrAuthenticated ? (
-              <button
-                onClick={() => setShowLoginModal(true)}
-                className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors font-medium"
-              >
-                🔐 Sign in with Nostr
-              </button>
-            ) : (
-              <div className="space-y-3">
-                <div className="p-3 bg-white/5 rounded-lg text-sm">
-                  <p className="text-gray-300">Logged in as:</p>
-                  <p className="text-blue-400 font-mono text-xs break-all mt-1">
-                    {nostrUser?.nostrNpub || nostrUser?.nostrPubkey}
-                  </p>
-                </div>
-                <button
-                  onClick={() => verifyAdminAccess(nostrUser!.nostrNpub, nostrUser!.nostrPubkey)}
-                  disabled={verifying}
-                  className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-                >
-                  {verifying ? 'Verifying...' : 'Verify Admin Access'}
-                </button>
-              </div>
-            )}
-          </div>
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white flex items-center justify-center">
+        <div className="bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 p-8 w-full max-w-md text-center">
+          <h1 className="text-3xl font-bold mb-2">Admin Access</h1>
+          {!isNostrAuthenticated ? (
+            <p className="text-gray-400">
+              Please log in with Nostr to access this page.
+            </p>
+          ) : (
+            <p className="text-gray-400">
+              Your account is not authorized for admin access.
+            </p>
+          )}
         </div>
-        {showLoginModal && (
-          <LoginModal onClose={() => setShowLoginModal(false)} />
-        )}
-      </>
+      </div>
     );
   }
 
