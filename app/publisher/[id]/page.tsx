@@ -401,38 +401,50 @@ async function loadPublisherData(publisherId: string) {
           }
           
           // Extract podcast:remoteItem tags (for music/album feeds, not publisher references)
+          // First, remove podroll section to avoid including related feeds as albums
+          const xmlWithoutPodroll = xmlText.replace(/<podcast:podroll>[\s\S]*?<\/podcast:podroll>/gi, '');
+
           const remoteItemRegex = /<podcast:remoteItem[^>]*>/g;
-          const matches = xmlText.match(remoteItemRegex) || [];
-          
+          const matches = xmlWithoutPodroll.match(remoteItemRegex) || [];
+
           for (const match of matches) {
             const feedGuidMatch = match.match(/feedGuid="([^"]+)"/);
             const feedUrlMatch = match.match(/feedUrl="([^"]+)"/);
             const mediumMatch = match.match(/medium="([^"]+)"/);
-            
+
             const medium = mediumMatch?.[1] || 'music';
-            
+
             // Only collect album/music remote items, not publisher references
             if (medium === 'publisher') {
               // Skip publisher references - we only want albums
               continue;
             }
-            
+
+            // Skip items that look like publisher feeds or playlist feeds (not albums)
+            if (feedUrlMatch?.[1]) {
+              const url = feedUrlMatch[1].toLowerCase();
+              if (url.includes('-pubfeed.xml') || url.endsWith('/feed.xml')) {
+                console.log(`⏭️ Skipping non-album feed: ${url}`);
+                continue;
+              }
+            }
+
             // Collect album/music remote items
             if (feedGuidMatch && feedGuidMatch[1]) {
               const guid = feedGuidMatch[1];
-              
+
               // Check if URL indicates this is a music/album feed (not a publisher feed)
               // For wavlake, remote items from artist feeds can point to music feeds
               const isAlbumFeed = feedUrlMatch && (
-                feedUrlMatch[1].includes('/feed/music/') || 
+                feedUrlMatch[1].includes('/feed/music/') ||
                 (feedUrlMatch[1].includes('/feed/') && !feedUrlMatch[1].includes('/feed/artist/')) ||
                 medium === 'music' ||
                 !mediumMatch // Default to music if no medium
               );
-              
+
               // Also include if the medium is explicitly 'music' or 'album'
               const isExplicitAlbum = medium === 'music' || medium === 'album';
-              
+
               if ((isAlbumFeed || isExplicitAlbum) && !remoteItemGuids.includes(guid)) {
                 remoteItemGuids.push(guid);
                 // Also collect the feedUrl for matching (more reliable than GUID for fountain feeds)
