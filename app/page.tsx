@@ -1253,6 +1253,18 @@ function HomePageContent() {
           const dateB = new Date(b.releaseDate || 0).getTime();
           return dateA - dateB; // Oldest first
         });
+      case 'added-desc':
+        return sorted.sort((a, b) => {
+          const dateA = new Date(a.dateAdded || a.releaseDate || 0).getTime();
+          const dateB = new Date(b.dateAdded || b.releaseDate || 0).getTime();
+          return dateB - dateA; // Newest added first
+        });
+      case 'added-asc':
+        return sorted.sort((a, b) => {
+          const dateA = new Date(a.dateAdded || a.releaseDate || 0).getTime();
+          const dateB = new Date(b.dateAdded || b.releaseDate || 0).getTime();
+          return dateA - dateB; // Oldest added first
+        });
       case 'tracks-desc':
         return sorted.sort((a, b) => {
           const tracksA = a.tracks?.length || a.totalTracks || 0;

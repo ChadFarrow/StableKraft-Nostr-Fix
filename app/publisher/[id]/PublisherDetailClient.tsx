@@ -914,6 +914,10 @@ export default function PublisherDetailClient({ publisherId, initialData }: Publ
         return [...filtered].sort((a, b) => new Date(a.releaseDate || 0).getTime() - new Date(b.releaseDate || 0).getTime());
       case 'year-desc':
         return [...filtered].sort((a, b) => new Date(b.releaseDate || 0).getTime() - new Date(a.releaseDate || 0).getTime());
+      case 'added-desc':
+        return [...filtered].sort((a, b) => new Date(b.dateAdded || b.releaseDate || 0).getTime() - new Date(a.dateAdded || a.releaseDate || 0).getTime());
+      case 'added-asc':
+        return [...filtered].sort((a, b) => new Date(a.dateAdded || a.releaseDate || 0).getTime() - new Date(b.dateAdded || b.releaseDate || 0).getTime());
       case 'tracks-desc':
         return [...filtered].sort((a, b) => (b.tracks?.length || 0) - (a.tracks?.length || 0));
       case 'tracks-asc':

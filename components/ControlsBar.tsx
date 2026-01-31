@@ -4,7 +4,7 @@ import { Filter, Grid3X3, List, Shuffle } from 'lucide-react';
 
 export type FilterType = 'all' | 'albums' | 'eps' | 'singles' | 'publishers' | 'playlist' | 'videos';
 export type ViewType = 'grid' | 'list';
-export type SortType = 'name-asc' | 'name-desc' | 'year-desc' | 'year-asc' | 'tracks-desc' | 'tracks-asc';
+export type SortType = 'name-asc' | 'name-desc' | 'year-desc' | 'year-asc' | 'tracks-desc' | 'tracks-asc' | 'added-desc' | 'added-asc';
 
 interface ControlsBarProps {
   // Filter props
@@ -40,6 +40,8 @@ const defaultSortOptions: { value: SortType; label: string }[] = [
   { value: 'name-desc', label: 'Name (Z-A)' },
   { value: 'year-desc', label: 'Year (Newest)' },
   { value: 'year-asc', label: 'Year (Oldest)' },
+  { value: 'added-desc', label: 'Added (Newest)' },
+  { value: 'added-asc', label: 'Added (Oldest)' },
   { value: 'tracks-desc', label: 'Tracks (Most)' },
   { value: 'tracks-asc', label: 'Tracks (Least)' },
 ];

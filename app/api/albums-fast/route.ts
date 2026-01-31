@@ -282,6 +282,7 @@ export async function GET(request: Request) {
       description: feed.description || '',
       coverArt: feed.image || '',
       releaseDate: feed.oldestItemPubdate || feed.createdAt, // Oldest item date from Podcast Index, fallback to when added
+      dateAdded: feed.createdAt, // When added to the site
       feedUrl: feed.originalUrl, // For Helipad TLV
       feedGuid: feed.id,
       feedId: feed.id, // For Helipad TLV

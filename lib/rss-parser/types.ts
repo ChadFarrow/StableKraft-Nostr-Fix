@@ -142,6 +142,7 @@ export interface RSSAlbum {
   guid?: string; // Episode GUID for Helipad TLV
   episodeGuid?: string; // Alternative episode GUID field
   totalTracks?: number;
+  dateAdded?: string; // When added to the site
   // V4V (Value4Value) fields
   value4Value?: RSSValue4Value;
   v4vRecipient?: string;
