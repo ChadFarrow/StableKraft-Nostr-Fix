@@ -263,12 +263,31 @@ async function loadPublisherData(publisherId: string) {
         console.log(`⚠️ No publisher feed found for "${publisherId}", inferring artist name: "${artistSearchName}"`);
       }
 
-      // Find the first album feed with exact artist match
+      // Generate alternate artist names to search for
+      // Handle common URL transformations: "and" → "&", "plus" → "+", "at" → "@"
+      const artistSearchVariants = [artistSearchName];
+      if (artistSearchName) {
+        // Try with & instead of And (case insensitive)
+        const withAmpersand = artistSearchName.replace(/\bAnd\b/gi, '&');
+        if (withAmpersand !== artistSearchName) {
+          artistSearchVariants.push(withAmpersand);
+        }
+        // Try with + instead of Plus
+        const withPlus = artistSearchName.replace(/\bPlus\b/gi, '+');
+        if (withPlus !== artistSearchName) {
+          artistSearchVariants.push(withPlus);
+        }
+      }
+      console.log(`🔍 Artist search variants: ${artistSearchVariants.join(', ')}`);
+
+      // Find the first album feed with exact artist match (try all variants)
       let firstAlbumFeed = await prisma.feed.findFirst({
         where: {
           type: { in: ['album', 'music'] },
           status: 'active',
-          artist: { equals: artistSearchName, mode: 'insensitive' } // Exact match only!
+          OR: artistSearchVariants.map(variant => ({
+            artist: { equals: variant, mode: 'insensitive' as const }
+          }))
         },
         select: {
           id: true,
@@ -307,7 +326,8 @@ async function loadPublisherData(publisherId: string) {
       }
 
       if (firstAlbumFeed) {
-        artistName = artistSearchName; // Use the search name (mapped or inferred)
+        // Use the actual artist name from the database (e.g., "Lies & Sets" not "Lies And Sets")
+        artistName = firstAlbumFeed.artist || artistSearchName;
         console.log(`✅ Found albums by artist: "${artistName}"`);
 
         // Create a synthetic publisher feed from the first album
@@ -564,11 +584,26 @@ async function loadPublisherData(publisherId: string) {
     if (artistName) {
       console.log(`🔍 Finding additional albums via artist matching for: "${artistName}"`);
 
-      // Use ONLY exact matches with the artist name
+      // Generate artist name variants to handle URL transformations like "and" → "&"
+      const artistVariants = [artistName];
+      // Try with & instead of And (for URLs like "lies-and-sets" → "Lies & Sets")
+      const withAmpersand = artistName.replace(/\bAnd\b/gi, '&');
+      if (withAmpersand !== artistName) {
+        artistVariants.push(withAmpersand);
+      }
+      // Try with + instead of Plus
+      const withPlus = artistName.replace(/\bPlus\b/gi, '+');
+      if (withPlus !== artistName) {
+        artistVariants.push(withPlus);
+      }
+
+      // Use ONLY exact matches with the artist name variants
       // This is critical to prevent false matches - NO contains matching!
       const allArtistFeeds = await prisma.feed.findMany({
         where: {
-          artist: { equals: artistName, mode: 'insensitive' },
+          OR: artistVariants.map(variant => ({
+            artist: { equals: variant, mode: 'insensitive' as const }
+          })),
           type: { in: ['album', 'music'] },
           status: 'active'
         },
