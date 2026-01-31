@@ -1100,7 +1100,7 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
                   activeFilter="all"
                   onFilterChange={() => {}}
                   showFilters={false}
-                  sortType="name"
+                  sortType="name-asc"
                   onSortChange={() => {}}
                   showSort={false}
                   viewType="list"
