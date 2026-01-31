@@ -5,7 +5,12 @@
 
 import { NextResponse } from 'next/server';
 import { playlistCache } from '@/lib/playlist-cache';
-import { processPlaylistFeedDiscovery } from '@/lib/feed-discovery';
+import {
+  processPlaylistFeedDiscovery,
+  findUnparsedFeeds,
+  parsePlaylistFeeds,
+  discoverAndParsePublishers
+} from '@/lib/feed-discovery';
 import type { PlaylistConfig, PlaylistAlbum, PlaylistResponse } from './types';
 import { fetchAndParsePlaylist } from './parser';
 import {
@@ -54,12 +59,29 @@ export function createPlaylistHandler(config: PlaylistConfig) {
         console.log(`📺 [${config.shortName}] Found ${groupedItems.episodes.length} episodes`);
       }
 
+      // On refresh, check for unparsed feeds before resolution
+      const feedGuids = [...new Set(remoteItems.map(i => i.feedGuid))];
+      if (forceRefresh) {
+        const unparsedFeeds = await findUnparsedFeeds(feedGuids);
+        if (unparsedFeeds.length > 0) {
+          console.log(`📥 [${config.shortName}] Found ${unparsedFeeds.length} unparsed feeds, parsing now...`);
+          const parsedFeedIds = await parsePlaylistFeeds(unparsedFeeds);
+          console.log(`✅ [${config.shortName}] Parsed ${parsedFeedIds.length} feeds`);
+
+          // Discover publishers for these albums
+          if (parsedFeedIds.length > 0) {
+            const pubResult = await discoverAndParsePublishers(parsedFeedIds);
+            console.log(`🔗 [${config.shortName}] Publisher discovery: ${pubResult.discovered} new, ${pubResult.linked} linked`);
+          }
+        }
+      }
+
       // Resolve playlist items from database
       console.log(`🔍 [${config.shortName}] Resolving tracks from database...`);
-      const resolvedTracks = await resolvePlaylistItems(remoteItems, config);
+      let resolvedTracks = await resolvePlaylistItems(remoteItems, config);
       console.log(`✅ [${config.shortName}] Resolved ${resolvedTracks.length} tracks`);
 
-      // On refresh, discover and add missing feeds to database
+      // On refresh, discover and add missing feeds to database, then parse immediately
       if (forceRefresh && resolvedTracks.length < remoteItems.length) {
         const resolvedGuids = new Set(resolvedTracks.map(t => t.playlistContext?.itemGuid));
         const unresolvedItems = remoteItems.filter(item => !resolvedGuids.has(item.itemGuid));
@@ -69,6 +91,25 @@ export function createPlaylistHandler(config: PlaylistConfig) {
           try {
             const addedFeeds = await processPlaylistFeedDiscovery(unresolvedItems);
             console.log(`✅ [${config.shortName}] Added ${addedFeeds} new feeds to database`);
+
+            // Parse newly discovered feeds immediately
+            if (addedFeeds > 0) {
+              const newFeedGuids = [...new Set(unresolvedItems.map(i => i.feedGuid))];
+              console.log(`📥 [${config.shortName}] Parsing ${newFeedGuids.length} newly discovered feeds...`);
+              const parsedFeedIds = await parsePlaylistFeeds(newFeedGuids);
+              console.log(`✅ [${config.shortName}] Parsed ${parsedFeedIds.length} feeds with tracks`);
+
+              // Discover and parse publishers for newly added albums
+              if (parsedFeedIds.length > 0) {
+                const pubResult = await discoverAndParsePublishers(parsedFeedIds);
+                console.log(`🔗 [${config.shortName}] Publisher discovery: ${pubResult.discovered} new, ${pubResult.linked} linked`);
+              }
+
+              // Re-resolve tracks now that they exist in the database
+              const previousCount = resolvedTracks.length;
+              resolvedTracks = await resolvePlaylistItems(remoteItems, config);
+              console.log(`🔄 [${config.shortName}] Re-resolved: ${resolvedTracks.length} tracks (was ${previousCount})`);
+            }
           } catch (error) {
             console.warn(`⚠️ [${config.shortName}] Feed discovery error:`, error);
           }

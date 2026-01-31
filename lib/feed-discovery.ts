@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma';
 import { isValidFeedUrl, normalizeUrl } from '@/lib/url-utils';
 import { generatePodcastIndexHeaders, normalizeFeedResponse, getFeedByUrlPreferNewest } from '@/lib/podcast-index-api';
+import { parseFeedByGuid } from '@/lib/feed-parsing';
+import { extractPublisherFromXML, discoverAndStorePublisher } from '@/lib/publisher-discovery';
 
 interface PodcastIndexResponse {
   status: string;
@@ -299,13 +301,176 @@ export async function resolveItemGuid(feedGuid: string, itemGuid: string): Promi
 export async function processPlaylistFeedDiscovery(remoteItems: Array<{ feedGuid: string; itemGuid: string }>): Promise<number> {
   // Get unique feed GUIDs from the playlist
   const uniqueFeedGuids = [...new Set(remoteItems.map(item => item.feedGuid))];
-  
+
   console.log(`🔍 Processing ${uniqueFeedGuids.length} unique feed GUIDs for auto-discovery...`);
-  
+
   // Add unresolved feeds to the database
   const addedCount = await addUnresolvedFeeds(uniqueFeedGuids);
-  
+
   console.log(`✅ Feed discovery complete: ${addedCount} new feeds added to database`);
-  
+
   return addedCount;
+}
+
+/**
+ * Find feeds that exist in the database but have no tracks (unparsed)
+ */
+export async function findUnparsedFeeds(feedGuids: string[]): Promise<string[]> {
+  if (feedGuids.length === 0) return [];
+
+  // Get feeds that exist but have no tracks
+  const feedsWithTrackCounts = await prisma.feed.findMany({
+    where: {
+      id: { in: feedGuids },
+      status: 'active'
+    },
+    select: {
+      id: true,
+      _count: {
+        select: { Track: true }
+      }
+    }
+  });
+
+  // Return feed IDs that have zero tracks
+  return feedsWithTrackCounts
+    .filter(f => f._count.Track === 0)
+    .map(f => f.id);
+}
+
+/**
+ * Parse playlist feeds immediately
+ * Takes a list of feed GUIDs, parses them via Podcast Index API,
+ * and imports all tracks to the database.
+ *
+ * @returns Array of parsed feed IDs (for use in publisher discovery)
+ */
+export async function parsePlaylistFeeds(feedGuids: string[]): Promise<string[]> {
+  if (feedGuids.length === 0) return [];
+
+  console.log(`📥 Parsing ${feedGuids.length} feeds immediately...`);
+
+  const parsedFeedIds: string[] = [];
+  let totalTracks = 0;
+
+  for (const feedGuid of feedGuids) {
+    try {
+      const result = await parseFeedByGuid(feedGuid);
+
+      if (result) {
+        parsedFeedIds.push(result.feedId);
+        totalTracks += result.newTracks;
+        console.log(`✅ Parsed feed "${result.title}": ${result.newTracks} tracks`);
+      }
+
+      // Small delay to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 100));
+    } catch (error) {
+      console.error(`❌ Error parsing feed ${feedGuid}:`, error);
+    }
+  }
+
+  console.log(`📊 Parsing complete: ${parsedFeedIds.length} feeds, ${totalTracks} total tracks`);
+
+  return parsedFeedIds;
+}
+
+/**
+ * Discover and parse publisher feeds for newly added albums
+ * Checks each album's XML for publisher references and adds/links them.
+ */
+export async function discoverAndParsePublishers(albumFeedIds: string[]): Promise<{ discovered: number; linked: number }> {
+  if (albumFeedIds.length === 0) return { discovered: 0, linked: 0 };
+
+  console.log(`🔍 Discovering publishers for ${albumFeedIds.length} albums...`);
+
+  let discovered = 0;
+  let linked = 0;
+
+  // Get album feeds with their URLs
+  const albums = await prisma.feed.findMany({
+    where: {
+      id: { in: albumFeedIds },
+      type: { in: ['album', 'music'] }
+    },
+    select: {
+      id: true,
+      title: true,
+      originalUrl: true,
+      publisherId: true
+    }
+  });
+
+  for (const album of albums) {
+    // Skip if already linked to a publisher
+    if (album.publisherId) {
+      console.log(`⚡ Album "${album.title}" already linked to publisher`);
+      continue;
+    }
+
+    if (!album.originalUrl) {
+      console.log(`⚠️ Album "${album.title}" has no URL, skipping publisher discovery`);
+      continue;
+    }
+
+    try {
+      // Fetch album feed XML
+      const response = await fetch(album.originalUrl, {
+        signal: AbortSignal.timeout(10000)
+      });
+
+      if (!response.ok) {
+        console.warn(`⚠️ Failed to fetch album feed ${album.title}: ${response.status}`);
+        continue;
+      }
+
+      const xml = await response.text();
+
+      // Check for publisher reference
+      const publisherRef = extractPublisherFromXML(xml);
+
+      if (publisherRef) {
+        // Discover and store the publisher
+        const wasAdded = await discoverAndStorePublisher(publisherRef);
+
+        if (wasAdded) {
+          discovered++;
+        }
+
+        // Link the album to the publisher
+        const publisherId = publisherRef.feedGuid || '';
+        if (publisherId) {
+          // Find publisher by GUID or URL
+          const publisher = await prisma.feed.findFirst({
+            where: {
+              OR: [
+                { id: publisherId },
+                { originalUrl: publisherRef.feedUrl }
+              ],
+              type: 'publisher'
+            },
+            select: { id: true }
+          });
+
+          if (publisher) {
+            await prisma.feed.update({
+              where: { id: album.id },
+              data: { publisherId: publisher.id }
+            });
+            linked++;
+            console.log(`🔗 Linked album "${album.title}" to publisher`);
+          }
+        }
+      }
+
+      // Rate limit
+      await new Promise(resolve => setTimeout(resolve, 100));
+    } catch (error) {
+      console.error(`❌ Error discovering publisher for "${album.title}":`, error);
+    }
+  }
+
+  console.log(`📊 Publisher discovery complete: ${discovered} new, ${linked} linked`);
+
+  return { discovered, linked };
 }
