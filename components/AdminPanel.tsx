@@ -319,7 +319,7 @@ export default function AdminPanel() {
     try {
       // Auto-detect type from URL patterns, default to 'album'
       let detectedType = 'album';
-      if (feedUrl.includes('/artist/') || feedUrl.includes('/publisher/')) {
+      if (feedUrl.includes('/artist/') || feedUrl.includes('/publisher/') || feedUrl.includes('-pubfeed')) {
         detectedType = 'publisher';
       } else if (feedUrl.includes('/playlist/')) {
         detectedType = 'playlist';
@@ -355,7 +355,33 @@ export default function AdminPanel() {
         // Refresh the recent feeds list
         fetchRecentFeeds();
       } else if (response.status === 409) {
-        toast.info('This feed already exists in the database');
+        // Feed already exists - automatically reparse it
+        toast.info('Feed exists, reparsing...');
+
+        const reparseResponse = await fetch('/api/feeds/refresh-by-url', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            originalUrl: feedUrl,
+          }),
+        });
+
+        const reparseData = await reparseResponse.json();
+
+        if (reparseResponse.ok) {
+          const messages = [];
+          if (reparseData.newTracks > 0) messages.push(`Added ${reparseData.newTracks} new tracks`);
+          if (reparseData.updatedTracks > 0) messages.push(`Updated ${reparseData.updatedTracks} existing tracks`);
+          if (reparseData.v4vUpdated > 0) messages.push(`Refreshed ${reparseData.v4vUpdated} payment splits`);
+          if (messages.length === 0) messages.push('No changes needed');
+          toast.success(`Feed reparsed! ${messages.join('. ')}. Total: ${reparseData.totalTracks} tracks`);
+          setNewFeedUrl('');
+          fetchRecentFeeds();
+        } else {
+          toast.error(reparseData.error || 'Failed to reparse feed');
+        }
       } else {
         toast.error(data.error || 'Failed to add feed. Please check the URL and try again.');
       }
@@ -646,9 +672,9 @@ export default function AdminPanel() {
           </p>
         </div>
 
-        {/* Add Feed Form - Simple paste interface */}
+        {/* Add/Update Feed Form - Smart single input */}
         <div className="bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 p-6 mb-8">
-          <h2 className="text-2xl font-semibold mb-4">Add RSS Feed</h2>
+          <h2 className="text-2xl font-semibold mb-4">Add or Update Feed</h2>
           <form onSubmit={addFeed} className="space-y-4">
             <div>
               <label htmlFor="feedUrl" className="block text-sm font-medium text-gray-300 mb-2">
@@ -680,64 +706,15 @@ export default function AdminPanel() {
                   {addingFeed ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Adding...
+                      Processing...
                     </>
                   ) : (
-                    'Add Feed'
+                    'Add / Update'
                   )}
                 </button>
               </div>
               <p className="mt-2 text-xs text-gray-400">
-                Just paste the RSS feed URL and click Add. The system will automatically detect the feed type and parse all tracks.
-              </p>
-            </div>
-          </form>
-        </div>
-
-        {/* Reparse Feed Form */}
-        <div className="bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 p-6 mb-8">
-          <h2 className="text-2xl font-semibold mb-4">Reparse Existing Feed</h2>
-          <form onSubmit={reparseByUrl} className="space-y-4">
-            <div>
-              <label htmlFor="reparseFeedUrl" className="block text-sm font-medium text-gray-300 mb-2">
-                Paste RSS Feed URL to Reparse
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="url"
-                  id="reparseFeedUrl"
-                  value={reparseFeedUrl}
-                  onChange={(e) => setReparseFeedUrl(e.target.value)}
-                  onPaste={(e) => {
-                    const pastedText = e.clipboardData.getData('text');
-                    if (pastedText.trim()) {
-                      setReparseFeedUrl(pastedText.trim());
-                    }
-                  }}
-                  placeholder="https://example.com/feed.xml"
-                  className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
-                  disabled={reparsingByUrl}
-                  autoComplete="off"
-                />
-                <button
-                  type="submit"
-                  disabled={reparsingByUrl || !reparseFeedUrl.trim()}
-                  className="px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
-                >
-                  {reparsingByUrl ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Reparsing...
-                    </>
-                  ) : (
-                    <>
-                      🔄 Reparse Feed
-                    </>
-                  )}
-                </button>
-              </div>
-              <p className="mt-2 text-xs text-gray-400">
-                Paste the URL of an existing feed to refresh it from the source. This will update metadata, add any new tracks, and sync all lightning payment splits with the feed.
+                Paste any RSS feed URL. New feeds will be added and parsed. Existing feeds will be reparsed to update metadata, tracks, and payment splits.
               </p>
             </div>
           </form>
