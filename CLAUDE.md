@@ -183,3 +183,33 @@ Single smart input for managing feeds:
 - Tracks over 2 hours (7200s) are considered podcasts, not music
 - Duration is set to `undefined` for these tracks (falls back to 180s default)
 - No console warnings logged (silent filtering)
+
+## Search
+
+### Key Files
+- `lib/fuzzy-search.ts` - PostgreSQL trigram similarity search
+- `app/api/search/route.ts` - Search API with fuzzy/exact modes
+
+### Artist Search (Case-Insensitive)
+Both fuzzy and non-fuzzy paths use `GROUP BY LOWER(artist)` to avoid duplicates from inconsistent capitalization (e.g., "eardiod" vs "Eardiod" appear as one result).
+
+### Search Modes
+- **Fuzzy (default)**: Uses PostgreSQL `similarity()` for typo-tolerant matching
+- **Exact (`?fuzzy=false`)**: Uses `ILIKE` pattern matching
+
+## Publisher Pages
+
+### Key Files
+- `app/publisher/[id]/page.tsx` - Publisher page component
+- `app/api/publishers/[id]/route.ts` - Publisher API endpoint
+
+### Publisher Matching
+Publishers are matched by multiple methods:
+1. Title slug (e.g., "setto" matches "To Setto Setto")
+2. Artist slug
+3. URL path (e.g., `/setto/` in feed URL matches "setto")
+
+### Podroll Filtering
+Publisher feeds may contain `<podcast:podroll>` sections with related feeds that aren't albums. These are filtered out:
+- `<podcast:podroll>` XML sections removed before parsing `<podcast:remoteItem>` tags
+- URLs ending in `-pubfeed.xml` or `/feed.xml` skipped (likely publisher feeds, not albums)
