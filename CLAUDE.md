@@ -163,3 +163,23 @@ Playlists reference tracks via `feedGuid` + `itemGuid` in XML. The resolution fl
 - Storing tracks with their correct GUIDs for future resolution
 
 **Result**: All playlist tracks now resolve on first refresh. HGH Episode 120 (10 tracks) and Episode 121 (13 tracks) fully resolved.
+
+## Admin Feed Management
+
+### Admin Page (`/admin`)
+Single smart input for managing feeds:
+- **New feeds** → automatically added and parsed (metadata, tracks, V4V data)
+- **Existing feeds** → automatically reparsed to update content
+- **Auto-detects** feed type from URL patterns (`-pubfeed` = publisher, `/artist/` = publisher)
+
+### Key Endpoints
+- `POST /api/admin/feeds` - Add feed with auto-parse
+- `POST /api/feeds/refresh-by-url` - Reparse existing feed by URL
+- `POST /api/admin/feeds/[id]/reparse` - Reparse feed by ID
+- `POST /api/admin/reparse-feeds?type=publisher` - Bulk reparse publisher feeds
+
+### Duration Validation
+`lib/duration-validation.ts` filters out non-music content:
+- Tracks over 2 hours (7200s) are considered podcasts, not music
+- Duration is set to `undefined` for these tracks (falls back to 180s default)
+- No console warnings logged (silent filtering)
