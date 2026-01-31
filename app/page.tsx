@@ -937,6 +937,7 @@ function HomePageContent() {
         description: album.description,
         coverArt: album.coverArt,
         releaseDate: album.releaseDate || album.lastUpdated || new Date().toISOString(),
+        dateAdded: album.dateAdded,
         tracks: album.tracks.map((track: any) => ({
           title: track.title,
           duration: track.duration,
