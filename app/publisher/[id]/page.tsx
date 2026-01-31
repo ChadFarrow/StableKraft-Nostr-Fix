@@ -219,7 +219,7 @@ async function loadPublisherData(publisherId: string) {
             return true;
           }
         }
-        
+
         // Try matching by artist slug (with and without -publisher suffix)
         // Use generateAlbumSlug for consistent slug generation
         if (feed.artist) {
@@ -229,7 +229,20 @@ async function loadPublisherData(publisherId: string) {
             return true;
           }
         }
-        
+
+        // Try matching by URL path (e.g., /setto/ in the URL matches "setto")
+        if (feed.originalUrl) {
+          try {
+            const urlPath = new URL(feed.originalUrl).pathname.toLowerCase();
+            if (urlPath.includes(`/${searchId}/`) || urlPath.startsWith(`/${searchId}`)) {
+              console.log(`✅ Matched publisher by URL path: "${feed.originalUrl}" contains "/${searchId}/"`);
+              return true;
+            }
+          } catch {
+            // Invalid URL, skip
+          }
+        }
+
         return false;
       });
       

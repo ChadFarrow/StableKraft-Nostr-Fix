@@ -61,7 +61,7 @@ export async function GET(
       originalUrl: string;
     } | null | undefined = null;
     
-    // Try matching by title or artist slug
+    // Try matching by title, artist slug, or URL path
     publisherFeed = publisherFeeds.find((feed) => {
       // Try matching by title slug
       if (feed.title) {
@@ -72,6 +72,18 @@ export async function GET(
       if (feed.artist) {
         const artistToSlug = feed.artist.toLowerCase().replace(/\s+/g, '-');
         if (artistToSlug === searchId) return true;
+      }
+      // Try matching by URL path (e.g., /setto/ in the URL matches "setto")
+      if (feed.originalUrl) {
+        try {
+          const urlPath = new URL(feed.originalUrl).pathname.toLowerCase();
+          // Check if URL path contains /searchId/ or starts with /searchId
+          if (urlPath.includes(`/${searchId}/`) || urlPath.startsWith(`/${searchId}`)) {
+            return true;
+          }
+        } catch {
+          // Invalid URL, skip
+        }
       }
       return false;
     });
