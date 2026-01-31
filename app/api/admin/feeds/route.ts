@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { parseRSSFeedWithSegments, calculateTrackOrder, detectTrackMediaType } from '@/lib/rss-parser-db';
 
 export async function GET() {
   try {
@@ -140,19 +141,119 @@ export async function POST(request: NextRequest) {
 
     console.log(`✅ Added new RSS feed to database: ${url} (${type}) with ID: ${id}`);
 
+    // Immediately parse the feed to populate metadata and tracks
+    let parseResult = { success: false, newTracks: 0, error: '' };
+    try {
+      console.log(`🔄 Parsing feed: ${url}`);
+      const parsedFeed = await parseRSSFeedWithSegments(url);
+
+      // Update feed metadata from parsed content
+      await prisma.feed.update({
+        where: { id },
+        data: {
+          title: parsedFeed.title,
+          description: parsedFeed.description,
+          artist: parsedFeed.artist,
+          image: parsedFeed.image,
+          language: parsedFeed.language,
+          category: parsedFeed.category,
+          podcastCategories: parsedFeed.podcastCategories || [],
+          explicit: parsedFeed.explicit,
+          v4vRecipient: parsedFeed.v4vRecipient,
+          v4vValue: parsedFeed.v4vValue,
+          lastFetched: new Date(),
+          status: 'active',
+          lastError: null
+        }
+      });
+
+      // Add tracks if any
+      if (parsedFeed.items && parsedFeed.items.length > 0) {
+        const tracksData = parsedFeed.items.map((item, index) => {
+          const order = item.episode ? calculateTrackOrder(item.episode, item.season) : index + 1;
+          return {
+            id: `${id}-${item.guid || `track-${index}-${Date.now()}`}`,
+            feedId: id,
+            guid: item.guid,
+            title: item.title,
+            subtitle: item.subtitle,
+            description: item.description,
+            artist: item.artist,
+            audioUrl: item.audioUrl,
+            mediaType: detectTrackMediaType(item),
+            mimeType: item.mimeType,
+            alternateEnclosures: item.alternateEnclosures ? JSON.parse(JSON.stringify(item.alternateEnclosures)) : undefined,
+            duration: item.duration,
+            explicit: item.explicit,
+            image: item.image,
+            publishedAt: item.publishedAt,
+            itunesAuthor: item.itunesAuthor,
+            itunesSummary: item.itunesSummary,
+            itunesImage: item.itunesImage,
+            itunesDuration: item.itunesDuration,
+            itunesKeywords: item.itunesKeywords || [],
+            itunesCategories: item.itunesCategories || [],
+            podcastCategories: parsedFeed.podcastCategories || [],
+            v4vRecipient: item.v4vRecipient,
+            v4vValue: item.v4vValue,
+            startTime: item.startTime,
+            endTime: item.endTime,
+            trackOrder: order,
+            updatedAt: new Date()
+          };
+        });
+
+        await prisma.track.createMany({
+          data: tracksData,
+          skipDuplicates: true
+        });
+
+        parseResult = { success: true, newTracks: tracksData.length, error: '' };
+        console.log(`✅ Parsed feed and added ${tracksData.length} tracks`);
+      } else {
+        parseResult = { success: true, newTracks: 0, error: '' };
+        console.log(`✅ Parsed feed (no tracks - likely a publisher feed)`);
+      }
+    } catch (parseError) {
+      const errorMessage = parseError instanceof Error ? parseError.message : 'Unknown parsing error';
+      console.error(`⚠️ Failed to parse feed: ${errorMessage}`);
+      parseResult = { success: false, newTracks: 0, error: errorMessage };
+
+      // Update feed with error but keep it active
+      await prisma.feed.update({
+        where: { id },
+        data: {
+          lastError: errorMessage,
+          lastFetched: new Date()
+        }
+      });
+    }
+
+    // Get the updated feed
+    const updatedFeed = await prisma.feed.findUnique({
+      where: { id },
+      include: { _count: { select: { Track: true } } }
+    });
+
     return NextResponse.json({
       success: true,
-      message: 'Feed added successfully',
+      message: parseResult.success
+        ? `Feed added and parsed successfully (${parseResult.newTracks} tracks)`
+        : `Feed added but parsing failed: ${parseResult.error}`,
       feed: {
-        id: newFeed.id,
-        originalUrl: newFeed.originalUrl,
-        type: newFeed.type,
-        title: newFeed.title,
-        priority: newFeed.priority,
-        status: newFeed.status,
-        createdAt: newFeed.createdAt,
-        updatedAt: newFeed.updatedAt
-      }
+        id: updatedFeed?.id || id,
+        originalUrl: updatedFeed?.originalUrl || url,
+        type: updatedFeed?.type || type,
+        title: updatedFeed?.title || `Feed from ${urlObj.hostname}`,
+        artist: updatedFeed?.artist,
+        priority: updatedFeed?.priority || priority,
+        status: updatedFeed?.status || 'active',
+        trackCount: updatedFeed?._count.Track || 0,
+        createdAt: updatedFeed?.createdAt || new Date(),
+        updatedAt: updatedFeed?.updatedAt || new Date()
+      },
+      parsed: parseResult.success,
+      tracksAdded: parseResult.newTracks
     });
   } catch (error) {
     console.error('Error adding feed to database:', error);

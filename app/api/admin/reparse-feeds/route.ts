@@ -27,25 +27,57 @@ export async function POST(request: NextRequest) {
     // Calculate cutoff time
     const cutoffTime = new Date(Date.now() - (maxAgeHours * 60 * 60 * 1000));
 
-    // Build type filter
-    let typeFilter: { type?: string | { in: string[] } } = {};
-    if (type === 'all') {
-      typeFilter = { type: { in: ['album', 'music', 'publisher'] } };
-    } else if (type === 'album' || type === 'music' || type === 'publisher') {
-      typeFilter = { type };
-    }
-
     // Find feeds that need reparsing
-    const feedsToReparse = await prisma.feed.findMany({
-      where: {
+    // For publisher feeds, include even those without tracks (newly added)
+    // For album/music feeds, require at least one track (already parsed)
+
+    // Build the where clause based on type
+    let whereClause: any;
+
+    if (type === 'publisher') {
+      // Publisher feeds don't need tracks - they reference albums via remoteItem
+      whereClause = {
         status: 'active',
-        ...typeFilter,
+        type: 'publisher',
+        OR: [
+          { lastFetched: null },
+          { lastFetched: { lt: cutoffTime } }
+        ]
+      };
+    } else if (type === 'all') {
+      // For 'all': publisher feeds don't need tracks, others do
+      whereClause = {
+        status: 'active',
+        type: { in: ['album', 'music', 'publisher'] },
         OR: [
           { lastFetched: null },
           { lastFetched: { lt: cutoffTime } }
         ],
-        Track: { some: {} }  // Only already-parsed feeds (have at least one track)
-      },
+        // Either it's a publisher feed, or it has tracks
+        AND: [
+          {
+            OR: [
+              { type: 'publisher' },
+              { Track: { some: {} } }
+            ]
+          }
+        ]
+      };
+    } else {
+      // album or music - require tracks
+      whereClause = {
+        status: 'active',
+        type,
+        OR: [
+          { lastFetched: null },
+          { lastFetched: { lt: cutoffTime } }
+        ],
+        Track: { some: {} }
+      };
+    }
+
+    const feedsToReparse = await prisma.feed.findMany({
+      where: whereClause,
       select: {
         id: true,
         title: true,

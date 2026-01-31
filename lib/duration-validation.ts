@@ -12,16 +12,8 @@ const MAX_MUSIC_TRACK_DURATION = 7200;
 export function validateDuration(duration: number | null | undefined, trackTitle?: string): number | undefined {
   if (!duration) return undefined;
 
-  // Check for suspiciously long durations
+  // Filter out non-music content (podcasts, etc.) by duration
   if (duration > MAX_MUSIC_TRACK_DURATION) {
-    const hours = Math.floor(duration / 3600);
-    const days = Math.floor(duration / 86400);
-    console.warn(
-      `⚠️  Suspicious duration detected for track "${trackTitle || 'Unknown'}": ` +
-      `${duration}s (${days > 0 ? `${days}d ` : ''}${hours}h). ` +
-      `This exceeds maximum expected duration for music (${MAX_MUSIC_TRACK_DURATION}s). ` +
-      `Setting to undefined.`
-    );
     return undefined;
   }
 
