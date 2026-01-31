@@ -297,55 +297,44 @@ export async function GET(request: NextRequest) {
           similarity: artist.similarity
         }));
       } else {
-        // Fallback to exact match search
-        const artists = await prisma.feed.findMany({
-          where: {
-            AND: [
-              { status: 'active' },
-              { artist: { contains: query, mode: 'insensitive' } }
-            ]
-          },
-          select: {
-            id: true,
-            title: true,
-            artist: true,
-            image: true,
-            description: true
-          },
-          distinct: ['artist'],
-          take: limit,
-          orderBy: [{ artist: 'asc' }]
-        });
+        // Fallback to exact match search with case-insensitive grouping
+        // Use raw SQL to GROUP BY LOWER(artist) to avoid duplicates like "eardiod" vs "Eardiod"
+        const searchPattern = `%${query}%`;
+        const artistResults = await prisma.$queryRaw<Array<{
+          name: string;
+          image: string | null;
+          feedGuid: string;
+          albumCount: bigint;
+          totalTracks: bigint;
+        }>>`
+          SELECT
+            MAX(f.artist) as name,
+            MIN(f.image) as image,
+            MIN(f.id) as "feedGuid",
+            COUNT(DISTINCT f.id) as "albumCount",
+            COALESCE(SUM(tc.track_count), 0) as "totalTracks"
+          FROM "Feed" f
+          LEFT JOIN (
+            SELECT "feedId", COUNT(*) as track_count
+            FROM "Track"
+            GROUP BY "feedId"
+          ) tc ON tc."feedId" = f.id
+          WHERE f.status = 'active'
+            AND f.artist IS NOT NULL
+            AND f.artist ILIKE ${searchPattern}
+          GROUP BY LOWER(f.artist)
+          ORDER BY MAX(f.artist) ASC
+          LIMIT ${limit}
+          OFFSET ${offset}
+        `;
 
-        const artistsWithCounts = await Promise.all(
-          artists.map(async (artist) => {
-            const albumCount = await prisma.feed.count({
-              where: {
-                artist: artist.artist,
-                status: 'active'
-              }
-            });
-
-            const trackCount = await prisma.track.count({
-              where: {
-                Feed: {
-                  artist: artist.artist,
-                  status: 'active'
-                }
-              }
-            });
-
-            return {
-              name: artist.artist,
-              image: artist.image,
-              albumCount,
-              totalTracks: trackCount,
-              feedGuid: artist.id
-            };
-          })
-        );
-
-        results.artists = artistsWithCounts.filter(a => a.name);
+        results.artists = artistResults.map(artist => ({
+          name: artist.name,
+          image: artist.image,
+          albumCount: Number(artist.albumCount),
+          totalTracks: Number(artist.totalTracks),
+          feedGuid: artist.feedGuid
+        }));
       }
     }
 

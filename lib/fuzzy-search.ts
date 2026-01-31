@@ -162,7 +162,7 @@ export async function fuzzySearchArtists(options: FuzzySearchOptions): Promise<F
 
   const results = await prisma.$queryRaw<FuzzyArtistResult[]>`
     SELECT
-      f.artist as name,
+      MAX(f.artist) as name,
       MIN(f.image) as image,
       MIN(f.id) as "feedGuid",
       MAX(similarity(f.artist, ${query})) as similarity,
@@ -177,7 +177,7 @@ export async function fuzzySearchArtists(options: FuzzySearchOptions): Promise<F
     WHERE f.status = 'active'
       AND f.artist IS NOT NULL
       AND similarity(f.artist, ${query}) > ${threshold}
-    GROUP BY f.artist
+    GROUP BY LOWER(f.artist)
     ORDER BY similarity DESC
     LIMIT ${limit}
     OFFSET ${offset}
