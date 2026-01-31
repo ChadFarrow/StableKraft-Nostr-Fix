@@ -120,3 +120,27 @@ stablekraft-app/
 - Docs: https://podcastindex-org.github.io/docs-api/#overview
 - Playlists use `<podcast:remoteItem>` tags with `feedGuid` and `itemGuid`
 - All feeds must be parsed before they can be displayed
+
+## Playlist Feed Resolution
+
+Playlists reference tracks via `feedGuid` + `itemGuid` in XML. The resolution flow:
+
+### On Refresh (`?refresh`)
+1. **Pre-resolution check**: Find feeds that exist but have no tracks, parse them immediately
+2. **Initial resolution**: Query database for tracks by GUID
+3. **Discovery**: For unresolved tracks, discover missing feeds via Podcast Index API
+4. **Immediate parsing**: Parse newly discovered feeds (imports all album tracks + V4V data)
+5. **Publisher discovery**: Check album XML for publisher references, add/link publishers
+6. **Re-resolution**: Query again to include newly imported tracks
+
+### Key Files
+- `lib/feed-parsing.ts` - Shared utilities for parsing feeds via Podcast Index API
+- `lib/feed-discovery.ts` - Feed discovery, parsing, and publisher linking
+- `lib/playlist/handler.ts` - Playlist request handler with immediate parsing
+- `lib/publisher-discovery.ts` - Publisher feed discovery and album linking
+
+### Functions
+- `findUnparsedFeeds(guids)` - Find feeds missing tracks
+- `parsePlaylistFeeds(guids)` - Parse feeds immediately, import all tracks
+- `discoverAndParsePublishers(feedIds)` - Discover and link publisher feeds
+- `parseFeedByGuid(guid)` - Parse single feed via Podcast Index API
