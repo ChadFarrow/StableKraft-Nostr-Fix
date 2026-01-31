@@ -35,7 +35,8 @@ interface ControlsBarProps {
   resultLabel?: string;
 }
 
-const defaultSortOptions: { value: SortType; label: string }[] = [
+/** Full sort options for album/EP/single lists (Year and Added = release/feed date). */
+export const SORT_OPTIONS_ALBUMS: { value: SortType; label: string }[] = [
   { value: 'name-asc', label: 'Name (A-Z)' },
   { value: 'name-desc', label: 'Name (Z-A)' },
   { value: 'year-desc', label: 'Year (Newest)' },
@@ -45,6 +46,24 @@ const defaultSortOptions: { value: SortType; label: string }[] = [
   { value: 'tracks-desc', label: 'Tracks (Most)' },
   { value: 'tracks-asc', label: 'Tracks (Least)' },
 ];
+
+/** Reduced sort options for publisher cards (no Year/Tracks). */
+export const SORT_OPTIONS_PUBLISHERS: { value: SortType; label: string }[] = [
+  { value: 'name-asc', label: 'Name (A-Z)' },
+  { value: 'name-desc', label: 'Name (Z-A)' },
+  { value: 'added-desc', label: 'Added (Newest)' },
+  { value: 'added-asc', label: 'Added (Oldest)' },
+];
+
+/** Sort options for playlist cards (Name and Tracks only; no date-based sort). */
+export const SORT_OPTIONS_PLAYLIST: { value: SortType; label: string }[] = [
+  { value: 'name-asc', label: 'Name (A-Z)' },
+  { value: 'name-desc', label: 'Name (Z-A)' },
+  { value: 'tracks-desc', label: 'Tracks (Most)' },
+  { value: 'tracks-asc', label: 'Tracks (Least)' },
+];
+
+const defaultSortOptions = SORT_OPTIONS_ALBUMS;
 
 // Filter options for publishers
 const defaultFilters: { value: FilterType; label: string }[] = [

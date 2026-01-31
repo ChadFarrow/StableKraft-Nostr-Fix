@@ -77,8 +77,9 @@ const LoadingSkeleton = ({ count = 6 }: { count?: number }) => (
   </div>
 );
 
-// Import types from the original component
+// Import types and sort option sets from ControlsBar
 import type { FilterType, ViewType, SortType } from '@/components/ControlsBar';
+import { SORT_OPTIONS_ALBUMS, SORT_OPTIONS_PUBLISHERS, SORT_OPTIONS_PLAYLIST } from '@/components/ControlsBar';
 // RSS feed configuration - CDN removed, using original URLs directly
 
 // Development logging utility - disabled for performance
@@ -193,6 +194,13 @@ function HomePageContent() {
   const [sortType, setSortType] = useState<SortType>('name-asc');
   const [isFilterLoading, setIsFilterLoading] = useState(false);
   
+  // Sort options per filter: albums/EPs/singles get full options; publishers and playlist get reduced sets
+  const currentSortOptions = useMemo(() => {
+    if (activeFilter === 'publishers') return SORT_OPTIONS_PUBLISHERS;
+    if (activeFilter === 'playlist') return SORT_OPTIONS_PLAYLIST;
+    return SORT_OPTIONS_ALBUMS;
+  }, [activeFilter]);
+
   // Cache for filter data to avoid re-fetching
   const [filterCache, setFilterCache] = useState<Map<FilterType, any>>(new Map());
 
@@ -538,6 +546,12 @@ function HomePageContent() {
 
     // Set activeFilter immediately so UI updates right away
     setActiveFilter(newFilter);
+
+    // When switching to publishers or playlist, ensure sortType is valid for reduced options
+    const optsForFilter = newFilter === 'publishers' ? SORT_OPTIONS_PUBLISHERS : newFilter === 'playlist' ? SORT_OPTIONS_PLAYLIST : null;
+    if (optsForFilter && !optsForFilter.some((o) => o.value === sortType)) {
+      setSortType(optsForFilter[0].value as SortType);
+    }
 
     // Reset format-aware loading state
     setFormatCounts(null);
@@ -1569,13 +1583,14 @@ function HomePageContent() {
                 </div>
               )}
 
-              {/* Controls Bar - Sort only (other controls in main menu) */}
-              {(activeFilter === 'albums' || activeFilter === 'eps' || activeFilter === 'singles' || activeFilter === 'publishers') && (
+              {/* Controls Bar - Sort only (other controls in main menu); options vary by filter */}
+              {(activeFilter === 'all' || activeFilter === 'albums' || activeFilter === 'eps' || activeFilter === 'singles' || activeFilter === 'publishers' || activeFilter === 'playlist') && (
                 <ControlsBar
                   activeFilter={activeFilter}
                   onFilterChange={handleFilterChange}
                   sortType={sortType}
                   onSortChange={setSortType}
+                  sortOptions={currentSortOptions}
                   showFilters={false}
                   showSort={true}
                   viewType={viewType}

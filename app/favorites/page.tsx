@@ -969,8 +969,8 @@ function FavoritesPageContent() {
                     onChange={(e) => setAlbumSortBy(e.target.value as typeof albumSortBy)}
                     className="px-3 sm:px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-stablekraft-teal focus:border-stablekraft-teal transition-all"
                   >
-                    <option value="date-desc">Date Favorited (Newest)</option>
-                    <option value="date-asc">Date Favorited (Oldest)</option>
+                    <option value="date-desc">Favorited (Newest)</option>
+                    <option value="date-asc">Favorited (Oldest)</option>
                     <option value="title-asc">Title (A-Z)</option>
                     <option value="title-desc">Title (Z-A)</option>
                     <option value="artist-asc">Artist (A-Z)</option>
@@ -1045,8 +1045,8 @@ function FavoritesPageContent() {
                     onChange={(e) => setPublisherSortBy(e.target.value as typeof publisherSortBy)}
                     className="px-3 sm:px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-stablekraft-teal focus:border-stablekraft-teal transition-all"
                   >
-                    <option value="date-desc">Date Favorited (Newest)</option>
-                    <option value="date-asc">Date Favorited (Oldest)</option>
+                    <option value="date-desc">Favorited (Newest)</option>
+                    <option value="date-asc">Favorited (Oldest)</option>
                     <option value="title-asc">Name (A-Z)</option>
                     <option value="title-desc">Name (Z-A)</option>
                   </select>
@@ -1116,8 +1116,8 @@ function FavoritesPageContent() {
                       onChange={(e) => setTrackSortBy(e.target.value as typeof trackSortBy)}
                       className="px-3 sm:px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-stablekraft-teal focus:border-stablekraft-teal transition-all"
                     >
-                      <option value="date-desc">Date Favorited (Newest)</option>
-                      <option value="date-asc">Date Favorited (Oldest)</option>
+                      <option value="date-desc">Favorited (Newest)</option>
+                      <option value="date-asc">Favorited (Oldest)</option>
                       <option value="title-asc">Title (A-Z)</option>
                       <option value="title-desc">Title (Z-A)</option>
                       <option value="artist-asc">Artist (A-Z)</option>
@@ -1261,8 +1261,8 @@ function FavoritesPageContent() {
                     onChange={(e) => setPlaylistSortBy(e.target.value as typeof playlistSortBy)}
                     className="px-3 sm:px-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-stablekraft-teal focus:border-stablekraft-teal transition-all"
                   >
-                    <option value="date-desc">Date Favorited (Newest)</option>
-                    <option value="date-asc">Date Favorited (Oldest)</option>
+                    <option value="date-desc">Favorited (Newest)</option>
+                    <option value="date-asc">Favorited (Oldest)</option>
                     <option value="title-asc">Name (A-Z)</option>
                     <option value="title-desc">Name (Z-A)</option>
                   </select>

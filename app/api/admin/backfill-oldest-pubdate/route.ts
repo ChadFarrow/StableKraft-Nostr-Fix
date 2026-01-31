@@ -4,6 +4,11 @@ import { prisma } from '@/lib/prisma';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes
 
+/**
+ * Backfill Feed.oldestItemPubdate from each feed's oldest track publishedAt.
+ * Run after bulk feed refresh or when new feeds are added so "Year" sort uses real release dates.
+ * GET returns counts; POST runs the backfill.
+ */
 export async function POST(request: NextRequest) {
   try {
     // Get all feeds that don't have oldestItemPubdate set, along with their oldest track

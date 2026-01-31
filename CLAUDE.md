@@ -53,3 +53,7 @@ Matched by: title slug, artist slug, or URL path (e.g., `/setto/` matches "setto
 
 ### Duration Filtering
 Tracks over 2 hours filtered as non-music (silent, no warnings)
+
+### Sort / Album Dates
+- **releaseDate**: Album release from tracks (Feed.oldestItemPubdate when available). Used for "Year" sort. Backfill via `POST /api/admin/backfill-oldest-pubdate` so feeds have real release dates.
+- **dateAdded**: When the feed/item was added to the site (Feed.createdAt). Used for "Added" sort.

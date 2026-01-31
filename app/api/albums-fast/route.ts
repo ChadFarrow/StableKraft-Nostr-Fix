@@ -274,15 +274,17 @@ export async function GET(request: Request) {
       publisherStats = cachedData!.publisherStats;
     }
     
-    // Transform feeds into album format for frontend
+    // Transform feeds into album format for frontend.
+    // API contract for sort/display: releaseDate = album release (oldest track date when available); dateAdded = when feed was added to site.
+    // Run POST /api/admin/backfill-oldest-pubdate to backfill oldestItemPubdate so "Year" sort uses real release dates.
     const albums = feeds.map((feed: FeedWithTracks) => ({
       id: feed.id,
       title: feed.title,
       artist: feed.artist || feed.title,
       description: feed.description || '',
       coverArt: feed.image || '',
-      releaseDate: feed.oldestItemPubdate || feed.createdAt, // Oldest item date from Podcast Index, fallback to when added
-      dateAdded: feed.createdAt, // When added to the site
+      releaseDate: feed.oldestItemPubdate || feed.createdAt,
+      dateAdded: feed.createdAt,
       feedUrl: feed.originalUrl, // For Helipad TLV
       feedGuid: feed.id,
       feedId: feed.id, // For Helipad TLV

@@ -113,6 +113,7 @@ export interface RSSAlbum {
   description: string;
   coverArt: string | null;
   tracks: RSSTrack[];
+  /** Album release date: from tracks (oldest item pub date when available); used for "Year" sort. */
   releaseDate: string;
   duration?: string;
   link?: string;
@@ -142,7 +143,8 @@ export interface RSSAlbum {
   guid?: string; // Episode GUID for Helipad TLV
   episodeGuid?: string; // Alternative episode GUID field
   totalTracks?: number;
-  dateAdded?: string; // When added to the site
+  /** When the feed/item was added to the site; used for "Added" sort. */
+  dateAdded?: string;
   // V4V (Value4Value) fields
   value4Value?: RSSValue4Value;
   v4vRecipient?: string;
