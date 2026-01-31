@@ -371,6 +371,8 @@ async function loadPublisherData(publisherId: string) {
     // Try to fetch and parse publisher feed to get remote items and artwork
     let remoteItemGuids: string[] = [];
     let remoteItemUrls: string[] = []; // Also collect feedUrls for matching
+    let podrollGuids = new Set<string>(); // Blocklist: never show these in Official Releases
+    let podrollUrls = new Set<string>();
     let feedImage: string | null = publisherFeed.image || null;
 
     if (publisherFeed.originalUrl && publisherFeed.originalUrl.trim() !== '') {
@@ -382,6 +384,23 @@ async function loadPublisherData(publisherId: string) {
 
         if (feedResponse.ok) {
           const xmlText = await feedResponse.text();
+
+          // Build podroll blocklist from raw XML (defense in depth: exclude even if regex edge case)
+          const podrollMatch = xmlText.match(/<podcast:podroll>([\s\S]*?)<\/podcast:podroll>/gi);
+          if (podrollMatch && podrollMatch[0]) {
+            const podrollBlock = podrollMatch[0];
+            const podrollItemRegex = /<podcast:remoteItem[^>]*>/gi;
+            const podrollItems = podrollBlock.match(podrollItemRegex) || [];
+            for (const m of podrollItems) {
+              const g = m.match(/feedGuid=["']([^"']+)["']/i);
+              const u = m.match(/feedUrl=["']([^"']+)["']/i);
+              if (g?.[1]) podrollGuids.add(g[1]);
+              if (u?.[1]) podrollUrls.add(u[1]);
+            }
+            if (podrollGuids.size > 0 || podrollUrls.size > 0) {
+              console.log(`📋 Podroll blocklist: ${podrollGuids.size} GUIDs, ${podrollUrls.size} URLs (excluded from Official Releases)`);
+            }
+          }
 
           // ALWAYS extract artwork/image from feed (prioritize feed over database)
           // Try iTunes image first
@@ -550,6 +569,17 @@ async function loadPublisherData(publisherId: string) {
 
         relatedFeeds = fountainFeeds;
       }
+
+      // Explicit blocklist: exclude any feed that appears in podroll (defense in depth)
+      if (podrollGuids.size > 0 || podrollUrls.size > 0) {
+        const before = relatedFeeds.length;
+        relatedFeeds = relatedFeeds.filter(
+          (f) => !podrollGuids.has(f.id) && !(f.originalUrl && podrollUrls.has(f.originalUrl))
+        );
+        if (relatedFeeds.length < before) {
+          console.log(`📋 Excluded ${before - relatedFeeds.length} feeds by podroll blocklist`);
+        }
+      }
     }
 
     // First, find albums linked via publisherId (most reliable)
@@ -594,14 +624,9 @@ async function loadPublisherData(publisherId: string) {
 
     console.log(`✅ Found ${publisherIdFeeds.length} albums via publisherId`);
 
-    // Merge publisherId feeds with GUID-matched feeds (deduplicate by id)
-    const existingIds = new Set(relatedFeeds.map(f => f.id));
-    for (const feed of publisherIdFeeds) {
-      if (!existingIds.has(feed.id)) {
-        relatedFeeds.push(feed);
-        existingIds.add(feed.id);
-      }
-    }
+    // Do NOT merge publisherIdFeeds into relatedFeeds for Official Releases.
+    // Official Releases = only feeds from <podcast:remoteItem> outside <podcast:podroll> (already stripped above).
+    // Merging publisherIdFeeds would include podroll-sourced albums that were incorrectly linked.
 
     // Artist matching: Find additional albums not linked via remote items or publisherId
     // Use artist from the publisher feed we found, OR from the known publisher mapping

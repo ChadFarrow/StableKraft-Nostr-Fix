@@ -21,14 +21,18 @@ export interface RemoteItem {
 
 /**
  * Extract all <podcast:remoteItem> tags from publisher feed XML
- * These point to albums belonging to this publisher
+ * These point to albums belonging to this publisher.
+ * Items inside <podcast:podroll> are excluded (related feeds, not official releases).
  */
 function extractRemoteItemsFromXML(xml: string): RemoteItem[] {
   const items: RemoteItem[] = [];
 
+  // Remove podroll section so we only get official remoteItem entries
+  const xmlWithoutPodroll = xml.replace(/<podcast:podroll>[\s\S]*?<\/podcast:podroll>/gi, '');
+
   // Match all remoteItem tags (self-closing)
   const remoteItemRegex = /<podcast:remoteItem[^>]*>/gi;
-  const matches = xml.match(remoteItemRegex) || [];
+  const matches = xmlWithoutPodroll.match(remoteItemRegex) || [];
 
   for (const match of matches) {
     const feedGuidMatch = match.match(/feedGuid=["']([^"']+)["']/i);

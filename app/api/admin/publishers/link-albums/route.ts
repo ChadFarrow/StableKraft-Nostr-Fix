@@ -68,9 +68,12 @@ export async function POST(request: NextRequest) {
 
         const xmlText = await response.text();
 
-        // Extract podcast:remoteItem tags
+        // Strip podroll so we only link albums from official remoteItem entries (not related feeds in podroll)
+        const xmlWithoutPodroll = xmlText.replace(/<podcast:podroll>[\s\S]*?<\/podcast:podroll>/gi, '');
+
+        // Extract podcast:remoteItem tags (from XML outside podroll only)
         const remoteItemRegex = /<podcast:remoteItem[^>]*>/g;
-        const matches = xmlText.match(remoteItemRegex) || [];
+        const matches = xmlWithoutPodroll.match(remoteItemRegex) || [];
 
         const feedUrls: string[] = [];
         const feedGuids: string[] = [];
