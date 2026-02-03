@@ -163,6 +163,17 @@ export async function addUnresolvedFeeds(feedGuids: string[]): Promise<number> {
 
         const normalizedUrl = normalizeUrl(resolvedFeed.url);
 
+        // Check if URL already exists with a different ID
+        const existingByUrl = await prisma.feed.findFirst({
+          where: { originalUrl: normalizedUrl },
+          select: { id: true, title: true }
+        });
+
+        if (existingByUrl) {
+          console.log(`⚡ Feed URL already exists as "${existingByUrl.title}" (ID: ${existingByUrl.id}), skipping GUID ${feedGuid}`);
+          continue;
+        }
+
         // Use upsert to atomically create or update (prevents race conditions)
         const upsertResult = await prisma.feed.upsert({
           where: { id: feedGuid },

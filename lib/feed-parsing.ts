@@ -183,6 +183,32 @@ export async function importFeedToDatabase(feedData: any, episodes: ParsedEpisod
       console.warn(`⚠️ Invalid feed URL for ${feedId}: ${feedUrl}`);
     }
 
+    // Check if URL already exists with a different ID
+    if (normalizedFeedUrl) {
+      const existingByUrl = await prisma.feed.findFirst({
+        where: {
+          originalUrl: normalizedFeedUrl,
+          id: { not: feedId }
+        },
+        select: { id: true, title: true }
+      });
+
+      if (existingByUrl) {
+        console.log(`⚡ Feed URL already exists as "${existingByUrl.title}" (ID: ${existingByUrl.id}), using existing feed for ${feedId}`);
+        // Return info about the existing feed instead of failing
+        const existingTrackCount = await prisma.track.count({
+          where: { feedId: existingByUrl.id }
+        });
+        return {
+          feedId: existingByUrl.id,
+          title: existingByUrl.title || 'Unknown Feed',
+          trackCount: existingTrackCount,
+          hadTracks: existingTrackCount > 0,
+          newTracks: 0
+        };
+      }
+    }
+
     // Parse v4v tags from RSS feed if xmlText is provided
     let parsedV4V = null;
     if (xmlText) {
@@ -446,20 +472,13 @@ export async function parseFeedByGuid(feedGuid: string): Promise<ImportFeedResul
       return null;
     }
 
-    // Check if feed already has tracks
-    const trackCount = await prisma.track.count({
+    // Check existing track count (but still parse to add any new tracks)
+    const existingTrackCount = await prisma.track.count({
       where: { feedId: feedGuid }
     });
 
-    if (trackCount > 0) {
-      console.log(`⚡ Feed ${feedGuid} already has ${trackCount} tracks, skipping`);
-      return {
-        feedId: feedGuid,
-        title: existingFeed.title || 'Unknown',
-        trackCount,
-        hadTracks: true,
-        newTracks: 0
-      };
+    if (existingTrackCount > 0) {
+      console.log(`ℹ️ Feed ${feedGuid} already has ${existingTrackCount} tracks, checking for new ones...`);
     }
 
     // Look up feed data from Podcast Index

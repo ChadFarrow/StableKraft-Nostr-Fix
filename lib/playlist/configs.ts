@@ -132,6 +132,19 @@ export const PLAYLIST_CONFIGS: Record<string, PlaylistConfig> = {
     playlistUrl: '/playlist/flowgnar',
     albumUrl: '/album/flowgnar-playlist',
   },
+
+  lt: {
+    id: 'lt',
+    url: `${GITHUB_BASE}/LT-music-playlist.xml`,
+    name: 'Lightning Thrashes Music Playlist',
+    shortName: 'LT',
+    author: 'ChadF',
+    description: 'Curated playlist from Lightning Thrashes featuring Value4Value independent artists',
+    cacheDuration: CACHE_6_HOURS,
+    maxDuration: TIMEOUT_STANDARD,
+    playlistUrl: '/playlist/lt',
+    albumUrl: '/album/lightning-thrashes-playlist',
+  },
 };
 
 /**

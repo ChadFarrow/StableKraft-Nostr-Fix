@@ -757,7 +757,7 @@ function HomePageContent() {
           console.warn('⚠️ Fast playlist endpoint failed, falling back to individual APIs');
           
           // Fallback to individual playlist APIs if fast endpoint fails
-          const [upbeatsResponse, b4tsResponse, itdvResponse, hghResponse, iamResponse, mmmResponse, mmtResponse, sasResponse, flowgnarResponse] = await Promise.allSettled([
+          const [upbeatsResponse, b4tsResponse, itdvResponse, hghResponse, iamResponse, mmmResponse, mmtResponse, sasResponse, flowgnarResponse, ltResponse] = await Promise.allSettled([
             fetch('/api/playlist/upbeats'),
             fetch('/api/playlist/b4ts'),
             fetch('/api/playlist/itdv'),
@@ -766,7 +766,8 @@ function HomePageContent() {
             fetch('/api/playlist/mmm'),
             fetch('/api/playlist/mmt'),
             fetch('/api/playlist/sas'),
-            fetch('/api/playlist/flowgnar')
+            fetch('/api/playlist/flowgnar'),
+            fetch('/api/playlist/lt')
           ]);
 
           const allAlbums: any[] = [];
@@ -868,6 +869,17 @@ function HomePageContent() {
             }
           } else {
             console.warn('⚠️ Failed to load SAS playlist');
+          }
+
+          // Process LT playlist
+          if (ltResponse.status === 'fulfilled' && ltResponse.value.ok) {
+            const ltData = await ltResponse.value.json();
+            if (ltData.success && ltData.albums) {
+              allAlbums.push(...ltData.albums);
+              console.log(`✅ Loaded ${ltData.albums.length} LT playlist albums`);
+            }
+          } else {
+            console.warn('⚠️ Failed to load LT playlist');
           }
 
           return { albums: allAlbums, totalCount: allAlbums.length };

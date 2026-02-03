@@ -281,6 +281,30 @@ export async function GET() {
           source: 'flowgnar-playlist',
           originalUrl: 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/main/docs/flowgnar-playlist.xml'
         }
+      },
+      {
+        id: 'lt-playlist',
+        title: 'Lightning Thrashes Music Playlist',
+        artist: 'Various Artists',
+        album: 'Lightning Thrashes Music Playlist',
+        description: 'Curated playlist from Lightning Thrashes featuring Value4Value independent artists',
+        image: 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/main/docs/LT-playlist-art.webp',
+        coverArt: 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/main/docs/LT-playlist-art.webp',
+        url: 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/LT-music-playlist.xml',
+        feedId: 'lt-playlist',
+        type: 'playlist',
+        totalTracks: trackCounts['lt'] || 0,
+        tracks: [],
+        publishedAt: new Date().toISOString(),
+        isPlaylistCard: true,
+        playlistUrl: '/playlist/lt',
+        albumUrl: '/playlist/lt',
+        isLoading: true,
+        fullDataUrl: '/api/playlist/lt',
+        playlistContext: {
+          source: 'lt-playlist',
+          originalUrl: 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/LT-music-playlist.xml'
+        }
       }
     ];
 
