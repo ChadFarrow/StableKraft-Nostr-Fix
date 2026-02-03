@@ -35,6 +35,11 @@ Playlists use `<podcast:remoteItem>` with `feedGuid` + `itemGuid`. On `?refresh`
 3. Parse new feeds (imports tracks + V4V data)
 4. Discover/link publisher feeds
 
+**Resolution Limitations** (expect 80-90% resolution rate):
+- **Dead feeds**: Some `feedGuid` entries exist in Podcast Index but have no URL (feed removed/dead)
+- **Duplicate GUIDs**: Same song published on multiple platforms (Wavlake vs original publisher) has different `itemGuid` values - playlist may reference one version while database has another
+- **Duplicate URLs**: Two different `feedGuid` values can point to the same feed URL - handled by checking URL before insert to avoid constraint errors
+
 ### Admin Feed Management (`/admin`)
 Single input handles both add and reparse:
 - New feeds -> added and parsed automatically
@@ -65,3 +70,15 @@ Date fields:
 - `Feed.oldestItemPubdate` - Album release date. Backfill: `POST /api/admin/backfill-oldest-pubdate`
 - `Feed.createdAt` - When added to site
 - Publishers use oldest album's `createdAt` as their `dateAdded`
+
+### Adding New Playlists
+Files to modify (7 total):
+1. `lib/playlist/configs.ts` - Add config entry with id, url, name, shortName, etc.
+2. `app/api/playlist/[id]/route.ts` - Create main API route using `createPlaylistHandler`
+3. `app/api/playlist/[id]-fast/route.ts` - Create fast API route for placeholder data
+4. `lib/playlist-track-counts.ts` - Add to both `FALLBACK_COUNTS` and `PLAYLIST_URLS`
+5. `app/api/playlists-fast/route.ts` - Add playlist summary to the array
+6. `app/page.tsx` - Add to fallback `Promise.allSettled` array (~line 760)
+7. `app/playlist/[id]/page.tsx` - Create dedicated playlist page
+
+After code changes, populate database: `curl http://localhost:3000/api/playlist/[id]?refresh`
