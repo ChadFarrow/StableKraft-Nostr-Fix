@@ -62,23 +62,24 @@ export function parseRemoteItems(xmlText: string): RemoteItem[] {
 export function parsePlaylistWithEpisodes(xmlText: string): ParsedPlaylistItem[] {
   const items: ParsedPlaylistItem[] = [];
 
-  // Combined regex to match both episode markers and remote items in document order
-  const combinedRegex = /<podcast:txt\s+purpose="episode">([^<]*)<\/podcast:txt>|<podcast:remoteItem[^>]*feedGuid="([^"]*)"[^>]*itemGuid="([^"]*)"[^>]*\/?>/g;
+  // Combined regex to match episode markers, playcount markers, and remote items in document order
+  const combinedRegex = /<podcast:txt\s+purpose="(episode|playcount)">([^<]*)<\/podcast:txt>|<podcast:remoteItem[^>]*feedGuid="([^"]*)"[^>]*itemGuid="([^"]*)"[^>]*\/?>/g;
 
   let match;
   while ((match = combinedRegex.exec(xmlText)) !== null) {
-    if (match[1] !== undefined) {
-      // Episode marker - match[1] is the episode title
+    if (match[1] !== undefined && match[2] !== undefined) {
+      // Episode or playcount marker - match[1] is the purpose, match[2] is the title
+      const purpose = match[1] as 'episode' | 'playcount';
       items.push({
-        type: 'episode',
-        title: match[1].trim()
+        type: purpose,
+        title: match[2].trim()
       });
-    } else if (match[2] && match[3]) {
-      // Remote item - match[2] is feedGuid, match[3] is itemGuid
+    } else if (match[3] && match[4]) {
+      // Remote item - match[3] is feedGuid, match[4] is itemGuid
       items.push({
         type: 'remoteItem',
-        feedGuid: match[2],
-        itemGuid: match[3]
+        feedGuid: match[3],
+        itemGuid: match[4]
       });
     }
   }
@@ -94,7 +95,7 @@ export function generateEpisodeId(title: string): string {
 }
 
 /**
- * Group parsed items by episode
+ * Group parsed items by episode or playcount marker
  */
 export function groupItemsByEpisode(parsedItems: ParsedPlaylistItem[]): GroupedItems {
   const episodes: { title: string; remoteItems: RemoteItem[] }[] = [];
@@ -103,9 +104,9 @@ export function groupItemsByEpisode(parsedItems: ParsedPlaylistItem[]): GroupedI
   let foundEpisodeMarker = false;
 
   for (const item of parsedItems) {
-    if (item.type === 'episode') {
+    if (item.type === 'episode' || item.type === 'playcount') {
       foundEpisodeMarker = true;
-      // Start new episode group
+      // Start new episode/playcount group
       if (currentEpisode) {
         episodes.push(currentEpisode);
       }

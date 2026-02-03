@@ -30,13 +30,18 @@ export interface ParsedEpisodeMarker {
   title: string;
 }
 
+export interface ParsedPlaycountMarker {
+  type: 'playcount';
+  title: string;
+}
+
 export interface ParsedRemoteItem {
   type: 'remoteItem';
   feedGuid: string;
   itemGuid: string;
 }
 
-export type ParsedPlaylistItem = ParsedEpisodeMarker | ParsedRemoteItem;
+export type ParsedPlaylistItem = ParsedEpisodeMarker | ParsedRemoteItem | ParsedPlaycountMarker;
 
 export interface EpisodeGroup {
   id: string;
