@@ -129,6 +129,28 @@ const staticPlaylists: PlaylistItem[] = [
     type: 'rss',
     color: 'bg-green-600',
     medium: 'musicL'
+  },
+  {
+    id: 'lt',
+    title: 'Lightning Thrashes Music Playlist',
+    description: 'Curated playlist from Lightning Thrashes featuring Value4Value independent artists',
+    trackCount: 1290,
+    episodes: '1290 remote items',
+    href: '/playlist/lt',
+    type: 'rss',
+    color: 'bg-red-600',
+    medium: 'musicL'
+  },
+  {
+    id: 'greatest-hits',
+    title: "ChadF's Greatest Hits Music Playlist",
+    description: 'Most frequently played tracks across all ChadF musicL playlists - songs appearing 2+ times, organized by play count',
+    trackCount: 1247,
+    episodes: '1247 remote items',
+    href: '/playlist/greatest-hits',
+    type: 'rss',
+    color: 'bg-yellow-600',
+    medium: 'musicL'
   }
 ];
 
@@ -377,6 +399,18 @@ function PlaylistContent() {
               className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-medium transition-colors"
             >
               🎵 Open SAS Player
+            </Link>
+            <Link
+              href="/playlist/lt"
+              className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+            >
+              🎵 Open LT Player
+            </Link>
+            <Link
+              href="/playlist/greatest-hits"
+              className="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+            >
+              🎵 Open Greatest Hits
             </Link>
             <Link
               href="/playlist/maker"
