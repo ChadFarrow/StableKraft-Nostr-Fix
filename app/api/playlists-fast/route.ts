@@ -305,6 +305,30 @@ export async function GET() {
           source: 'lt-playlist',
           originalUrl: 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/LT-music-playlist.xml'
         }
+      },
+      {
+        id: 'greatestHits-playlist',
+        title: "ChadF's Greatest Hits Music Playlist",
+        artist: 'Various Artists',
+        album: "ChadF's Greatest Hits Music Playlist",
+        description: 'Most frequently played tracks across all ChadF musicL playlists - songs appearing 2+ times, organized by play count',
+        image: 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/main/docs/Greatest-Hits-music-playlist.png',
+        coverArt: 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/main/docs/Greatest-Hits-music-playlist.png',
+        url: 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/Greatest-Hits-music-playlist.xml',
+        feedId: 'greatestHits-playlist',
+        type: 'playlist',
+        totalTracks: trackCounts['greatestHits'] || 0,
+        tracks: [],
+        publishedAt: new Date().toISOString(),
+        isPlaylistCard: true,
+        playlistUrl: '/playlist/greatest-hits',
+        albumUrl: '/playlist/greatest-hits',
+        isLoading: true,
+        fullDataUrl: '/api/playlist/greatest-hits',
+        playlistContext: {
+          source: 'greatestHits-playlist',
+          originalUrl: 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/Greatest-Hits-music-playlist.xml'
+        }
       }
     ];
 

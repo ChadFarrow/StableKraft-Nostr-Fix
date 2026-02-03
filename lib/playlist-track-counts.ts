@@ -15,6 +15,7 @@ const FALLBACK_COUNTS: Record<string, number> = {
   'itdv': 125,
   'flowgnar': 188,
   'lt': 1290,
+  'greatestHits': 1247,
 };
 
 // Playlist XML URLs from the chadf-musicl-playlists repo
@@ -29,6 +30,7 @@ const PLAYLIST_URLS: Record<string, string> = {
   'itdv': 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/ITDV-music-playlist.xml',
   'flowgnar': 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/flowgnar-music-playlist.xml',
   'lt': 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/LT-music-playlist.xml',
+  'greatestHits': 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/Greatest-Hits-music-playlist.xml',
 };
 
 // Cache for track counts - refreshes every 6 hours

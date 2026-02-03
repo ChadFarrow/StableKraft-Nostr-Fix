@@ -145,6 +145,19 @@ export const PLAYLIST_CONFIGS: Record<string, PlaylistConfig> = {
     playlistUrl: '/playlist/lt',
     albumUrl: '/album/lightning-thrashes-playlist',
   },
+
+  greatestHits: {
+    id: 'greatestHits',
+    url: `${GITHUB_BASE}/Greatest-Hits-music-playlist.xml`,
+    name: "ChadF's Greatest Hits Music Playlist",
+    shortName: 'Greatest Hits',
+    author: 'ChadF',
+    description: 'Most frequently played tracks across all ChadF musicL playlists - songs appearing 2+ times, organized by play count',
+    cacheDuration: CACHE_6_HOURS,
+    maxDuration: TIMEOUT_STANDARD,
+    playlistUrl: '/playlist/greatest-hits',
+    albumUrl: '/album/greatest-hits-playlist',
+  },
 };
 
 /**

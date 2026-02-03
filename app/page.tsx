@@ -757,7 +757,7 @@ function HomePageContent() {
           console.warn('⚠️ Fast playlist endpoint failed, falling back to individual APIs');
           
           // Fallback to individual playlist APIs if fast endpoint fails
-          const [upbeatsResponse, b4tsResponse, itdvResponse, hghResponse, iamResponse, mmmResponse, mmtResponse, sasResponse, flowgnarResponse, ltResponse] = await Promise.allSettled([
+          const [upbeatsResponse, b4tsResponse, itdvResponse, hghResponse, iamResponse, mmmResponse, mmtResponse, sasResponse, flowgnarResponse, ltResponse, greatestHitsResponse] = await Promise.allSettled([
             fetch('/api/playlist/upbeats'),
             fetch('/api/playlist/b4ts'),
             fetch('/api/playlist/itdv'),
@@ -767,7 +767,8 @@ function HomePageContent() {
             fetch('/api/playlist/mmt'),
             fetch('/api/playlist/sas'),
             fetch('/api/playlist/flowgnar'),
-            fetch('/api/playlist/lt')
+            fetch('/api/playlist/lt'),
+            fetch('/api/playlist/greatest-hits')
           ]);
 
           const allAlbums: any[] = [];
@@ -880,6 +881,17 @@ function HomePageContent() {
             }
           } else {
             console.warn('⚠️ Failed to load LT playlist');
+          }
+
+          // Process Greatest Hits playlist
+          if (greatestHitsResponse.status === 'fulfilled' && greatestHitsResponse.value.ok) {
+            const greatestHitsData = await greatestHitsResponse.value.json();
+            if (greatestHitsData.success && greatestHitsData.albums) {
+              allAlbums.push(...greatestHitsData.albums);
+              console.log(`✅ Loaded ${greatestHitsData.albums.length} Greatest Hits playlist albums`);
+            }
+          } else {
+            console.warn('⚠️ Failed to load Greatest Hits playlist');
           }
 
           return { albums: allAlbums, totalCount: allAlbums.length };
