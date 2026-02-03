@@ -102,6 +102,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
   const [repeatMode, setRepeatMode] = useState<'none' | 'one' | 'all'>('none');
 
+  // iOS detection state (for JSX conditional rendering)
+  const [isIOS, setIsIOS] = useState(false);
+
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<HlsType | null>(null);
@@ -123,6 +126,11 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   const stallCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const recoveryAttemptRef = useRef<number>(0);
   const userInitiatedPauseRef = useRef<boolean>(false); // Track if pause was user-initiated
+
+  // iOS background audio keepalive refs
+  const silentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const keepaliveIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isInBackgroundRef = useRef(false);
 
   // Web Audio API for volume normalization (compressor)
   const webAudioContextRef = useRef<AudioContext | null>(null);
@@ -354,6 +362,47 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     if (typeof navigator === 'undefined') return false;
     return /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
            (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPad on iOS 13+
+  }, []);
+
+  // Set iOS state on mount for JSX conditional rendering
+  useEffect(() => {
+    setIsIOS(isIOSDevice());
+  }, [isIOSDevice]);
+
+  // iOS background audio keepalive - plays silent audio to keep audio session alive
+  const startSilentKeepalive = useCallback(() => {
+    if (!isIOSDevice() || keepaliveIntervalRef.current) return;
+
+    console.log('📱 Starting iOS silent keepalive');
+
+    if (!silentAudioRef.current) {
+      const silent = new Audio('/silent-500ms.mp3');
+      silent.loop = true;
+      silent.volume = 0.001; // Near-silent but not zero (zero might be optimized out)
+      silentAudioRef.current = silent;
+    }
+
+    silentAudioRef.current.play().catch(() => {
+      // Ignore errors - might fail if no user interaction yet
+    });
+
+    // Periodically re-trigger play to ensure session stays alive
+    keepaliveIntervalRef.current = setInterval(() => {
+      if (isInBackgroundRef.current && silentAudioRef.current) {
+        silentAudioRef.current.play().catch(() => {});
+      }
+    }, 10000); // Every 10 seconds
+  }, [isIOSDevice]);
+
+  const stopSilentKeepalive = useCallback(() => {
+    if (keepaliveIntervalRef.current) {
+      clearInterval(keepaliveIntervalRef.current);
+      keepaliveIntervalRef.current = null;
+    }
+    if (silentAudioRef.current) {
+      silentAudioRef.current.pause();
+    }
+    console.log('📱 Stopped iOS silent keepalive');
   }, []);
 
   // Initialize Web Audio API for volume normalization (compressor)
@@ -639,6 +688,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
 
       if (!isVisible) {
         // Page is being hidden (screen locked or app backgrounded)
+        isInBackgroundRef.current = true;
+
         // Remember if we were playing so we can resume
         const audio = document.getElementById('stablekraft-audio-player') as HTMLAudioElement;
         const video = document.getElementById('stablekraft-video-player') as HTMLVideoElement;
@@ -647,9 +698,18 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
           (video && !video.paused)
         );
         console.log('📱 Page hidden, was playing:', wasPlayingBeforeHiddenRef.current);
+
+        // Start silent keepalive on iOS when going to background while playing
+        if (wasPlayingBeforeHiddenRef.current) {
+          startSilentKeepalive();
+        }
       } else {
         // Page is visible again (screen unlocked)
+        isInBackgroundRef.current = false;
         console.log('📱 Page visible, checking audio state...');
+
+        // Stop silent keepalive when returning to foreground
+        stopSilentKeepalive();
 
         // Resume Web Audio context if suspended
         const ctx = webAudioContextRef.current;
@@ -726,7 +786,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('pageshow', handlePageShow);
     };
-  }, []); // Run only once on mount
+  }, [startSilentKeepalive, stopSilentKeepalive]); // Re-run when keepalive functions change
 
   // Save state to IndexedDB when it changes - with debouncing
   useEffect(() => {
@@ -1578,6 +1638,11 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         navigator.mediaSession.playbackState = 'playing';
       }
 
+      // Start silent keepalive during track transition on iOS (especially important in background)
+      if (isInBackgroundRef.current) {
+        startSilentKeepalive();
+      }
+
       // Auto-boost: fire and forget - doesn't block next track (disabled in radio mode)
       // Check settings and trigger boost for the just-finished track
       if (!radioMode && settings.autoBoostEnabled && currentPlayingAlbum && currentTrackIndex >= 0) {
@@ -1605,6 +1670,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         if ('mediaSession' in navigator && navigator.mediaSession) {
           navigator.mediaSession.playbackState = 'paused';
         }
+        // Stop keepalive if track transition failed
+        stopSilentKeepalive();
       }
     };
 
@@ -3016,7 +3083,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
       <audio
         id="stablekraft-audio-player"
         ref={audioRef}
-        preload="metadata"
+        preload={isIOS ? 'auto' : 'metadata'}
         playsInline
         webkit-playsinline="true"
         x-webkit-airplay="allow"
@@ -3036,7 +3103,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
       <video
         id="stablekraft-video-player"
         ref={videoRef}
-        preload="metadata"
+        preload={isIOS ? 'auto' : 'metadata'}
         playsInline
         webkit-playsinline="true"
         x-webkit-airplay="allow"
