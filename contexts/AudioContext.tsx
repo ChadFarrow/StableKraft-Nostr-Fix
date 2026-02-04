@@ -653,29 +653,26 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         const video = document.getElementById('stablekraft-video-player') as HTMLVideoElement;
 
         // If we were playing before and audio is now paused, try to resume
-        if (wasPlayingBeforeHiddenRef.current) {
+        // BUT respect user-initiated pause (e.g., from lock screen controls)
+        if (wasPlayingBeforeHiddenRef.current && !userInitiatedPauseRef.current) {
           if (audio && audio.paused && audio.currentTime > 0 && audio.src) {
             console.log('📱 Attempting to resume audio after visibility change');
-            audio.play().then(() => {
-              console.log('✅ Audio resumed after screen unlock');
-              if ('mediaSession' in navigator && navigator.mediaSession) {
-                navigator.mediaSession.playbackState = 'playing';
-              }
-            }).catch(err => {
-              console.warn('⚠️ Failed to resume audio:', err);
-            });
+            // Use resumeRef for proper state management instead of direct audio.play()
+            if (resumeRef.current) {
+              resumeRef.current();
+              console.log('✅ Audio resumed after screen unlock via resumeRef');
+            }
           }
           if (video && video.paused && video.currentTime > 0 && video.src) {
             console.log('📱 Attempting to resume video after visibility change');
-            video.play().then(() => {
-              console.log('✅ Video resumed after screen unlock');
-              if ('mediaSession' in navigator && navigator.mediaSession) {
-                navigator.mediaSession.playbackState = 'playing';
-              }
-            }).catch(err => {
-              console.warn('⚠️ Failed to resume video:', err);
-            });
+            // Use resumeRef for proper state management instead of direct video.play()
+            if (resumeRef.current) {
+              resumeRef.current();
+              console.log('✅ Video resumed after screen unlock via resumeRef');
+            }
           }
+        } else if (userInitiatedPauseRef.current) {
+          console.log('📱 Skipping auto-resume: user explicitly paused');
         }
       }
     };
@@ -697,14 +694,18 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
       }
 
       // Check if audio was interrupted and needs to be resumed
-      if (wasPlayingBeforeHiddenRef.current) {
+      // BUT respect user-initiated pause (e.g., from lock screen controls)
+      if (wasPlayingBeforeHiddenRef.current && !userInitiatedPauseRef.current) {
         const audio = document.getElementById('stablekraft-audio-player') as HTMLAudioElement;
         if (audio && audio.paused && audio.currentTime > 0 && audio.src) {
           console.log('📱 Resuming audio on pageshow');
-          audio.play().catch(err => {
-            console.warn('⚠️ Failed to resume audio on pageshow:', err);
-          });
+          // Use resumeRef for proper state management instead of direct audio.play()
+          if (resumeRef.current) {
+            resumeRef.current();
+          }
         }
+      } else if (userInitiatedPauseRef.current) {
+        console.log('📱 Skipping pageshow resume: user explicitly paused');
       }
     };
 
@@ -2492,6 +2493,10 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   const pause = () => {
     // Mark this as user-initiated pause so we don't try to auto-recover
     userInitiatedPauseRef.current = true;
+    // Clear the "was playing" flag so visibility handlers don't resume after user pause
+    wasPlayingBeforeHiddenRef.current = false;
+    // Stop silent keepalive to prevent audio session from staying alive after user pause
+    stopSilentKeepalive();
 
     // Try ref first, then fallback to DOM query for iOS background compatibility
     let currentElement: HTMLAudioElement | HTMLVideoElement | null = isVideoMode
