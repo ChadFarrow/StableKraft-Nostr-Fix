@@ -251,6 +251,12 @@ export async function getPlaylistFromDatabase(config: PlaylistConfig): Promise<{
     console.log(`⚡ [${config.shortName}] Using database playlist (${dbPlaylist.SystemPlaylistTrack.length} tracks)`);
 
     // Transform to expected response format
+    // Convert episodeId (e.g., "ep-23-plays") back to readable title (e.g., "23 plays")
+    const episodeIdToTitle = (epId: string | null): string => {
+      if (!epId) return '';
+      return epId.replace('ep-', '').replace(/-/g, ' ');
+    };
+
     const tracks = dbPlaylist.SystemPlaylistTrack.map((pt, index) => ({
       id: pt.Track.id,
       title: pt.Track.title,
@@ -267,8 +273,9 @@ export async function getPlaylistFromDatabase(config: PlaylistConfig): Promise<{
       guid: pt.Track.guid,
       index,
       episodeId: pt.episodeId,
+      episodeTitle: episodeIdToTitle(pt.episodeId),
       playlistContext: {
-        episodeTitle: pt.episodeId,
+        episodeTitle: episodeIdToTitle(pt.episodeId),
         itemGuid: pt.Track.guid,
         position: pt.position
       }

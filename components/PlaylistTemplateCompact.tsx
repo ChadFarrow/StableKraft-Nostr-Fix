@@ -1228,6 +1228,12 @@ export default function PlaylistTemplateCompact({ config }: PlaylistTemplateComp
 
                   {/* Row 2: Duration & Action Buttons - inline on desktop */}
                   <div className="flex items-center justify-end gap-2 lg:flex-shrink-0">
+                    {/* Play Count Badge (for Greatest Hits playlist) */}
+                    {track.episodeTitle && track.episodeTitle.includes('play') && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-900/50 text-amber-400 border border-amber-800">
+                        {track.episodeTitle}
+                      </span>
+                    )}
                     {/* Duration & V4V Badge */}
                     <div className="flex items-center gap-2">
                       {track.valueForValue?.resolved && (
