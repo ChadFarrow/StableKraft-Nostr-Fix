@@ -267,6 +267,30 @@ export function useNip46Connection(options: UseNip46ConnectionOptions): Nip46Con
     }
   }, [loginMethod, amberConnectionInitialized, cleanupAmberConnection]);
 
+  // iOS visibility change reconnection
+  // iOS Safari kills WebSocket connections after ~30 seconds when backgrounded
+  // Proactively reconnect when the app returns to foreground
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible' && nip46ClientRef.current) {
+        // Dynamically import to avoid SSR issues
+        const { isIOS } = await import('@/lib/utils/device');
+        const isiOSDevice = isIOS();
+
+        // Check and reconnect - use iOS threshold on iOS devices
+        const reconnected = await nip46ClientRef.current.checkAndReconnectIfNeeded(isiOSDevice);
+        if (reconnected) {
+          console.log(`${isiOSDevice ? 'iOS' : 'Mobile'}: Reconnected NIP-46 after app foreground`);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, []);
+
   return {
     // State
     nip46Client,

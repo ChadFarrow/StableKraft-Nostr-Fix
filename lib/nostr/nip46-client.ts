@@ -11,6 +11,7 @@ import { NostrClient } from './client';
 import { RelayManager } from './relay';
 import { saveNIP46Connection, loadNIP46Connection, getOrCreateAppKeyPair, clearNIP46Connection, NIP46Connection, getAppKeyPairHistory, AppKeyPair } from './nip46-storage';
 import { npubToPublicKey, publicKeyToNpub, hexToBytes } from './keys';
+import { isIOS } from '@/lib/utils/device';
 
 /**
  * Parse bunker:// URI to extract connection information
@@ -92,6 +93,11 @@ export interface NIP46Response {
 }
 
 export class NIP46Client {
+  // iOS Safari kills WebSocket connections after ~30 seconds when backgrounded
+  // Use shorter threshold for iOS to detect stale connections faster
+  private static readonly IOS_STALE_THRESHOLD_MS = 15000; // 15 seconds
+  private static readonly DEFAULT_STALE_THRESHOLD_MS = 60000; // 60 seconds
+
   private connection: NIP46Connection | null = null;
   private ws: WebSocket | null = null;
   private pendingRequests: Map<string, { method: string; resolve: (value: any) => void; reject: (error: Error) => void }> = new Map();
@@ -2431,6 +2437,53 @@ export class NIP46Client {
   }
 
   /**
+   * Get the time of the last received event
+   * Used by visibility change handlers to check connection staleness
+   */
+  getLastEventTime(): number {
+    return this.lastEventTime;
+  }
+
+  /**
+   * Check if the connection is stale and reconnect if needed
+   * Called proactively when the app returns from background (visibility change)
+   * @param isIOS - Whether the device is iOS (uses shorter threshold)
+   * @returns true if reconnection was performed
+   */
+  async checkAndReconnectIfNeeded(isIOS: boolean = false): Promise<boolean> {
+    const staleThreshold = isIOS
+      ? NIP46Client.IOS_STALE_THRESHOLD_MS
+      : NIP46Client.DEFAULT_STALE_THRESHOLD_MS;
+
+    const timeSinceLastEvent = this.lastEventTime > 0 ? Date.now() - this.lastEventTime : Infinity;
+    const isConnectionStale = timeSinceLastEvent > staleThreshold;
+
+    if (!isConnectionStale) {
+      return false;
+    }
+
+    console.log('🔄 NIP-46: Proactive reconnection check (visibility change):', {
+      isIOS,
+      staleThreshold: `${staleThreshold / 1000}s`,
+      timeSinceLastEvent: timeSinceLastEvent === Infinity ? 'never' : `${Math.floor(timeSinceLastEvent / 1000)}s`,
+    });
+
+    try {
+      const relayUrl = this.getRelayUrl();
+      if (relayUrl && relayUrl.startsWith('wss://')) {
+        await this.startRelayConnection(relayUrl);
+        this.lastEventTime = Date.now();
+        console.log('✅ NIP-46: Proactive reconnection successful');
+        return true;
+      }
+    } catch (err) {
+      console.error('❌ NIP-46: Proactive reconnection failed:', err);
+    }
+
+    return false;
+  }
+
+  /**
    * Establish WebSocket connection
    */
   private async establishConnection(): Promise<void> {
@@ -2764,11 +2817,14 @@ export class NIP46Client {
         
         const isRelayConnected = relayManager.isConnected(relayUrl);
 
-        // Check if connection is stale (no events received in last 60 seconds)
-        // This handles iOS Safari killing WebSocket connections when backgrounded
-        const CONNECTION_STALE_THRESHOLD_MS = 60000; // 60 seconds
+        // Check if connection is stale (no events received recently)
+        // iOS Safari kills WebSocket connections after ~30 seconds when backgrounded
+        // Use shorter threshold on iOS to detect stale connections faster
+        const staleThreshold = isIOS()
+          ? NIP46Client.IOS_STALE_THRESHOLD_MS
+          : NIP46Client.DEFAULT_STALE_THRESHOLD_MS;
         const timeSinceLastEvent = this.lastEventTime > 0 ? Date.now() - this.lastEventTime : Infinity;
-        const isConnectionStale = timeSinceLastEvent > CONNECTION_STALE_THRESHOLD_MS;
+        const isConnectionStale = timeSinceLastEvent > staleThreshold;
 
         if (!isRelayConnected || isConnectionStale) {
           console.log('⚠️ NIP-46: Relay needs reconnection:', {
