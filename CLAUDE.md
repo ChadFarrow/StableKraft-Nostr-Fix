@@ -59,6 +59,12 @@ Matched by: title slug, artist slug, or URL path (e.g., `/setto/` matches "setto
 ### Duration Filtering
 Tracks over 2 hours filtered as non-music (silent, no warnings)
 
+### NIP-46 Remote Signer (Amber)
+iOS Safari kills WebSocket connections after ~30 seconds when backgrounded. The NIP-46 client handles this with:
+- **Proactive reconnection**: `visibilitychange` listener in `useNip46Connection.ts` triggers reconnection when app returns to foreground
+- **Platform-aware thresholds**: iOS uses 15s staleness threshold, other platforms use 60s
+- **Key files**: `lib/nostr/nip46-client.ts` (client + thresholds), `components/Nostr/hooks/useNip46Connection.ts` (visibility handler)
+
 ### Sorting
 Main page sorting available on filtered views (Albums, EPs, Singles, Publishers):
 - **Name**: A-Z / Z-A alphabetical
