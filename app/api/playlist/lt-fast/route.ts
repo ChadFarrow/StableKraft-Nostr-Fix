@@ -30,8 +30,8 @@ export async function GET(request: NextRequest) {
         artist: 'Various Artists',
         album: 'Lightning Thrashes Music Playlist',
         description: 'Curated playlist from Lightning Thrashes featuring Value4Value independent artists',
-        image: 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/main/docs/LT-playlist-art.webp',
-        coverArt: 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/main/docs/LT-playlist-art.webp',
+        image: 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/LT-music-playlist.png',
+        coverArt: 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/LT-music-playlist.png',
         url: LT_PLAYLIST_URL,
         tracks: [], // Start with empty tracks, will load via regular endpoint
         feedId: 'lt-playlist',
