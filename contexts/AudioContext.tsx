@@ -2528,6 +2528,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     // Clear user-initiated pause flag since we're resuming
     userInitiatedPauseRef.current = false;
 
+    // Restart silent keepalive for iOS background audio (stopped on pause)
+    startSilentKeepalive();
+
     // Ensure Web Audio context is running (critical for volume normalization)
     ensureWebAudioRunning();
 
