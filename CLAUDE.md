@@ -65,6 +65,20 @@ iOS Safari kills WebSocket connections after ~30 seconds when backgrounded. The 
 - **Platform-aware thresholds**: iOS uses 15s staleness threshold, other platforms use 60s
 - **Key files**: `lib/nostr/nip46-client.ts` (client + thresholds), `components/Nostr/hooks/useNip46Connection.ts` (visibility handler)
 
+### iOS PWA Background Audio
+iOS aggressively suspends audio when the PWA is backgrounded. Key mechanisms in `contexts/AudioContext.tsx`:
+
+- **Silent keepalive**: Plays inaudible audio to keep the audio session alive when backgrounded
+- **Visibility handlers**: `visibilitychange` and `pageshow` events detect foreground/background transitions
+- **User pause tracking**: `userInitiatedPauseRef` tracks explicit user pauses (lock screen controls)
+- **Was playing tracking**: `wasPlayingBeforeHiddenRef` tracks if audio was playing before backgrounding
+
+**Critical behavior**:
+- `pause()` sets `userInitiatedPauseRef = true`, clears `wasPlayingBeforeHiddenRef`, and stops keepalive
+- `resume()` clears `userInitiatedPauseRef` and restarts keepalive
+- Visibility handlers check BOTH flags before auto-resuming: `wasPlayingBeforeHiddenRef && !userInitiatedPauseRef`
+- This prevents lock screen pause from being overridden when unlocking the phone
+
 ### Sorting
 Main page sorting available on filtered views (Albums, EPs, Singles, Publishers):
 - **Name**: A-Z / Z-A alphabetical
