@@ -119,6 +119,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   const playPreviousTrackRef = useRef<() => Promise<void>>();
   const pauseRef = useRef<() => void>();
   const resumeRef = useRef<() => void>();
+  const updateMediaSessionRef = useRef<() => void>();
 
   // Silent stall detection refs - detect when audio stops advancing while supposedly playing
   const lastKnownTimeRef = useRef<number>(0);
@@ -386,6 +387,15 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
       // Ignore errors - might fail if no user interaction yet
     });
 
+    // Re-assert media session metadata after starting silent audio
+    // iOS may reset metadata when a new audio element starts playing
+    setTimeout(() => {
+      if (updateMediaSessionRef.current) {
+        console.log('📱 Re-asserting media session metadata after keepalive start');
+        updateMediaSessionRef.current();
+      }
+    }, 100);
+
     // Periodically re-trigger play to ensure session stays alive
     keepaliveIntervalRef.current = setInterval(() => {
       if (isInBackgroundRef.current && silentAudioRef.current) {
@@ -554,96 +564,14 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         // Using refs with DOM fallback for iOS background reliability
         navigator.mediaSession.setActionHandler('play', () => {
           console.log('📱 Media session: Play action received');
-          let resumed = false;
-
-          // Try specific IDs first
-          const audio = document.getElementById('stablekraft-audio-player') as HTMLAudioElement;
-          const video = document.getElementById('stablekraft-video-player') as HTMLVideoElement;
-
-          if (audio && audio.paused && audio.currentTime > 0) {
-            console.log('📱 Resuming audio element by ID');
-            audio.play();
-            resumed = true;
-          }
-          if (video && video.paused && video.currentTime > 0) {
-            console.log('📱 Resuming video element by ID');
-            video.play();
-            resumed = true;
-          }
-
-          // Fallback: find ANY paused audio/video element with progress
-          if (!resumed) {
-            console.log('📱 ID lookup failed, scanning all media elements');
-            const allAudio = document.getElementsByTagName('audio');
-            const allVideo = document.getElementsByTagName('video');
-
-            for (let i = 0; i < allAudio.length; i++) {
-              if (allAudio[i].paused && allAudio[i].currentTime > 0) {
-                console.log('📱 Found and resuming audio element', i);
-                allAudio[i].play();
-                resumed = true;
-              }
-            }
-            for (let i = 0; i < allVideo.length; i++) {
-              if (allVideo[i].paused && allVideo[i].currentTime > 0) {
-                console.log('📱 Found and resuming video element', i);
-                allVideo[i].play();
-                resumed = true;
-              }
-            }
-          }
-
-          if (resumed) {
-            navigator.mediaSession.playbackState = 'playing';
-          } else {
-            console.warn('📱 No paused media element found anywhere in document');
+          if (resumeRef.current) {
+            resumeRef.current();
           }
         });
         navigator.mediaSession.setActionHandler('pause', () => {
           console.log('📱 Media session: Pause action received');
-          let paused = false;
-
-          // Try specific IDs first
-          const audio = document.getElementById('stablekraft-audio-player') as HTMLAudioElement;
-          const video = document.getElementById('stablekraft-video-player') as HTMLVideoElement;
-
-          if (audio && !audio.paused) {
-            console.log('📱 Pausing audio element by ID');
-            audio.pause();
-            paused = true;
-          }
-          if (video && !video.paused) {
-            console.log('📱 Pausing video element by ID');
-            video.pause();
-            paused = true;
-          }
-
-          // Fallback: find ANY playing audio/video element in the document
-          if (!paused) {
-            console.log('📱 ID lookup failed, scanning all media elements');
-            const allAudio = document.getElementsByTagName('audio');
-            const allVideo = document.getElementsByTagName('video');
-
-            for (let i = 0; i < allAudio.length; i++) {
-              if (!allAudio[i].paused) {
-                console.log('📱 Found and pausing audio element', i);
-                allAudio[i].pause();
-                paused = true;
-              }
-            }
-            for (let i = 0; i < allVideo.length; i++) {
-              if (!allVideo[i].paused) {
-                console.log('📱 Found and pausing video element', i);
-                allVideo[i].pause();
-                paused = true;
-              }
-            }
-          }
-
-          if (paused) {
-            navigator.mediaSession.playbackState = 'paused';
-          } else {
-            console.warn('📱 No playing media element found anywhere in document');
+          if (pauseRef.current) {
+            pauseRef.current();
           }
         });
         navigator.mediaSession.setActionHandler('previoustrack', () => {
@@ -2111,6 +2039,15 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
       }
     }
   };
+
+  // Update media session ref for iOS keepalive to re-assert metadata
+  useEffect(() => {
+    updateMediaSessionRef.current = () => {
+      if (currentPlayingAlbum && currentPlayingAlbum.tracks[currentTrackIndex]) {
+        updateMediaSession(currentPlayingAlbum, currentPlayingAlbum.tracks[currentTrackIndex]);
+      }
+    };
+  }, [currentPlayingAlbum, currentTrackIndex, isVideoMode]);
 
   // Play album function
   const playAlbum = async (album: RSSAlbum, trackIndex: number = 0): Promise<boolean> => {
