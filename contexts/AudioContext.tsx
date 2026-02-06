@@ -127,6 +127,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   const stallCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const recoveryAttemptRef = useRef<number>(0);
   const userInitiatedPauseRef = useRef<boolean>(false); // Track if pause was user-initiated
+  const iosMutedPauseRef = useRef<boolean>(false); // iOS: muted instead of paused to keep lock screen
+  const iosMutedPauseTimeRef = useRef<number>(0); // Saved currentTime at mute-pause
 
   // iOS background audio keepalive refs
   const silentAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -1606,6 +1608,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
 
     const handleTimeUpdate = () => {
       const currentElement = isVideoMode ? video : audio;
+      if (iosMutedPauseRef.current) return;
       setCurrentTime(currentElement.currentTime);
 
       // Update position state for iOS lockscreen controls
@@ -1984,19 +1987,28 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
           artworkUrl = `${baseUrl}${artworkUrl}`;
         }
         
-        // Create artwork array with various sizes
-        const artworkSizes = ['96x96', '128x128', '192x192', '256x256', '384x384', '512x512'];
-        const artwork = artworkSizes.map(size => ({
-          src: artworkUrl,
-          sizes: size,
-          type: 'image/jpeg'
-        }));
-        
-        // Also add a catch-all for any size
-        artwork.push({
-          src: artworkUrl,
-          sizes: 'any',
-          type: 'image/jpeg'
+        // Build artwork array — direct HTTPS URL first (fast), proxy fallback second
+        const artworkSizes: Array<{src: string; sizes: string}> = [];
+
+        // If original artwork is an external HTTPS URL, use it directly as primary (no proxy latency)
+        if (originalArtworkUrl.startsWith('https://')) {
+          ['512x512', '256x256', '96x96'].forEach(size => {
+            artworkSizes.push({ src: originalArtworkUrl, sizes: size });
+          });
+        }
+
+        // Add proxied/local URL as fallback (or primary if no external URL)
+        ['512x512', '256x256', '96x96'].forEach(size => {
+          artworkSizes.push({ src: artworkUrl, sizes: size });
+        });
+
+        // Deduplicate if original and proxied are the same (e.g. local images)
+        const seen = new Set<string>();
+        const artwork = artworkSizes.filter(entry => {
+          const key = `${entry.src}|${entry.sizes}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
         });
         
         navigator.mediaSession.metadata = new MediaMetadata({
@@ -2495,8 +2507,6 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     userInitiatedPauseRef.current = true;
     // Clear the "was playing" flag so visibility handlers don't resume after user pause
     wasPlayingBeforeHiddenRef.current = false;
-    // Stop silent keepalive to prevent audio session from staying alive after user pause
-    stopSilentKeepalive();
 
     // Try ref first, then fallback to DOM query for iOS background compatibility
     let currentElement: HTMLAudioElement | HTMLVideoElement | null = isVideoMode
@@ -2512,24 +2522,32 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     }
 
     if (currentElement) {
-      currentElement.pause();
-      // Update media session playback state
-      if ('mediaSession' in navigator && navigator.mediaSession) {
-        navigator.mediaSession.playbackState = 'paused';
+      const onIOS = isIOS || isIOSDevice();
+      if (onIOS) {
+        currentElement.pause();
+        setIsPlaying(false);
+        // Keep keepalive running on iOS — it maintains the audio session
+        if ('mediaSession' in navigator && navigator.mediaSession) {
+          navigator.mediaSession.playbackState = 'paused';
+        }
+        console.log('✅ iOS Pause: paused (keepalive still running)');
+      } else {
+        currentElement.pause();
+        stopSilentKeepalive();
+        if ('mediaSession' in navigator && navigator.mediaSession) {
+          navigator.mediaSession.playbackState = 'paused';
+        }
+        console.log('✅ Pause executed successfully');
       }
-      console.log('✅ Pause executed successfully');
     } else {
       console.warn('⚠️ Pause: No audio/video element found');
     }
   };
 
   // Resume function - uses DOM ID as fallback for iOS background reliability
-  const resume = () => {
+  const resume = async () => {
     // Clear user-initiated pause flag since we're resuming
     userInitiatedPauseRef.current = false;
-
-    // Restart silent keepalive for iOS background audio (stopped on pause)
-    startSilentKeepalive();
 
     // Ensure Web Audio context is running (critical for volume normalization)
     ensureWebAudioRunning();
@@ -2548,25 +2566,49 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     }
 
     if (currentElement) {
-      currentElement.play();
-      // Update media session playback state
-      if ('mediaSession' in navigator && navigator.mediaSession) {
-        navigator.mediaSession.playbackState = 'playing';
+      try {
+        await currentElement.play();
+        setIsPlaying(true);
+        // Start silent keepalive AFTER successful play (iOS needs primary audio session first)
+        startSilentKeepalive();
+        // Update media session playback state
+        if ('mediaSession' in navigator && navigator.mediaSession) {
+          navigator.mediaSession.playbackState = 'playing';
+        }
+        console.log('✅ Resume executed successfully');
+      } catch (err) {
+        console.warn('⚠️ Resume: play() failed, retrying in 300ms...', err);
+        // Single retry after short delay (iOS sometimes needs a moment)
+        setTimeout(async () => {
+          try {
+            await currentElement!.play();
+            setIsPlaying(true);
+            startSilentKeepalive();
+            if ('mediaSession' in navigator && navigator.mediaSession) {
+              navigator.mediaSession.playbackState = 'playing';
+            }
+            console.log('✅ Resume retry succeeded');
+          } catch (retryErr) {
+            console.error('❌ Resume retry failed:', retryErr);
+            if ('mediaSession' in navigator && navigator.mediaSession) {
+              navigator.mediaSession.playbackState = 'paused';
+            }
+          }
+        }, 300);
       }
-      console.log('✅ Resume executed successfully');
     } else {
       console.warn('⚠️ Resume: No audio/video element found');
     }
   };
 
-  // Update pause/resume refs for media session handlers
+  // Update pause/resume refs for media session handlers (no deps — must stay current every render)
   useEffect(() => {
     pauseRef.current = pause;
-  }, [isVideoMode]);
+  });
 
   useEffect(() => {
     resumeRef.current = resume;
-  }, [isVideoMode]);
+  });
 
   // Seek function
   const seek = (time: number) => {
