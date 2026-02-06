@@ -2524,13 +2524,18 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     if (currentElement) {
       const onIOS = isIOS || isIOSDevice();
       if (onIOS) {
+        // Save position before pausing — iOS may ignore .pause() from lock screen
+        // so we also mute as a fallback. On resume we seek back to this position.
+        iosMutedPauseTimeRef.current = currentElement.currentTime;
+        iosMutedPauseRef.current = true;
         currentElement.pause();
+        currentElement.muted = true;
         setIsPlaying(false);
         // Keep keepalive running on iOS — it maintains the audio session
         if ('mediaSession' in navigator && navigator.mediaSession) {
           navigator.mediaSession.playbackState = 'paused';
         }
-        console.log('✅ iOS Pause: paused (keepalive still running)');
+        console.log('✅ iOS Pause: paused+muted at', iosMutedPauseTimeRef.current.toFixed(1), 's (keepalive still running)');
       } else {
         currentElement.pause();
         stopSilentKeepalive();
@@ -2566,6 +2571,14 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     }
 
     if (currentElement) {
+      // iOS: seek back to saved position and unmute (pause may not have stuck)
+      if (iosMutedPauseRef.current) {
+        currentElement.currentTime = iosMutedPauseTimeRef.current;
+        currentElement.muted = false;
+        iosMutedPauseRef.current = false;
+        console.log('✅ iOS Resume: seeked back to', iosMutedPauseTimeRef.current.toFixed(1), 's and unmuted');
+      }
+
       try {
         await currentElement.play();
         setIsPlaying(true);
