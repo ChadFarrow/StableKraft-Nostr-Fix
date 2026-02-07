@@ -809,17 +809,17 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
       <div style={backgroundStyle} />
       
       {/* Content layer - relative positioned above background */}
-      <div className="min-h-screen text-white relative z-10">
-        <div className="container mx-auto px-6 pt-16 md:pt-12 pb-40">
+      <div className="min-h-screen lg:h-[100dvh] lg:overflow-hidden text-white relative z-10">
+        <div className="container mx-auto px-6 pt-16 md:pt-12 pb-40 lg:pb-0 lg:h-full lg:flex lg:flex-col">
         {/* Back button */}
-        <div className="mb-6">
+        <div className="mb-6 lg:flex-shrink-0">
           <BackButton label="Back" />
         </div>
 
         {/* Two-column layout on desktop, single column on mobile */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 mb-8 lg:mb-0 lg:flex-1 lg:min-h-0 lg:grid-rows-1">
           {/* Left Column: Album Art and Info (2/5 width) */}
-          <div className="flex flex-col gap-6 lg:col-span-2 lg:sticky lg:top-24 lg:self-start">
+          <div className="flex flex-col gap-6 lg:col-span-2 lg:overflow-y-auto scrollbar-hide">
             {/* Album Art with Play Button Overlay */}
             <div className="relative group mx-auto lg:mx-0 w-[280px] h-[280px] lg:w-full lg:h-auto lg:aspect-square lg:max-w-[400px]">
             <Image 
@@ -1089,9 +1089,9 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
         </div>
 
           {/* Right Column: Track List (Desktop) / Below (Mobile) (3/5 width) */}
-          <div className="lg:col-span-3">
+          <div className="lg:col-span-3 lg:overflow-y-auto scrollbar-hide lg:pb-28">
             {/* Track List */}
-            <div className="bg-black/40 backdrop-blur-sm rounded-lg p-4 md:p-6 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
+            <div className="bg-black/40 backdrop-blur-sm rounded-lg p-4 md:p-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
                 <h2 className="text-xl font-semibold text-center sm:text-left">Tracks</h2>
 
@@ -1276,50 +1276,50 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
                 })}
               </div>
             </div>
+
+            {/* PodRoll and Publisher Recommendations */}
+            {podrollAlbums.length > 0 && (
+              <div className="bg-black/40 backdrop-blur-sm rounded-lg p-6 mt-6">
+                <h2 className="text-xl font-semibold mb-4">You Might Also Like</h2>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  {podrollAlbums.map((podrollAlbum, index) => (
+                    <Link
+                      key={index}
+                      href={generateAlbumUrl(podrollAlbum.title)}
+                      className="group block"
+                    >
+                      <div className="bg-white/5 hover:bg-white/10 rounded-lg p-3 transition-all duration-200 hover:scale-105">
+                        <div className="aspect-square relative mb-3">
+                          <Image
+                            src={getAlbumArtworkUrl(podrollAlbum.coverArt || '', 'thumbnail')}
+                            alt={podrollAlbum.title}
+                            width={150}
+                            height={150}
+                            className="w-full h-full object-cover rounded-md"
+                            onError={(e) => {
+                              // Fallback to placeholder on error
+                              const target = e.target as HTMLImageElement;
+                              target.src = getPlaceholderImageUrl('thumbnail');
+                            }}
+                          />
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded-md transition-all duration-200 flex items-center justify-center">
+                            <Play className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+                          </div>
+                        </div>
+                        <h3 className="font-semibold text-white text-sm mb-1 overflow-hidden line-clamp-2">
+                          {podrollAlbum.title}
+                        </h3>
+                        <p className="text-gray-400 text-xs">
+                          {podrollAlbum.artist}
+                        </p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
-
-        {/* PodRoll and Publisher Recommendations */}
-        {podrollAlbums.length > 0 && (
-          <div className="bg-black/40 backdrop-blur-sm rounded-lg p-6 mt-8">
-            <h2 className="text-xl font-semibold mb-4">You Might Also Like</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              {podrollAlbums.map((podrollAlbum, index) => (
-                <Link
-                  key={index}
-                  href={generateAlbumUrl(podrollAlbum.title)}
-                  className="group block"
-                >
-                  <div className="bg-white/5 hover:bg-white/10 rounded-lg p-3 transition-all duration-200 hover:scale-105">
-                    <div className="aspect-square relative mb-3">
-                      <Image
-                        src={getAlbumArtworkUrl(podrollAlbum.coverArt || '', 'thumbnail')}
-                        alt={podrollAlbum.title}
-                        width={150}
-                        height={150}
-                        className="w-full h-full object-cover rounded-md"
-                        onError={(e) => {
-                          // Fallback to placeholder on error
-                          const target = e.target as HTMLImageElement;
-                          target.src = getPlaceholderImageUrl('thumbnail');
-                        }}
-                      />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 rounded-md transition-all duration-200 flex items-center justify-center">
-                        <Play className="h-8 w-8 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
-                      </div>
-                    </div>
-                    <h3 className="font-semibold text-white text-sm mb-1 overflow-hidden line-clamp-2">
-                      {podrollAlbum.title}
-                    </h3>
-                    <p className="text-gray-400 text-xs">
-                      {podrollAlbum.artist}
-                    </p>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
         </div>
       </div>
     </div>
