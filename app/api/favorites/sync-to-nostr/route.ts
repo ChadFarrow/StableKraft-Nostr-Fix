@@ -13,16 +13,10 @@ export interface UnpublishedFavorite {
 /**
  * GET /api/favorites/sync-to-nostr
  * Get list of unpublished favorites with metadata for publishing to Nostr
- * Query params:
- * - force=true: Return items needing NIP-51 republishing
- * - force=all: Return ALL favorites (for complete re-sync)
  */
 export async function GET(request: NextRequest) {
   try {
     const userId = request.headers.get('x-nostr-user-id');
-    const forceParam = request.nextUrl.searchParams.get('force');
-    const forceNip51 = forceParam === 'true';
-    const forceAll = forceParam === 'all';
 
     if (!userId) {
       return NextResponse.json({
@@ -33,19 +27,8 @@ export async function GET(request: NextRequest) {
 
     const items: UnpublishedFavorite[] = [];
 
-    // Get track favorites:
-    // - If force=all: get ALL favorites (complete re-sync)
-    // - If force=true: get those that need NIP-51 republishing (published but not in NIP-51 format)
-    // - Otherwise: get unpublished ones
-    const trackWhere: { userId: string; nostrEventId?: { not: null } | null; nip51Format?: boolean } = { userId };
-    if (forceAll) {
-      // Get all favorites
-    } else if (forceNip51) {
-      trackWhere.nostrEventId = { not: null };
-      trackWhere.nip51Format = false;
-    } else {
-      trackWhere.nostrEventId = null;
-    }
+    // Get unpublished track favorites
+    const trackWhere: { userId: string; nostrEventId: null } = { userId, nostrEventId: null };
 
     const trackFavorites = await prisma.favoriteTrack.findMany({
       where: trackWhere,
@@ -97,19 +80,8 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Get album favorites:
-    // - If force=all: get ALL favorites (complete re-sync)
-    // - If force=true: get those that need NIP-51 republishing (published but not in NIP-51 format)
-    // - Otherwise: get unpublished ones
-    const albumWhere: { userId: string; nostrEventId?: { not: null } | null; nip51Format?: boolean } = { userId };
-    if (forceAll) {
-      // Get all favorites
-    } else if (forceNip51) {
-      albumWhere.nostrEventId = { not: null };
-      albumWhere.nip51Format = false;
-    } else {
-      albumWhere.nostrEventId = null;
-    }
+    // Get unpublished album favorites
+    const albumWhere: { userId: string; nostrEventId: null } = { userId, nostrEventId: null };
 
     const albumFavorites = await prisma.favoriteAlbum.findMany({
       where: albumWhere,

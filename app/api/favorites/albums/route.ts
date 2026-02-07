@@ -59,6 +59,29 @@ export async function GET(request: NextRequest) {
     // Create a map of feedId -> feed for quick lookup
     const feedMap = new Map(feeds.map(feed => [feed.id, feed]));
 
+    // For unmatched feedIds, try looking up by the `guid` column as a fallback
+    const unmatchedIds = feedIds.filter(id => !feedMap.has(id) && !id.startsWith('artist-'));
+    if (unmatchedIds.length > 0) {
+      const guidMatches = await prisma.feed.findMany({
+        where: { guid: { in: unmatchedIds } },
+        include: {
+          Track: {
+            take: 5,
+            orderBy: { trackOrder: 'asc' },
+            select: { id: true, title: true, artist: true, duration: true, image: true }
+          },
+          _count: { select: { Track: true } }
+        }
+      });
+      for (const feed of guidMatches) {
+        // Map the favorite's feedId (which matched the guid column) to this feed
+        const matchedFavId = unmatchedIds.find(id => id === feed.guid);
+        if (matchedFavId && !feedMap.has(matchedFavId)) {
+          feedMap.set(matchedFavId, feed);
+        }
+      }
+    }
+
     // Collect synthetic artist IDs (from /api/publishers) that need DB resolution
     const syntheticArtistIds = new Set<string>();
     for (const fav of favoriteAlbums) {
@@ -222,6 +245,14 @@ export async function GET(request: NextRequest) {
             }
           }
         }
+      }
+    }
+
+    // Clean up any publishers still showing raw GUIDs as titles
+    for (const pub of feedsWithFavorites) {
+      if (pub.type === 'publisher' && pub.title === pub.id && /^[0-9a-f-]{8,}$/i.test(pub.id)) {
+        (pub as any).title = 'Unknown Publisher';
+        if (!pub.artist) (pub as any).artist = 'Unknown Publisher';
       }
     }
 
