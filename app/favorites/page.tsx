@@ -251,10 +251,11 @@ function FavoritesPageContent() {
 
   const handleFavoriteToggle = (trackId?: string) => (isFavorite: boolean) => {
     if (!isFavorite && trackId) {
-      // Optimistically remove the track from local state so UI updates immediately
+      // Optimistically remove the track from local state — no reload needed
       setFavoriteTracks(prev => prev.filter(t => t.id !== trackId));
+      return;
     }
-    // Also reload to stay in sync with the DB (delayed to let DELETE complete)
+    // Only reload when re-favoriting (to get fresh data)
     setTimeout(() => {
       if (isNostrAuthenticated && nostrUser) {
         loadFavorites(null, nostrUser.id);
