@@ -35,6 +35,10 @@ Playlists use `<podcast:remoteItem>` with `feedGuid` + `itemGuid`. On `?refresh`
 3. Parse new feeds (imports tracks + V4V data)
 4. Discover/link publisher feeds
 
+**Feed import with duplicate IDs**: Podcast Index uses numeric IDs (`6876105`) while our DB uses GUIDs (`b2048129-...`). When `importFeedToDatabase` finds a URL already exists under a different ID, it redirects to the existing feed and imports tracks into it (previously it returned early with 0 tracks — fixed in `lib/feed-parsing.ts`).
+
+**Image URL validation**: Track images are validated in `lib/playlist/resolver.ts` — bare domain URLs (e.g., `http://thebearsnare.com`) are rejected, falling back to the feed-level image.
+
 **Resolution Limitations** (expect 80-90% resolution rate):
 - **Dead feeds**: Some `feedGuid` entries exist in Podcast Index but have no URL (feed removed/dead)
 - **Duplicate GUIDs**: Same song published on multiple platforms (Wavlake vs original publisher) has different `itemGuid` values - playlist may reference one version while database has another
@@ -102,3 +106,17 @@ Files to modify (7 total):
 7. `app/playlist/[id]/page.tsx` - Create dedicated playlist page
 
 After code changes, populate database: `curl http://localhost:3000/api/playlist/[id]?refresh`
+
+### Playlist Page UI
+- All playlist pages use `PlaylistTemplateCompact` component
+- Back button links to `/?filter=playlist` (the main page Playlists filter)
+- Grouped view (episodes/play counts): `EpisodeSection.tsx` renders collapsible sections
+- Tracks panel background: `bg-black/75` for readability over page backgrounds
+- Track rows in grouped view: single-row horizontal layout with `bg-black/50`
+
+### Episode/Play Count Markers
+Playlists can include `<podcast:txt purpose="episode">` or `<podcast:txt purpose="playcount">` markers in XML. These group tracks into collapsible sections:
+- **Parser** (`lib/playlist/parser.ts`): Extracts markers via regex, assigns `episodeTitle`/`episodeId` to tracks
+- **Resolver** (`lib/playlist/resolver.ts`): Passes episode context through to resolved tracks
+- **Display**: `EpisodeSection.tsx` (grouped view), amber badges in flat view
+- After adding markers to XML, refresh the playlist: `curl https://stablekraft.app/api/playlist/[id]?refresh`
