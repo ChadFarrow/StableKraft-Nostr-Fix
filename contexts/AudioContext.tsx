@@ -119,21 +119,12 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   const playPreviousTrackRef = useRef<() => Promise<void>>();
   const pauseRef = useRef<() => void>();
   const resumeRef = useRef<() => void>();
-  const updateMediaSessionRef = useRef<() => void>();
-
   // Silent stall detection refs - detect when audio stops advancing while supposedly playing
   const lastKnownTimeRef = useRef<number>(0);
   const staleTimeCounterRef = useRef<number>(0);
   const stallCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const recoveryAttemptRef = useRef<number>(0);
   const userInitiatedPauseRef = useRef<boolean>(false); // Track if pause was user-initiated
-  const iosMutedPauseRef = useRef<boolean>(false); // iOS: muted instead of paused to keep lock screen
-  const iosMutedPauseTimeRef = useRef<number>(0); // Saved currentTime at mute-pause
-
-  // iOS background audio keepalive refs
-  const silentAudioRef = useRef<HTMLAudioElement | null>(null);
-  const keepaliveIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const isInBackgroundRef = useRef(false);
 
   // Web Audio API for volume normalization (compressor)
   const webAudioContextRef = useRef<AudioContext | null>(null);
@@ -372,51 +363,6 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     setIsIOS(isIOSDevice());
   }, [isIOSDevice]);
 
-  // iOS background audio keepalive - plays silent audio to keep audio session alive
-  const startSilentKeepalive = useCallback(() => {
-    if (!isIOSDevice() || keepaliveIntervalRef.current) return;
-
-    console.log('📱 Starting iOS silent keepalive');
-
-    if (!silentAudioRef.current) {
-      const silent = new Audio('/silent-500ms.mp3');
-      silent.loop = true;
-      silent.volume = 0.001; // Near-silent but not zero (zero might be optimized out)
-      silentAudioRef.current = silent;
-    }
-
-    silentAudioRef.current.play().catch(() => {
-      // Ignore errors - might fail if no user interaction yet
-    });
-
-    // Re-assert media session metadata after starting silent audio
-    // iOS may reset metadata when a new audio element starts playing
-    setTimeout(() => {
-      if (updateMediaSessionRef.current) {
-        console.log('📱 Re-asserting media session metadata after keepalive start');
-        updateMediaSessionRef.current();
-      }
-    }, 100);
-
-    // Periodically re-trigger play to ensure session stays alive
-    keepaliveIntervalRef.current = setInterval(() => {
-      if (isInBackgroundRef.current && silentAudioRef.current) {
-        silentAudioRef.current.play().catch(() => {});
-      }
-    }, 10000); // Every 10 seconds
-  }, [isIOSDevice]);
-
-  const stopSilentKeepalive = useCallback(() => {
-    if (keepaliveIntervalRef.current) {
-      clearInterval(keepaliveIntervalRef.current);
-      keepaliveIntervalRef.current = null;
-    }
-    if (silentAudioRef.current) {
-      silentAudioRef.current.pause();
-    }
-    console.log('📱 Stopped iOS silent keepalive');
-  }, []);
-
   // Initialize Web Audio API for volume normalization (compressor)
   // SKIP on iOS - Web Audio breaks background playback when app is minimized
   const initWebAudio = useCallback(() => {
@@ -593,7 +539,14 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         // This prevents iOS from showing skip forward/back buttons
         navigator.mediaSession.setActionHandler('seekbackward', null);
         navigator.mediaSession.setActionHandler('seekforward', null);
-        navigator.mediaSession.setActionHandler('seekto', null);
+        navigator.mediaSession.setActionHandler('seekto', (details) => {
+          if (details.seekTime != null) {
+            const el = document.getElementById('stablekraft-audio-player') as HTMLAudioElement;
+            if (el) {
+              el.currentTime = details.seekTime;
+            }
+          }
+        });
 
         // Set initial playback state to 'none' - will be updated when playback starts
         navigator.mediaSession.playbackState = 'none';
@@ -605,119 +558,26 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     }
   }, []); // Run only once on mount
 
-  // iOS Background Audio Fix: Handle visibility changes (screen lock/unlock)
-  // When the user locks their phone, iOS may pause audio. This handler resumes playback
-  // when the app becomes visible again (user unlocks phone).
-  const wasPlayingBeforeHiddenRef = useRef(false);
-
+  // Resume Web Audio context when page becomes visible (needed for non-iOS volume normalization)
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
     const handleVisibilityChange = () => {
-      const isVisible = document.visibilityState === 'visible';
-
-      if (!isVisible) {
-        // Page is being hidden (screen locked or app backgrounded)
-        isInBackgroundRef.current = true;
-
-        // Remember if we were playing so we can resume
-        const audio = document.getElementById('stablekraft-audio-player') as HTMLAudioElement;
-        const video = document.getElementById('stablekraft-video-player') as HTMLVideoElement;
-        wasPlayingBeforeHiddenRef.current = !!(
-          (audio && !audio.paused) ||
-          (video && !video.paused)
-        );
-        console.log('📱 Page hidden, was playing:', wasPlayingBeforeHiddenRef.current);
-
-        // Start silent keepalive on iOS when going to background while playing
-        if (wasPlayingBeforeHiddenRef.current) {
-          startSilentKeepalive();
-        }
-      } else {
-        // Page is visible again (screen unlocked)
-        isInBackgroundRef.current = false;
-        console.log('📱 Page visible, checking audio state...');
-
-        // Stop silent keepalive when returning to foreground
-        stopSilentKeepalive();
-
-        // Resume Web Audio context if suspended
+      if (document.visibilityState === 'visible') {
         const ctx = webAudioContextRef.current;
         if (ctx && ctx.state === 'suspended') {
-          console.log('🔊 Resuming suspended Web Audio context after visibility change');
           ctx.resume().catch(err => {
-            console.warn('⚠️ Failed to resume Web Audio context:', err);
+            console.warn('Failed to resume Web Audio context:', err);
           });
-        }
-
-        // Check if audio should be playing but isn't
-        const audio = document.getElementById('stablekraft-audio-player') as HTMLAudioElement;
-        const video = document.getElementById('stablekraft-video-player') as HTMLVideoElement;
-
-        // If we were playing before and audio is now paused, try to resume
-        // BUT respect user-initiated pause (e.g., from lock screen controls)
-        if (wasPlayingBeforeHiddenRef.current && !userInitiatedPauseRef.current) {
-          if (audio && audio.paused && audio.currentTime > 0 && audio.src) {
-            console.log('📱 Attempting to resume audio after visibility change');
-            // Use resumeRef for proper state management instead of direct audio.play()
-            if (resumeRef.current) {
-              resumeRef.current();
-              console.log('✅ Audio resumed after screen unlock via resumeRef');
-            }
-          }
-          if (video && video.paused && video.currentTime > 0 && video.src) {
-            console.log('📱 Attempting to resume video after visibility change');
-            // Use resumeRef for proper state management instead of direct video.play()
-            if (resumeRef.current) {
-              resumeRef.current();
-              console.log('✅ Video resumed after screen unlock via resumeRef');
-            }
-          }
-        } else if (userInitiatedPauseRef.current) {
-          console.log('📱 Skipping auto-resume: user explicitly paused');
         }
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // Also handle pageshow event - more reliable on iOS for app switching
-    const handlePageShow = (event: PageTransitionEvent) => {
-      // event.persisted is true when page is restored from bfcache
-      console.log('📱 pageshow event, persisted:', event.persisted);
-
-      // Resume Web Audio context if needed
-      const ctx = webAudioContextRef.current;
-      if (ctx && ctx.state === 'suspended') {
-        console.log('🔊 Resuming Web Audio context on pageshow');
-        ctx.resume().catch(err => {
-          console.warn('⚠️ Failed to resume Web Audio on pageshow:', err);
-        });
-      }
-
-      // Check if audio was interrupted and needs to be resumed
-      // BUT respect user-initiated pause (e.g., from lock screen controls)
-      if (wasPlayingBeforeHiddenRef.current && !userInitiatedPauseRef.current) {
-        const audio = document.getElementById('stablekraft-audio-player') as HTMLAudioElement;
-        if (audio && audio.paused && audio.currentTime > 0 && audio.src) {
-          console.log('📱 Resuming audio on pageshow');
-          // Use resumeRef for proper state management instead of direct audio.play()
-          if (resumeRef.current) {
-            resumeRef.current();
-          }
-        }
-      } else if (userInitiatedPauseRef.current) {
-        console.log('📱 Skipping pageshow resume: user explicitly paused');
-      }
-    };
-
-    window.addEventListener('pageshow', handlePageShow);
-
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('pageshow', handlePageShow);
     };
-  }, [startSilentKeepalive, stopSilentKeepalive]); // Re-run when keepalive functions change
+  }, []);
 
   // Save state to IndexedDB when it changes - with debouncing
   useEffect(() => {
@@ -1569,11 +1429,6 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         navigator.mediaSession.playbackState = 'playing';
       }
 
-      // Start silent keepalive during track transition on iOS (especially important in background)
-      if (isInBackgroundRef.current) {
-        startSilentKeepalive();
-      }
-
       // Auto-boost: fire and forget - doesn't block next track (disabled in radio mode)
       // Check settings and trigger boost for the just-finished track
       if (!radioMode && settings.autoBoostEnabled && currentPlayingAlbum && currentTrackIndex >= 0) {
@@ -1601,14 +1456,11 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         if ('mediaSession' in navigator && navigator.mediaSession) {
           navigator.mediaSession.playbackState = 'paused';
         }
-        // Stop keepalive if track transition failed
-        stopSilentKeepalive();
       }
     };
 
     const handleTimeUpdate = () => {
       const currentElement = isVideoMode ? video : audio;
-      if (iosMutedPauseRef.current) return;
       setCurrentTime(currentElement.currentTime);
 
       // Update position state for iOS lockscreen controls
@@ -2053,15 +1905,6 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     }
   };
 
-  // Update media session ref for iOS keepalive to re-assert metadata
-  useEffect(() => {
-    updateMediaSessionRef.current = () => {
-      if (currentPlayingAlbum && currentPlayingAlbum.tracks[currentTrackIndex]) {
-        updateMediaSession(currentPlayingAlbum, currentPlayingAlbum.tracks[currentTrackIndex]);
-      }
-    };
-  }, [currentPlayingAlbum, currentTrackIndex, isVideoMode]);
-
   // Play album function
   const playAlbum = async (album: RSSAlbum, trackIndex: number = 0): Promise<boolean> => {
     if (!album.tracks || album.tracks.length === 0) {
@@ -2501,116 +2344,68 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     return success;
   };
 
-  // Pause function - uses DOM ID as fallback for iOS background reliability
+  // Pause function - uses DOM ID as fallback for reliability
   const pause = () => {
-    // Mark this as user-initiated pause so we don't try to auto-recover
     userInitiatedPauseRef.current = true;
-    // Clear the "was playing" flag so visibility handlers don't resume after user pause
-    wasPlayingBeforeHiddenRef.current = false;
 
-    // Try ref first, then fallback to DOM query for iOS background compatibility
     let currentElement: HTMLAudioElement | HTMLVideoElement | null = isVideoMode
       ? videoRef.current
       : audioRef.current;
 
-    // Fallback to DOM query if ref is unavailable (iOS background edge case)
     if (!currentElement) {
       currentElement = isVideoMode
         ? document.getElementById('stablekraft-video-player') as HTMLVideoElement
         : document.getElementById('stablekraft-audio-player') as HTMLAudioElement;
-      console.log('📱 Pause: Using DOM fallback, element found:', !!currentElement);
     }
 
     if (currentElement) {
-      const onIOS = isIOS || isIOSDevice();
-      if (onIOS) {
-        // Save position before pausing — iOS may ignore .pause() from lock screen
-        // so we also mute as a fallback. On resume we seek back to this position.
-        iosMutedPauseTimeRef.current = currentElement.currentTime;
-        iosMutedPauseRef.current = true;
-        currentElement.pause();
-        currentElement.muted = true;
-        setIsPlaying(false);
-        // Keep keepalive running on iOS — it maintains the audio session
-        if ('mediaSession' in navigator && navigator.mediaSession) {
-          navigator.mediaSession.playbackState = 'paused';
-        }
-        console.log('✅ iOS Pause: paused+muted at', iosMutedPauseTimeRef.current.toFixed(1), 's (keepalive still running)');
-      } else {
-        currentElement.pause();
-        stopSilentKeepalive();
-        if ('mediaSession' in navigator && navigator.mediaSession) {
-          navigator.mediaSession.playbackState = 'paused';
-        }
-        console.log('✅ Pause executed successfully');
+      currentElement.pause();
+      setIsPlaying(false);
+      if ('mediaSession' in navigator && navigator.mediaSession) {
+        navigator.mediaSession.playbackState = 'paused';
       }
-    } else {
-      console.warn('⚠️ Pause: No audio/video element found');
     }
   };
 
-  // Resume function - uses DOM ID as fallback for iOS background reliability
+  // Resume function - uses DOM ID as fallback for reliability
   const resume = async () => {
-    // Clear user-initiated pause flag since we're resuming
     userInitiatedPauseRef.current = false;
-
-    // Ensure Web Audio context is running (critical for volume normalization)
     ensureWebAudioRunning();
 
-    // Try ref first, then fallback to DOM query for iOS background compatibility
     let currentElement: HTMLAudioElement | HTMLVideoElement | null = isVideoMode
       ? videoRef.current
       : audioRef.current;
 
-    // Fallback to DOM query if ref is unavailable (iOS background edge case)
     if (!currentElement) {
       currentElement = isVideoMode
         ? document.getElementById('stablekraft-video-player') as HTMLVideoElement
         : document.getElementById('stablekraft-audio-player') as HTMLAudioElement;
-      console.log('📱 Resume: Using DOM fallback, element found:', !!currentElement);
     }
 
     if (currentElement) {
-      // iOS: seek back to saved position and unmute (pause may not have stuck)
-      if (iosMutedPauseRef.current) {
-        currentElement.currentTime = iosMutedPauseTimeRef.current;
-        currentElement.muted = false;
-        iosMutedPauseRef.current = false;
-        console.log('✅ iOS Resume: seeked back to', iosMutedPauseTimeRef.current.toFixed(1), 's and unmuted');
-      }
-
       try {
         await currentElement.play();
         setIsPlaying(true);
-        // Start silent keepalive AFTER successful play (iOS needs primary audio session first)
-        startSilentKeepalive();
-        // Update media session playback state
         if ('mediaSession' in navigator && navigator.mediaSession) {
           navigator.mediaSession.playbackState = 'playing';
         }
-        console.log('✅ Resume executed successfully');
       } catch (err) {
-        console.warn('⚠️ Resume: play() failed, retrying in 300ms...', err);
-        // Single retry after short delay (iOS sometimes needs a moment)
+        console.warn('Resume play() failed, retrying in 300ms...', err);
         setTimeout(async () => {
           try {
             await currentElement!.play();
             setIsPlaying(true);
-            startSilentKeepalive();
             if ('mediaSession' in navigator && navigator.mediaSession) {
               navigator.mediaSession.playbackState = 'playing';
             }
-            console.log('✅ Resume retry succeeded');
           } catch (retryErr) {
-            console.error('❌ Resume retry failed:', retryErr);
+            console.error('Resume retry failed:', retryErr);
             if ('mediaSession' in navigator && navigator.mediaSession) {
               navigator.mediaSession.playbackState = 'paused';
             }
           }
         }, 300);
       }
-    } else {
-      console.warn('⚠️ Resume: No audio/video element found');
     }
   };
 
