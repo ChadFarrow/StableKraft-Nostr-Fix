@@ -114,6 +114,28 @@ After code changes, populate database: `curl http://localhost:3000/api/playlist/
 - Tracks panel background: `bg-black/75` for readability over page backgrounds
 - Track rows in grouped view: single-row horizontal layout with `bg-black/50`
 
+### Nostr Publish Queue (`lib/nostr/publish-queue.ts`)
+Favoriting a track saves to DB immediately, then queues the Nostr publish in the background. This prevents each click from opening 7+ WebSocket connections to relays.
+
+- **`queueFavoritePublish()`** — enqueues a favorite, returns promise resolving with `nostrEventId`
+- **`queueFavoriteDeletion()`** — enqueues a deletion event
+- **`flushQueue()`** — 500ms debounce, creates ONE `RelayManager`, signs/publishes all queued events with 500ms inter-sign delay for NIP-46 rate limits
+- **30s failure cooldown** — after total relay failure, stops retrying to avoid log spam
+- After publish, FavoriteButton PATCHes the `nostrEventId` back to the DB
+- `FavoriteButton.tsx` imports from publish queue, NOT from `favorites.ts` directly
+
+**Flow**: `click → save to DB (no eventId) → queue Nostr publish → PATCH eventId when done`
+
+### Relay Connection Management (`lib/nostr/relay.ts`)
+- **5s connection timeout** — `RelayManager.connect()` wraps `Relay.connect()` with `Promise.race` (nostr-tools never passes timeout internally)
+- **Always disconnect** — every `RelayManager` must call `disconnectAll()` after publishing, otherwise WebSocket connections leak and accumulate in the browser
+- Per-relay connection warnings are suppressed; callers handle "0 successful connections" with a single summary log
+
+### Favorites Page (`/favorites`)
+- **Optimistic unfavorite** — `handleFavoriteToggle(trackId)` removes the track from local state immediately, no reload needed
+- **Sync button coordination** — `SyncToNostrButton` listens for `'favorites-synced'` custom event to re-fetch its unpublished count. Event is dispatched by `useAutoSyncFavorites` after batch sync and by `FavoriteButton` after a queued publish PATCH succeeds.
+- **Auto-sync** — `useAutoSyncFavorites` hook runs on page load (1.5s delay), batch-publishes unpublished favorites via `batchPublishFavoritesToNostr` in `favorites.ts`
+
 ### Episode/Play Count Markers
 Playlists can include `<podcast:txt purpose="episode">` or `<podcast:txt purpose="playcount">` markers in XML. These group tracks into collapsible sections:
 - **Parser** (`lib/playlist/parser.ts`): Extracts markers via regex, assigns `episodeTitle`/`episodeId` to tracks
