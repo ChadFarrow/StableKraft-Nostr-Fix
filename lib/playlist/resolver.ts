@@ -8,6 +8,18 @@ import type { RemoteItem, ResolvedTrack, EpisodeGroup, PlaylistConfig, GroupedIt
 import type { V4VValue } from '@/lib/v4v-utils';
 import { generateEpisodeId } from './parser';
 
+/** Check if a URL looks like an actual image (not just a bare domain) */
+function isValidImageUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    // Reject bare domains with no path (e.g. "http://thebearsnare.com")
+    return parsed.pathname !== '/' && parsed.pathname !== '';
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Resolve playlist items from database
  */
@@ -65,7 +77,7 @@ export async function resolvePlaylistItems(
         const artistName = track.artist ||
           (track.Feed.artist === 'Unresolved GUID' ? track.Feed.title : track.Feed.artist) ||
           'Unknown Artist';
-        const imageUrl = track.image || track.Feed.image || '/placeholder-podcast.jpg';
+        const imageUrl = (isValidImageUrl(track.image) ? track.image : null) || track.Feed.image || '/placeholder-podcast.jpg';
 
         resolvedTracks.push({
           id: track.id,
