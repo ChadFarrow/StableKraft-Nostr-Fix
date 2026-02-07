@@ -29,9 +29,11 @@ type QueueItem = QueuedPublish | QueuedDeletion;
 let queue: QueueItem[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 let flushing = false;
+let lastFailureTime = 0;
 
 const DEBOUNCE_MS = 500;
 const INTER_SIGN_DELAY_MS = 500;
+const FAILURE_COOLDOWN_MS = 30000; // 30s cooldown after total relay failure
 
 /**
  * Queue a favorite publish. Returns a promise that resolves with the nostrEventId
@@ -45,6 +47,11 @@ export function queueFavoritePublish(
   relays?: string[]
 ): Promise<string | null> {
   return new Promise((resolve) => {
+    // If relays recently failed entirely, skip immediately
+    if (Date.now() - lastFailureTime < FAILURE_COOLDOWN_MS) {
+      resolve(null);
+      return;
+    }
     queue.push({ type: 'favorite', favoriteType: type, itemId, title, artist, relays, resolve });
     scheduleFlush();
   });
@@ -58,6 +65,10 @@ export function queueFavoriteDeletion(
   relays?: string[]
 ): Promise<string | null> {
   return new Promise((resolve) => {
+    if (Date.now() - lastFailureTime < FAILURE_COOLDOWN_MS) {
+      resolve(null);
+      return;
+    }
     queue.push({ type: 'deletion', eventId, relays, resolve });
     scheduleFlush();
   });
@@ -131,7 +142,8 @@ async function flushQueue() {
 
     const successfulConnections = connectionResults.filter(r => r.status === 'fulfilled').length;
     if (successfulConnections === 0 && relayUrls.length > 0) {
-      console.warn('⚠️ Publish queue: Could not connect to any relay');
+      console.warn(`⚠️ Publish queue: Could not connect to any relay (0/${relayUrls.length}). Cooling down ${FAILURE_COOLDOWN_MS / 1000}s.`);
+      lastFailureTime = Date.now();
       items.forEach(item => item.resolve(null));
       flushing = false;
       return;

@@ -37,9 +37,7 @@ export class NostrClient {
     const relays = this.defaultRelays;
     await Promise.all(
       relays.map(url =>
-        this.relayManager.connect(url, { read: true, write: true }).catch(err => {
-          console.warn(`Failed to connect to relay ${url}:`, err);
-        })
+        this.relayManager.connect(url, { read: true, write: true }).catch(() => {})
       )
     );
   }
@@ -51,9 +49,7 @@ export class NostrClient {
   async connectToRelays(urls: string[]): Promise<void> {
     await Promise.all(
       urls.map(url =>
-        this.relayManager.connect(url, { read: true, write: true }).catch(err => {
-          console.warn(`Failed to connect to relay ${url}:`, err);
-        })
+        this.relayManager.connect(url, { read: true, write: true }).catch(() => {})
       )
     );
   }

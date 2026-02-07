@@ -21,7 +21,7 @@ export class RelayManager {
    * @param options - Connection options
    * @returns Relay instance
    */
-  async connect(url: string, options: { read?: boolean; write?: boolean } = {}): Promise<Relay> {
+  async connect(url: string, options: { read?: boolean; write?: boolean; timeout?: number } = {}): Promise<Relay> {
     if (this.relays.has(url)) {
       return this.relays.get(url)!;
     }
@@ -41,24 +41,25 @@ export class RelayManager {
       throw new Error(`Skipping unreachable relay: ${url}`);
     }
 
-    try {
-      const relay = await Relay.connect(url);
+    const timeoutMs = options.timeout ?? 5000;
 
-      const config: RelayConfig = {
-        url,
-        read: options.read !== false,
-        write: options.write !== false,
-      };
+    const relay = await Promise.race([
+      Relay.connect(url),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`Connection timeout: ${url}`)), timeoutMs)
+      ),
+    ]);
 
-      this.relays.set(url, relay);
-      this.configs.set(url, config);
+    const config: RelayConfig = {
+      url,
+      read: options.read !== false,
+      write: options.write !== false,
+    };
 
-      return relay;
-    } catch (error) {
-      // Log connection errors but don't throw - let callers handle failures gracefully
-      console.warn(`⚠️ Failed to connect to relay ${url}:`, error instanceof Error ? error.message : error);
-      throw error;
-    }
+    this.relays.set(url, relay);
+    this.configs.set(url, config);
+
+    return relay;
   }
 
   /**
