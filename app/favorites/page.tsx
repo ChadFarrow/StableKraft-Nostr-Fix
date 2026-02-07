@@ -15,6 +15,7 @@ import LoadingSpinner from '@/components/LoadingSpinner';
 import AlbumCard from '@/components/AlbumCard';
 import FavoriteButton from '@/components/favorites/FavoriteButton';
 import SyncToNostrButton from '@/components/favorites/SyncToNostrButton';
+import PublishPlaylistButton from '@/components/favorites/PublishPlaylistButton';
 import { BoostButton } from '@/components/Lightning/BoostButton';
 import { Heart, Music, Disc, Users, Play, ArrowLeft, Shuffle, ListMusic, Globe, RefreshCw } from 'lucide-react';
 import { toast } from '@/components/Toast';
@@ -42,6 +43,7 @@ interface FavoriteTrack {
     artist: string | null;
     image: string | null;
     id: string;
+    guid?: string | null;
     v4vValue?: any;
     v4vRecipient?: string | null;
     originalUrl?: string | null;
@@ -1125,14 +1127,17 @@ function FavoritesPageContent() {
                       Sort by
                     </label>
                   </div>
-                  <button
-                    onClick={handleShufflePlay}
-                    className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white rounded-lg text-sm font-medium transition-all sm:ml-auto"
-                    title="Shuffle play all tracks"
-                  >
-                    <Shuffle className="w-4 h-4" />
-                    <span>Shuffle All</span>
-                  </button>
+                  <div className="flex items-center gap-2 sm:ml-auto">
+                    <PublishPlaylistButton tracks={sortedTracks} />
+                    <button
+                      onClick={handleShufflePlay}
+                      className="flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white rounded-lg text-sm font-medium transition-all"
+                      title="Shuffle play all tracks"
+                    >
+                      <Shuffle className="w-4 h-4" />
+                      <span>Shuffle All</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-2">

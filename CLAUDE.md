@@ -136,6 +136,24 @@ Favoriting a track saves to DB immediately, then queues the Nostr publish in the
 - **Sync button coordination** — `SyncToNostrButton` listens for `'favorites-synced'` custom event to re-fetch its unpublished count. Event is dispatched by `useAutoSyncFavorites` after batch sync and by `FavoriteButton` after a queued publish PATCH succeeds.
 - **Auto-sync** — `useAutoSyncFavorites` hook runs on page load (1.5s delay), batch-publishes unpublished favorites via `batchPublishFavoritesToNostr` in `favorites.ts`
 
+### Nostr Playlist Publishing (`lib/nostr/playlist-events.ts`)
+Favorites can be published as a kind 34139 addressable Nostr event via "Share to Nostr" button on the Tracks tab.
+
+- **`createPlaylistEventTemplate()`** — builds unsigned event with `d` tag (`stablekraft-favorites`), title, `i` tags with podcast GUIDs
+- **`publishPlaylistToNostr()`** — signs via unified signer, publishes to relays, returns `{ success, eventId, naddr }`
+- **Addressable event** — re-publishing replaces previous version (same `d` tag, same `naddr`)
+- **Track order** — uses `sortedTracks` (matches whatever sort the user has selected)
+- **Title** — auto-generated from user's Nostr display name: `"{name}'s Favorite Tracks"`
+- **`i` tags** — per-track `podcast:item:guid:{guid}` + deduplicated `podcast:guid:{feedGuid}` for Podcast Index resolution
+- **WebSocket safety** — relay connections wrapped in `try/finally` to guarantee `disconnectAll()`
+- **Key files**: `lib/nostr/playlist-events.ts`, `components/favorites/PublishPlaylistButton.tsx`, `components/favorites/PublishPlaylistModal.tsx`
+
+### Favorite Publishers Resolution
+Publisher favorites stored by `feedId` (GUID). When a publisher isn't in the local DB or `KNOWN_PUBLISHERS`:
+- **API** (`app/api/favorites/albums/route.ts`) resolves title/artist/image from Podcast Index using `feedId` as GUID directly
+- **Album count** — batch `groupBy` query matches resolved artist name against non-publisher feeds in DB
+- Previously showed raw GUIDs as titles with placeholder images — fixed by falling back to Podcast Index lookup
+
 ### Episode/Play Count Markers
 Playlists can include `<podcast:txt purpose="episode">` or `<podcast:txt purpose="playcount">` markers in XML. These group tracks into collapsible sections:
 - **Parser** (`lib/playlist/parser.ts`): Extracts markers via regex, assigns `episodeTitle`/`episodeId` to tracks

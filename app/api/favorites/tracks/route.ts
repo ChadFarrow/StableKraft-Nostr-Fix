@@ -55,6 +55,7 @@ export async function GET(request: NextRequest) {
             artist: true,
             image: true,
             id: true,
+            guid: true,
             v4vValue: true,
             v4vRecipient: true,
             originalUrl: true
@@ -78,6 +79,7 @@ export async function GET(request: NextRequest) {
               artist: true,
               image: true,
               id: true,
+              guid: true,
               v4vValue: true,
               v4vRecipient: true,
               originalUrl: true
@@ -85,7 +87,7 @@ export async function GET(request: NextRequest) {
           }
         }
       });
-      
+
       // Combine tracks found by id and guid
       tracks = [...tracks, ...tracksByGuid];
       
@@ -104,6 +106,7 @@ export async function GET(request: NextRequest) {
                 artist: true,
                 image: true,
                 id: true,
+                guid: true,
                 v4vValue: true,
                 v4vRecipient: true,
                 originalUrl: true
@@ -111,7 +114,7 @@ export async function GET(request: NextRequest) {
             }
           }
         });
-        
+
         // Combine all tracks
         tracks = [...tracks, ...tracksByAudioUrl];
       }

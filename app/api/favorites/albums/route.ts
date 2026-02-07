@@ -114,34 +114,48 @@ export async function GET(request: NextRequest) {
       }
     });
 
-    // For publisher favorites without images, try to fetch from Podcast Index
-    // Limit to first 5 to avoid too many API calls (batch image fetch optimization)
-    const publisherFavorites = feedsWithFavorites.filter(f => f.type === 'publisher' && !f.image);
-    if (publisherFavorites.length > 0) {
-      // Collect all feedGuids for batch lookup
-      const publisherGuids = publisherFavorites
-        .slice(0, 5) // Limit API calls
-        .map(p => ({ id: p.id, info: getPublisherInfo(p.id) }))
-        .filter(p => p.info?.feedGuid);
+    // For publisher favorites missing data (image, title), resolve from Podcast Index
+    // The feedId IS the feed GUID, so we can look it up directly
+    const unresolvedPublishers = feedsWithFavorites.filter(f =>
+      f.type === 'publisher' && (!f.image || f.title === f.id)
+    );
+    if (unresolvedPublishers.length > 0) {
+      const lookups = unresolvedPublishers.slice(0, 10).map(p => {
+        const info = getPublisherInfo(p.id);
+        // Use feedGuid from KNOWN_PUBLISHERS if available, otherwise use the feedId directly
+        const guid = info?.feedGuid || p.id;
+        return { id: p.id, guid };
+      });
 
-      // Fetch publisher images from Podcast Index (limited parallel calls)
-      const imageResults = await Promise.allSettled(
-        publisherGuids.map(async ({ id, info }) => {
+      const results = await Promise.allSettled(
+        lookups.map(async ({ id, guid }) => {
           try {
-            const feed = await podcastIndexAPI.getFeedByGuid(info!.feedGuid!);
-            return { id, image: feed?.artwork || feed?.image || null };
+            const feed = await podcastIndexAPI.getFeedByGuid(guid);
+            return {
+              id,
+              title: feed?.title || null,
+              artist: feed?.author || feed?.title || null,
+              image: feed?.artwork || feed?.image || null,
+            };
           } catch {
-            return { id, image: null };
+            return { id, title: null, artist: null, image: null };
           }
         })
       );
 
-      // Apply images to publishers
-      for (const result of imageResults) {
-        if (result.status === 'fulfilled' && result.value.image) {
-          const publisher = publisherFavorites.find(p => p.id === result.value.id);
-          if (publisher) {
-            (publisher as any).image = result.value.image;
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          const pub = unresolvedPublishers.find(p => p.id === result.value.id);
+          if (pub) {
+            if (result.value.image && !pub.image) {
+              (pub as any).image = result.value.image;
+            }
+            if (result.value.title && pub.title === pub.id) {
+              (pub as any).title = result.value.title;
+            }
+            if (result.value.artist && !pub.artist) {
+              (pub as any).artist = result.value.artist;
+            }
           }
         }
       }
