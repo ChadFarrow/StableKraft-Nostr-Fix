@@ -322,8 +322,16 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Set 0 for any remaining publishers without itemCount
+    // Fall back to Track count from the DB when artist matching found 0
+    // Publisher feeds store album references as Track records
     for (const publisher of allPublisherFavorites) {
+      if ((publisher as any).itemCount === undefined || (publisher as any).itemCount === 0) {
+        const trackCount = (publisher as any)._count?.Track || (publisher as any).trackCount || 0;
+        if (trackCount > 0) {
+          (publisher as any).itemCount = trackCount;
+        }
+      }
+      // Ensure itemCount is always defined
       if ((publisher as any).itemCount === undefined) {
         (publisher as any).itemCount = 0;
       }
