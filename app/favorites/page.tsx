@@ -823,7 +823,7 @@ function FavoritesPageContent() {
 
   if (sessionLoading || nostrLoading || loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      <div className="h-[100dvh] flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
         <LoadingSpinner size="large" text="Loading favorites..." />
       </div>
     );
@@ -835,7 +835,7 @@ function FavoritesPageContent() {
 
   if (!hasSession && !hasUser) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
+      <div className="h-[100dvh] flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
         <div className="text-center">
           <Heart className="w-16 h-16 mx-auto mb-4 text-gray-400" />
           <h1 className="text-2xl font-bold mb-2">No Session Found</h1>
@@ -853,8 +853,8 @@ function FavoritesPageContent() {
 
   return (
     <AppLayout>
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white overflow-x-hidden">
-      <div className="container mx-auto px-4 py-8">
+      <div className="h-[100dvh] flex flex-col bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white overflow-hidden">
+      <div className="container mx-auto px-4 pt-8 flex-shrink-0">
         <div className="mb-8">
           <button
             onClick={() => router.back()}
@@ -877,7 +877,7 @@ function FavoritesPageContent() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 sm:gap-4 mb-8 border-b border-gray-700 overflow-x-auto scrollbar-hide -mx-4 px-4">
+        <div className="flex gap-2 sm:gap-4 border-b border-gray-700 overflow-x-auto scrollbar-hide -mx-4 px-4">
           <button
             onClick={() => handleTabChange('albums')}
             className={`px-3 sm:px-4 py-2 font-medium transition-colors flex items-center gap-1.5 sm:gap-2 whitespace-nowrap flex-shrink-0 ${
@@ -938,6 +938,11 @@ function FavoritesPageContent() {
             <span className="text-sm sm:text-base">Community</span>
           </button>
         </div>
+      </div>
+
+      {/* Scrollable content area */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="container mx-auto px-4 pt-6 pb-28">
 
         {error && (
           <div className="mb-6 p-4 bg-red-900/20 border border-red-500/50 rounded-lg text-red-400">
@@ -1571,6 +1576,7 @@ function FavoritesPageContent() {
             )}
           </div>
         )}
+        </div>
       </div>
     </div>
     </AppLayout>
