@@ -249,25 +249,28 @@ function FavoritesPageContent() {
     }
   };
 
-  const handleFavoriteToggle = () => {
-    // Reload favorites when a favorite is toggled
-    if (isNostrAuthenticated && nostrUser) {
-      loadFavorites(null, nostrUser.id);
-    } else {
-      const currentSessionId = sessionId || getSessionId();
-      if (currentSessionId) {
-        loadFavorites(currentSessionId, null);
-      }
+  const handleFavoriteToggle = (trackId?: string) => (isFavorite: boolean) => {
+    if (!isFavorite && trackId) {
+      // Optimistically remove the track from local state so UI updates immediately
+      setFavoriteTracks(prev => prev.filter(t => t.id !== trackId));
     }
+    // Also reload to stay in sync with the DB (delayed to let DELETE complete)
+    setTimeout(() => {
+      if (isNostrAuthenticated && nostrUser) {
+        loadFavorites(null, nostrUser.id);
+      } else {
+        const currentSessionId = sessionId || getSessionId();
+        if (currentSessionId) {
+          loadFavorites(currentSessionId, null);
+        }
+      }
+    }, 500);
   };
 
   // Handler for community favorites - removes item when unfavorited
   const handleCommunityFavoriteToggle = (nostrEventId: string) => (isFavorite: boolean) => {
-    // Delay the favorites reload to let the API call complete first
-    // This prevents the button from re-checking status before the add/remove completes
-    setTimeout(() => {
-      handleFavoriteToggle();
-    }, 1000);
+    // Reload personal favorites (delayed to let the API call complete)
+    handleFavoriteToggle()(isFavorite);
 
     // If unfavorited, remove from community list immediately
     if (!isFavorite) {
@@ -1204,7 +1207,7 @@ function FavoritesPageContent() {
                         {/* Favorite Button */}
                         <FavoriteButton
                           trackId={track.id}
-                          onToggle={handleFavoriteToggle}
+                          onToggle={handleFavoriteToggle(track.id)}
                           isFavorite={true}
                         />
 

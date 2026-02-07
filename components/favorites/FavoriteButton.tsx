@@ -6,7 +6,7 @@ import { useSession } from '@/contexts/SessionContext';
 import { useNostr } from '@/contexts/NostrContext';
 import { getSessionId } from '@/lib/session-utils';
 import { toast } from '@/components/Toast';
-import { publishFavoriteTrackToNostr, publishFavoriteAlbumToNostr } from '@/lib/nostr/favorites';
+import { queueFavoritePublish, queueFavoriteDeletion } from '@/lib/nostr/publish-queue';
 import { useBatchedFavorites } from '@/contexts/BatchedFavoritesContext';
 
 // Helper hook that safely uses batched favorites, with fallback
@@ -185,55 +185,12 @@ export default function FavoriteButton({
           headers['x-session-id'] = currentSessionId;
         }
 
-        // Publish to Nostr first to get the event ID, then create favorite with it
-        // Skip Nostr publishing for NIP-05 users (read-only mode, no signing)
-        let nostrEventId: string | null = null;
-        if (isNostrAuthenticated && user && !isNip05Login) {
-          try {
-            // Use extension-based signing (no private key needed)
-            const userRelays = user.relays && user.relays.length > 0 ? user.relays : undefined;
-            
-            if (isTrack && effectiveTrackId) {
-              nostrEventId = await publishFavoriteTrackToNostr(
-                effectiveTrackId,
-                null, // No private key - use extension
-                singleTrackData?.title, // Track title from single-track album
-                singleTrackData?.artist, // Artist name from single-track album
-                userRelays
-              );
-            } else if (feedId) {
-              nostrEventId = await publishFavoriteAlbumToNostr(
-                feedId,
-                null, // No private key - use extension
-                undefined, // Album title - could be fetched if needed
-                undefined, // Artist name - could be fetched if needed
-                userRelays
-              );
-            }
-          } catch (nostrError) {
-            // Don't fail the favorite action if Nostr publish fails
-            // We'll still create the favorite in the database
-            console.warn('Failed to publish favorite to Nostr:', nostrError);
-
-            // Provide helpful error messages based on the error
-            const errorMessage = nostrError instanceof Error ? nostrError.message : String(nostrError);
-
-            if (errorMessage.includes('iOS') || errorMessage.includes('not supported')) {
-              console.warn('💡 Favorite saved locally but not posted to Nostr. NIP-55 is not supported on iOS. Please log out and reconnect using NIP-46 (Nostr Connect) to enable Nostr features on iOS.');
-            } else if (errorMessage.includes('No signer available')) {
-              console.warn('💡 Favorite saved locally but not posted to Nostr. No Nostr signer is available. Please connect a Nostr wallet (NIP-07 extension, NIP-46, or NIP-55).');
-            } else {
-              console.warn('💡 Favorite saved locally but failed to post to Nostr. This may be a temporary issue. Check your Nostr connection.');
-            }
-          }
-        }
-
+        // Save to DB immediately (without nostrEventId), then queue Nostr publish
         const response = await fetch(apiBase, {
           method: 'POST',
           headers,
           body: JSON.stringify({
             [isTrack ? 'trackId' : 'feedId']: itemId,
-            ...(nostrEventId ? { nostrEventId } : {}),
             // Include type for album favorites to determine which tab it appears in
             ...(!isTrack ? { type: favoriteType } : {}),
             // Include feedGuid for auto-importing album when track not in database
@@ -255,42 +212,39 @@ export default function FavoriteButton({
             debug: errorData.debug
           });
           const error = new Error(fullErrorMsg);
-          // Store status in error for better handling
           (error as any).status = response.status;
           throw error;
         }
 
-        // Parse response data
-        const responseData = await response.json().catch(() => ({}));
+        // Queue Nostr publish in background — PATCH eventId when it resolves
+        if (isNostrAuthenticated && user && !isNip05Login) {
+          const userRelays = user.relays && user.relays.length > 0 ? user.relays : undefined;
+          const publishType = isTrack ? 'track' as const : 'album' as const;
+          const publishId = isTrack ? effectiveTrackId! : feedId!;
+          const publishTitle = isTrack ? singleTrackData?.title : undefined;
+          const publishArtist = isTrack ? singleTrackData?.artist : undefined;
 
-        // If we published to Nostr but didn't have the event ID when creating,
-        // try to update it now (fallback for race conditions)
-        if (isNostrAuthenticated && user && nostrEventId) {
-          try {
-            // Only update if the favorite was created without nostrEventId
-            if (responseData.data && !responseData.data.nostrEventId) {
-              const updateResponse = await fetch(apiBase, {
-                method: 'PATCH',
-                headers: {
-                  'Content-Type': 'application/json',
-                  ...(currentUserId ? { 'x-nostr-user-id': currentUserId } : {}),
-                  ...(currentSessionId ? { 'x-session-id': currentSessionId } : {}),
-                },
-                body: JSON.stringify({
-                  [isTrack ? 'trackId' : 'feedId']: itemId,
-                  nostrEventId
-                })
-              });
-              
-              if (!updateResponse.ok) {
-                const errorData = await updateResponse.json().catch(() => ({}));
-                console.warn('Failed to update favorite with Nostr event ID:', errorData);
+          queueFavoritePublish(publishType, publishId, publishTitle, publishArtist, userRelays)
+            .then(async (nostrEventId) => {
+              if (!nostrEventId) return;
+              try {
+                await fetch(apiBase, {
+                  method: 'PATCH',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    ...(currentUserId ? { 'x-nostr-user-id': currentUserId } : {}),
+                    ...(currentSessionId ? { 'x-session-id': currentSessionId } : {}),
+                  },
+                  body: JSON.stringify({
+                    [isTrack ? 'trackId' : 'feedId']: itemId,
+                    nostrEventId
+                  })
+                });
+              } catch (updateError) {
+                console.warn('Failed to update favorite with Nostr event ID:', updateError);
               }
-            }
-          } catch (updateError) {
-            // Non-critical - event was published to Nostr, just couldn't update DB
-            console.warn('Failed to update favorite with Nostr event ID:', updateError);
-          }
+            })
+            .catch((err) => console.warn('Failed to publish favorite to Nostr:', err));
         }
       } else {
         // Remove from favorites
@@ -326,40 +280,15 @@ export default function FavoriteButton({
           throw error;
         }
 
-        // If deletion succeeded and user is authenticated with Nostr, publish deletion event
-        // Skip Nostr publishing for NIP-05 users (read-only mode, no signing)
+        // Queue Nostr deletion fire-and-forget
         if (isNostrAuthenticated && user && !isNip05Login) {
-          try {
-            const responseData = await response.json().catch(() => ({}));
-            const nostrEventId = responseData.nostrEventId;
-            
-            if (nostrEventId) {
-              const { deleteFavoriteFromNostr } = await import('@/lib/nostr/favorites');
-              const userRelays = user.relays && user.relays.length > 0 ? user.relays : undefined;
-              
-              await deleteFavoriteFromNostr(
-                nostrEventId,
-                null, // No private key - use extension
-                userRelays
-              );
-              
-              console.log('✅ Published favorite deletion to Nostr');
-            }
-          } catch (nostrError) {
-            // Don't fail the unfavorite action if Nostr deletion fails
-            // Database deletion already succeeded above
-            console.warn('Failed to publish favorite deletion to Nostr:', nostrError);
+          const responseData = await response.json().catch(() => ({}));
+          const nostrEventId = responseData.nostrEventId;
 
-            // Provide helpful error messages based on the error
-            const errorMessage = nostrError instanceof Error ? nostrError.message : String(nostrError);
-
-            if (errorMessage.includes('iOS') || errorMessage.includes('not supported')) {
-              console.warn('💡 Favorite removed locally but deletion not posted to Nostr. NIP-55 is not supported on iOS. Please log out and reconnect using NIP-46 (Nostr Connect) to enable Nostr features on iOS.');
-            } else if (errorMessage.includes('No signer available')) {
-              console.warn('💡 Favorite removed locally but deletion not posted to Nostr. No Nostr signer is available. Please connect a Nostr wallet (NIP-07 extension, NIP-46, or NIP-55).');
-            } else {
-              console.warn('💡 Favorite removed locally but failed to post deletion to Nostr. This may be a temporary issue. Check your Nostr connection.');
-            }
+          if (nostrEventId) {
+            const userRelays = user.relays && user.relays.length > 0 ? user.relays : undefined;
+            queueFavoriteDeletion(nostrEventId, userRelays)
+              .catch((err) => console.warn('Failed to publish favorite deletion to Nostr:', err));
           }
         }
       }
