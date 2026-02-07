@@ -804,12 +804,12 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
   }
 
   return (
-    <div>
+    <div className="lg:fixed lg:inset-0 lg:z-[15]">
       {/* Background layer - fixed positioned to override global layout background */}
       <div style={backgroundStyle} />
-      
+
       {/* Content layer - relative positioned above background */}
-      <div className="min-h-screen lg:h-[100dvh] lg:overflow-hidden text-white relative z-10">
+      <div className="min-h-screen lg:h-full text-white relative z-10 lg:overflow-hidden">
         <div className="container mx-auto px-6 pt-16 md:pt-12 pb-40 lg:pb-0 lg:h-full lg:flex lg:flex-col">
         {/* Back button */}
         <div className="mb-6 lg:flex-shrink-0">
