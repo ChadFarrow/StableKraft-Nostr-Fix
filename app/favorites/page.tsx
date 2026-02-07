@@ -153,12 +153,6 @@ function FavoritesPageContent() {
   // Auto-sync unpublished favorites to Nostr when authenticated
   useAutoSyncFavorites({
     enabled: isNostrAuthenticated && !nostrLoading,
-    onSyncComplete: () => {
-      // Reload favorites to update UI after sync
-      if (nostrUser) {
-        loadFavorites(null, nostrUser.id);
-      }
-    }
   });
 
   const loadFavorites = async (sessionId: string | null, userId: string | null) => {
