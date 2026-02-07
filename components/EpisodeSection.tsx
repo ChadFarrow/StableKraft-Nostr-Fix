@@ -35,14 +35,14 @@ export default function EpisodeSection({
   };
 
   return (
-    <div className="mb-3">
+    <div className="mb-1.5">
       {/* Episode Header - Collapsible */}
       <div
         onClick={onToggle}
         role="button"
         tabIndex={0}
         onKeyDown={(e) => e.key === 'Enter' && onToggle()}
-        className={`w-full flex items-center justify-between p-3 rounded-lg transition-colors cursor-pointer ${
+        className={`w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors cursor-pointer ${
           hasPlayingTrack
             ? 'bg-[#00ffd5]/10 border border-[#00ffd5]/30'
             : 'bg-white/5 hover:bg-white/10 border border-transparent'
@@ -53,7 +53,7 @@ export default function EpisodeSection({
           <button
             onClick={handlePlayEpisode}
             disabled={tracks.length === 0}
-            className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors ${
+            className={`flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
               tracks.length === 0
                 ? 'bg-white/5 text-gray-600 cursor-not-allowed'
                 : hasPlayingTrack && isPlaying
@@ -89,7 +89,7 @@ export default function EpisodeSection({
 
       {/* Episode Tracks - Collapsible Content */}
       {isExpanded && (
-        <div className="mt-1 space-y-0.5 pl-3 border-l-2 border-white/10 ml-4">
+        <div className="mt-0.5 space-y-0.5 pl-2 border-l-2 border-white/10 ml-3">
           {tracks.length === 0 ? (
             <p className="text-gray-500 text-sm py-2 italic">No tracks</p>
           ) : (

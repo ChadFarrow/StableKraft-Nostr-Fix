@@ -891,7 +891,7 @@ export default function PlaylistTemplateCompact({ config }: PlaylistTemplateComp
 
             {/* Right Column - Track List (3/5 width) */}
             <div className="lg:col-span-3">
-              <div className="bg-black/40 backdrop-blur-sm rounded-lg p-4 md:p-6 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
+              <div className="bg-black/75 backdrop-blur-sm rounded-lg p-4 md:p-6 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
                 {/* Search */}
                 <div className="mb-4">
                   <div className="relative">
@@ -986,19 +986,19 @@ export default function PlaylistTemplateCompact({ config }: PlaylistTemplateComp
                             return (
                               <div
                                 key={`${track.id}-${trackIndex}`}
-                                className={`group flex flex-col gap-2 p-2 rounded-lg hover:bg-white/10 transition-colors ${
-                                  isCurrentTrack ? 'bg-stablekraft-teal/20' : ''
+                                className={`group flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-white/10 transition-colors ${
+                                  isCurrentTrack ? 'bg-stablekraft-teal/20' : 'bg-black/50'
                                 }`}
                               >
-                                {/* Row 1: Artwork + Track Info */}
-                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                {/* Artwork + Track Info */}
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
                                   {/* Track Artwork with Play Button Overlay */}
                                   {track.image ? (
-                                    <div className="relative flex-shrink-0 w-10 h-10">
+                                    <div className="relative flex-shrink-0 w-8 h-8">
                                       <img
                                         src={getAlbumArtworkUrl(track.image, 'thumbnail', false)}
                                         alt={track.title}
-                                        className="w-10 h-10 rounded object-cover"
+                                        className="w-8 h-8 rounded object-cover"
                                         onError={(e) => {
                                           const target = e.target as HTMLImageElement;
                                           target.src = getPlaceholderImageUrl('thumbnail');
@@ -1012,20 +1012,20 @@ export default function PlaylistTemplateCompact({ config }: PlaylistTemplateComp
                                         }`}
                                       >
                                         {isLoading ? (
-                                          <Loader2 className="h-4 w-4 text-white animate-spin" />
+                                          <Loader2 className="h-3.5 w-3.5 text-white animate-spin" />
                                         ) : isCurrentTrack && (shouldUseAudioContext ? audioContext?.isPlaying : !audio?.paused) ? (
-                                          <Pause className="h-4 w-4 text-white" />
+                                          <Pause className="h-3.5 w-3.5 text-white" />
                                         ) : (
-                                          <Play className="h-4 w-4 text-white" />
+                                          <Play className="h-3.5 w-3.5 text-white" />
                                         )}
                                       </button>
                                     </div>
                                   ) : (
-                                    <div className="w-10 h-10 flex items-center justify-center">
+                                    <div className="w-8 h-8 flex items-center justify-center">
                                       <button
                                         onClick={() => handlePlay(track)}
                                         disabled={isLoading}
-                                        className={`w-7 h-7 rounded-full flex items-center justify-center ${
+                                        className={`w-6 h-6 rounded-full flex items-center justify-center ${
                                           isCurrentTrack ? 'bg-stablekraft-teal text-white' : 'bg-gray-700 hover:bg-gray-600 text-white'
                                         }`}
                                       >
@@ -1042,19 +1042,19 @@ export default function PlaylistTemplateCompact({ config }: PlaylistTemplateComp
 
                                   {/* Track Info */}
                                   <div className="flex-1 min-w-0">
-                                    <h3 className={`text-sm font-medium line-clamp-2 ${
+                                    <h3 className={`text-sm font-medium truncate leading-tight ${
                                       isCurrentTrack ? 'text-stablekraft-teal' : 'text-white'
                                     }`}>
                                       {track.valueForValue?.resolvedTitle || track.title}
                                     </h3>
-                                    <p className="text-xs text-white/70 truncate">
+                                    <p className="text-xs text-white/80 truncate leading-tight">
                                       {track.valueForValue?.resolvedArtist || track.artist}
                                     </p>
                                   </div>
                                 </div>
 
-                                {/* Row 2: Duration & Action Buttons */}
-                                <div className="flex items-center justify-end gap-2">
+                                {/* Duration & Action Buttons */}
+                                <div className="flex items-center gap-1.5 flex-shrink-0">
                                   {/* Duration */}
                                   <span className="text-xs text-white font-medium bg-black/40 px-1.5 py-0.5 rounded tabular-nums flex-shrink-0">
                                     {formatDuration(track.valueForValue?.resolvedDuration || track.duration)}
@@ -1063,7 +1063,7 @@ export default function PlaylistTemplateCompact({ config }: PlaylistTemplateComp
                                   {/* Share Button */}
                                   {(track.albumTitle || track.feedTitle) && (
                                     <button
-                                      className="flex-shrink-0 p-1.5 bg-black/40 hover:bg-purple-500/50 text-white rounded transition-colors"
+                                      className="flex-shrink-0 p-1 bg-black/40 hover:bg-purple-500/50 text-white rounded transition-colors"
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         const albumTitle = track.albumTitle || track.feedTitle || '';
@@ -1077,7 +1077,7 @@ export default function PlaylistTemplateCompact({ config }: PlaylistTemplateComp
                                       }}
                                       title="Copy album link"
                                     >
-                                      <Share2 className="w-4 h-4" />
+                                      <Share2 className="w-3.5 h-3.5" />
                                     </button>
                                   )}
 
@@ -1086,8 +1086,8 @@ export default function PlaylistTemplateCompact({ config }: PlaylistTemplateComp
                                     <FavoriteButton
                                       trackId={track.itemGuid || track.id}
                                       feedGuidForImport={track.feedGuid || track.valueForValue?.feedGuid}
-                                      size={16}
-                                      className="p-1.5"
+                                      size={14}
+                                      className="p-1"
                                     />
                                   </div>
 
