@@ -1073,7 +1073,7 @@ function FavoritesPageContent() {
                     feedId: publisher.id,
                     type: publisher.type,
                     isPublisherCard: true,
-                    albumCount: (publisher as any).itemCount || (publisher.Track?.length || 0)
+                    albumCount: (publisher as any).itemCount ?? (publisher.Track?.length || 0)
                   };
 
                   return (

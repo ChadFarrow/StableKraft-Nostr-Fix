@@ -59,6 +59,56 @@ export async function GET(request: NextRequest) {
     // Create a map of feedId -> feed for quick lookup
     const feedMap = new Map(feeds.map(feed => [feed.id, feed]));
 
+    // Collect synthetic artist IDs (from /api/publishers) that need DB resolution
+    const syntheticArtistIds = new Set<string>();
+    for (const fav of favoriteAlbums) {
+      if (!feedMap.has(fav.feedId) && fav.feedId.startsWith('artist-')) {
+        syntheticArtistIds.add(fav.feedId);
+      }
+    }
+
+    // Resolve synthetic artist IDs by looking up album feeds by artist name
+    const syntheticPublisherData = new Map<string, { title: string; image: string | null; itemCount: number }>();
+    if (syntheticArtistIds.size > 0) {
+      // Query all album/music feeds to match against artist names
+      const albumFeeds = await prisma.feed.findMany({
+        where: {
+          type: { in: ['album', 'music'] },
+          status: 'active',
+          artist: { not: null }
+        },
+        select: { artist: true, image: true }
+      });
+
+      // Group by lowercased artist name and build synthetic ID -> data map
+      // Build the same synthetic ID that /api/publishers creates:
+      //   `artist-${artist.toLowerCase().trim().replace(/\s+/g, '-')}`
+      const artistAlbums = new Map<string, { count: number; image: string | null; name: string }>();
+      for (const album of albumFeeds) {
+        if (!album.artist) continue;
+        const key = album.artist.toLowerCase().trim();
+        const existing = artistAlbums.get(key);
+        if (existing) {
+          existing.count++;
+          if (!existing.image && album.image) existing.image = album.image;
+        } else {
+          artistAlbums.set(key, { count: 1, image: album.image, name: album.artist });
+        }
+      }
+
+      // Match synthetic IDs by rebuilding them from artist names
+      for (const [key, data] of artistAlbums) {
+        const syntheticId = `artist-${key.replace(/\s+/g, '-')}`;
+        if (syntheticArtistIds.has(syntheticId)) {
+          syntheticPublisherData.set(syntheticId, {
+            title: data.name,
+            image: data.image,
+            itemCount: data.count
+          });
+        }
+      }
+    }
+
     // Map all favorites, including those without feeds (e.g., publishers not yet indexed)
     const feedsWithFavorites = favoriteAlbums.map(favorite => {
       const feed = feedMap.get(favorite.feedId);
@@ -89,6 +139,20 @@ export async function GET(request: NextRequest) {
           artist: artistName || feed.artist,
           favoritedAt: favorite.createdAt,
           trackCount: (feed as any)._count?.Track || 0
+        };
+      } else if (syntheticPublisherData.has(favorite.feedId)) {
+        // Synthetic artist ID from /api/publishers — resolve from album feeds
+        const data = syntheticPublisherData.get(favorite.feedId)!;
+        return {
+          id: favorite.feedId,
+          title: data.title,
+          artist: data.title,
+          type: 'publisher' as const,
+          image: data.image,
+          itemCount: data.itemCount,
+          favoritedAt: favorite.createdAt,
+          createdAt: favorite.createdAt,
+          updatedAt: favorite.createdAt
         };
       } else {
         // Feed doesn't exist (e.g., not yet indexed)
@@ -161,38 +225,42 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Calculate album count for ALL publisher favorites (batch query - fixes N+1)
+    // Calculate album count for publisher favorites that don't have itemCount yet
+    // (Synthetic artist IDs already have itemCount from the resolution above)
     const allPublisherFavorites = feedsWithFavorites.filter(f => f.type === 'publisher');
-    const artistNames = allPublisherFavorites
-      .filter(p => p.artist && (p as any).itemCount === undefined)
-      .map(p => p.artist as string);
+    const publishersNeedingCount = allPublisherFavorites.filter(
+      p => p.artist && (p as any).itemCount === undefined
+    );
 
-    if (artistNames.length > 0) {
-      // Single batch query to get album counts for all artists
-      const albumCounts = await prisma.feed.groupBy({
-        by: ['artist'],
+    if (publishersNeedingCount.length > 0) {
+      // Query all non-publisher feeds to match artist names case-insensitively
+      const albumFeeds = await prisma.feed.findMany({
         where: {
-          artist: { in: artistNames },
-          type: { not: 'publisher' }
+          type: { not: 'publisher' },
+          artist: { not: null }
         },
-        _count: { id: true }
+        select: { artist: true }
       });
 
-      // Create a map for quick lookup
-      const countByArtist = new Map(albumCounts.map(c => [c.artist, c._count.id]));
-
-      // Apply counts to publishers
-      for (const publisher of allPublisherFavorites) {
-        if ((publisher as any).itemCount === undefined) {
-          (publisher as any).itemCount = publisher.artist ? (countByArtist.get(publisher.artist) || 0) : 0;
-        }
+      // Build case-insensitive count map
+      const countByArtistLower = new Map<string, number>();
+      for (const album of albumFeeds) {
+        if (!album.artist) continue;
+        const key = album.artist.toLowerCase().trim();
+        countByArtistLower.set(key, (countByArtistLower.get(key) || 0) + 1);
       }
-    } else {
-      // No artists to look up, just set 0
-      for (const publisher of allPublisherFavorites) {
-        if ((publisher as any).itemCount === undefined) {
-          (publisher as any).itemCount = 0;
-        }
+
+      // Apply counts to publishers using case-insensitive matching
+      for (const publisher of publishersNeedingCount) {
+        const key = (publisher.artist as string).toLowerCase().trim();
+        (publisher as any).itemCount = countByArtistLower.get(key) || 0;
+      }
+    }
+
+    // Set 0 for any remaining publishers without itemCount
+    for (const publisher of allPublisherFavorites) {
+      if ((publisher as any).itemCount === undefined) {
+        (publisher as any).itemCount = 0;
       }
     }
 
