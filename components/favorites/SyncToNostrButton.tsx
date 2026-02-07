@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { RefreshCw, Upload } from 'lucide-react';
 import { useNostr } from '@/contexts/NostrContext';
 import { toast } from '@/components/Toast';
 import { batchPublishFavoritesToNostr, BatchPublishItem } from '@/lib/nostr/favorites';
@@ -17,6 +17,7 @@ export default function SyncToNostrButton({
 }: SyncToNostrButtonProps) {
   const { user, isAuthenticated } = useNostr();
   const [unpublishedCount, setUnpublishedCount] = useState(0);
+  const [needsRepublishCount, setNeedsRepublishCount] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const [progress, setProgress] = useState({ completed: 0, total: 0 });
   const [isLoading, setIsLoading] = useState(true);
@@ -42,6 +43,7 @@ export default function SyncToNostrButton({
         const data = await unpubResponse.json();
         if (data.success) {
           setUnpublishedCount(data.unpublished.total);
+          setNeedsRepublishCount(data.needsRepublish?.total || 0);
         }
       }
     } catch (error) {
@@ -60,15 +62,22 @@ export default function SyncToNostrButton({
     return () => window.removeEventListener('favorites-synced', handleSynced);
   }, [fetchCounts]);
 
-  const handleSync = async () => {
-    if (!user || isSyncing || unpublishedCount === 0) return;
+  // forceMode: 'none' = unpublished only, 'nip51' = needs NIP-51 update
+  const handleSync = async (forceMode: 'none' | 'nip51' = 'none') => {
+    if (!user || isSyncing) return;
+
+    const countToSync = forceMode === 'nip51' ? needsRepublishCount : unpublishedCount;
+    if (countToSync === 0) return;
 
     setIsSyncing(true);
-    setProgress({ completed: 0, total: unpublishedCount });
+    setProgress({ completed: 0, total: countToSync });
 
     try {
       // Fetch favorites to sync
-      const url = '/api/favorites/sync-to-nostr';
+      let url = '/api/favorites/sync-to-nostr';
+      if (forceMode === 'nip51') {
+        url += '?force=true';
+      }
 
       const response = await fetch(url, {
         headers: {
@@ -131,7 +140,7 @@ export default function SyncToNostrButton({
       }
 
       // Show results
-      const action = 'Synced';
+      const action = forceMode !== 'none' ? 'Republished' : 'Synced';
       if (result.successful.length > 0 && result.failed.length === 0) {
         toast.success(`${action} ${result.successful.length} favorites to Nostr`);
       } else if (result.successful.length > 0 && result.failed.length > 0) {
@@ -164,32 +173,58 @@ export default function SyncToNostrButton({
   }
 
   // Only show if there's something to sync
-  if (unpublishedCount === 0) {
+  if (unpublishedCount === 0 && needsRepublishCount === 0) {
     return null;
   }
 
   return (
     <div className={`flex items-center gap-2 ${className}`}>
-      <button
-        onClick={handleSync}
-        disabled={isSyncing}
-        className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-all
-          ${isSyncing
-            ? 'bg-purple-600/50 text-purple-200 cursor-wait'
-            : 'bg-purple-600 hover:bg-purple-500 text-white cursor-pointer'
-          }`}
-        title={`Sync ${unpublishedCount} unpublished favorites to Nostr`}
-      >
-        <RefreshCw
-          size={16}
-          className={isSyncing ? 'animate-spin' : ''}
-        />
-        {isSyncing ? (
-          <span>Syncing... ({progress.completed}/{progress.total})</span>
-        ) : (
-          <span>Sync ({unpublishedCount})</span>
-        )}
-      </button>
+      {/* Sync unpublished button */}
+      {unpublishedCount > 0 && (
+        <button
+          onClick={() => handleSync('none')}
+          disabled={isSyncing}
+          className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-all
+            ${isSyncing
+              ? 'bg-purple-600/50 text-purple-200 cursor-wait'
+              : 'bg-purple-600 hover:bg-purple-500 text-white cursor-pointer'
+            }`}
+          title={`Sync ${unpublishedCount} unpublished favorites to Nostr`}
+        >
+          <RefreshCw
+            size={16}
+            className={isSyncing ? 'animate-spin' : ''}
+          />
+          {isSyncing ? (
+            <span>Syncing... ({progress.completed}/{progress.total})</span>
+          ) : (
+            <span>Sync ({unpublishedCount})</span>
+          )}
+        </button>
+      )}
+
+      {/* Republish all button (for NIP-51 migration) - show only if there are items needing republish */}
+      {needsRepublishCount > 0 && unpublishedCount === 0 && (
+        <button
+          onClick={() => handleSync('nip51')}
+          disabled={isSyncing}
+          className={`inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-lg transition-all
+            ${isSyncing
+              ? 'bg-teal-600/50 text-teal-200 cursor-wait'
+              : 'bg-teal-600 hover:bg-teal-500 text-white cursor-pointer'
+            }`}
+          title={`Republish ${needsRepublishCount} favorites with NIP-51 format`}
+        >
+          <Upload size={16} className={isSyncing ? 'animate-pulse' : ''} />
+          {isSyncing ? (
+            <span>Publishing... ({progress.completed}/{progress.total})</span>
+          ) : (
+            <span>Republish All ({needsRepublishCount})</span>
+          )}
+        </button>
+      )}
+
+{/* Force republish button removed - only show sync buttons when actually needed */}
     </div>
   );
 }
