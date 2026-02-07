@@ -23,28 +23,13 @@ export default function BackButton({
   const baseClasses = "flex items-center gap-2 text-gray-400 hover:text-white transition-all duration-200 p-2 rounded-lg hover:bg-white/5 active:scale-95";
   const combinedClasses = `${baseClasses} ${className}`;
 
-  // Check if user came from external source (share link)
-  const isExternalEntry = () => {
-    if (typeof window === 'undefined') return false;
-
-    // No referrer means direct navigation or external link
-    if (!document.referrer) return true;
-
-    // Check if referrer is from a different domain
-    try {
-      const referrerUrl = new URL(document.referrer);
-      const currentUrl = new URL(window.location.href);
-      return referrerUrl.hostname !== currentUrl.hostname;
-    } catch {
-      return true;
-    }
-  };
-
   const handleBack = () => {
-    if (isExternalEntry()) {
-      router.push(href);
-    } else {
+    // history.length > 1 means there's a page to go back to
+    // (works correctly with SPA navigation unlike document.referrer)
+    if (typeof window !== 'undefined' && window.history.length > 1) {
       router.back();
+    } else {
+      router.push(href);
     }
   };
 
