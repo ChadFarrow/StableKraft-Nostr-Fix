@@ -77,6 +77,7 @@ async function flushQueue() {
 
   // Grab all pending items and clear the queue
   const items = queue.splice(0);
+  let relayManager: RelayManager | null = null;
 
   try {
     // Get signer
@@ -123,9 +124,9 @@ async function flushQueue() {
     const relayUrls = [...new Set([...userRelays, ...defaultRelays])];
 
     // Connect ONE RelayManager for the entire batch
-    const relayManager = new RelayManager();
+    relayManager = new RelayManager();
     const connectionResults = await Promise.allSettled(
-      relayUrls.map(url => relayManager.connect(url, { read: false, write: true }))
+      relayUrls.map(url => relayManager!.connect(url, { read: false, write: true }))
     );
 
     const successfulConnections = connectionResults.filter(r => r.status === 'fulfilled').length;
@@ -157,7 +158,7 @@ async function flushQueue() {
         }
 
         const signedEvent = await signer.signEvent(event);
-        const results = await relayManager.publish(signedEvent);
+        const results = await relayManager!.publish(signedEvent);
         const hasSuccess = results.some(r => r.status === 'fulfilled');
 
         if (hasSuccess) {
@@ -181,6 +182,9 @@ async function flushQueue() {
     console.error('❌ Publish queue: unexpected error during flush:', error);
     items.forEach(item => item.resolve(null));
   } finally {
+    if (relayManager) {
+      await relayManager.disconnectAll();
+    }
     flushing = false;
     // If more items were queued during flush, schedule another
     if (queue.length > 0) {

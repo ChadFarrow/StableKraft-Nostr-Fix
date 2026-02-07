@@ -120,6 +120,7 @@ export async function publishFavoriteToNostr(
         }
 
         const results = await relayManager.publish(signedEvent);
+        await relayManager.disconnectAll();
         const hasSuccess = results.some(r => r.status === 'fulfilled');
 
         if (hasSuccess) {
@@ -160,6 +161,7 @@ export async function publishFavoriteToNostr(
       }
 
       const results = await relayManager.publish(event);
+      await relayManager.disconnectAll();
       const hasSuccess = results.some(r => r.status === 'fulfilled');
 
       if (hasSuccess) {
@@ -284,6 +286,7 @@ export async function deleteFavoriteFromNostr(
         }
 
         const results = await relayManager.publish(signedEvent);
+        await relayManager.disconnectAll();
         const hasSuccess = results.some(r => r.status === 'fulfilled');
 
         if (hasSuccess) {
@@ -324,6 +327,7 @@ export async function deleteFavoriteFromNostr(
       }
 
       const results = await relayManager.publish(event);
+      await relayManager.disconnectAll();
       const hasSuccess = results.some(r => r.status === 'fulfilled');
 
       if (hasSuccess) {
@@ -468,6 +472,7 @@ export async function batchPublishFavoritesToNostr(
     onProgress(favorites.length, favorites.length);
   }
 
+  await relayManager.disconnectAll();
   console.log(`📊 Batch sync complete: ${result.successful.length} successful, ${result.failed.length} failed`);
   return result;
 }

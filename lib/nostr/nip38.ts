@@ -165,6 +165,7 @@ export async function publishUserStatus(
     }
 
     const results = await relayManager.publish(signedEvent);
+    await relayManager.disconnectAll();
     const hasSuccess = results.some(r => r.status === 'fulfilled');
 
     if (hasSuccess) {
