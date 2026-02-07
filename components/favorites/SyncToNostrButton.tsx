@@ -55,6 +55,11 @@ export default function SyncToNostrButton({
 
   useEffect(() => {
     fetchCounts();
+
+    // Re-fetch when auto-sync or publish queue completes
+    const handleSynced = () => fetchCounts();
+    window.addEventListener('favorites-synced', handleSynced);
+    return () => window.removeEventListener('favorites-synced', handleSynced);
   }, [fetchCounts]);
 
   // forceMode: 'none' = unpublished only, 'nip51' = needs NIP-51 update

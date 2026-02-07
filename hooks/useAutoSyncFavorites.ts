@@ -115,6 +115,11 @@ export function useAutoSyncFavorites(options: UseAutoSyncFavoritesOptions = {}) 
         onSyncComplete();
       }
 
+      // Notify SyncToNostrButton to re-fetch counts
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('favorites-synced'));
+      }
+
       return result.failed.length === 0;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);

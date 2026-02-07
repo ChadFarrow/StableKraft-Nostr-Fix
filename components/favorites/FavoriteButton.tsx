@@ -228,7 +228,7 @@ export default function FavoriteButton({
             .then(async (nostrEventId) => {
               if (!nostrEventId) return;
               try {
-                await fetch(apiBase, {
+                const patchRes = await fetch(apiBase, {
                   method: 'PATCH',
                   headers: {
                     'Content-Type': 'application/json',
@@ -240,6 +240,9 @@ export default function FavoriteButton({
                     nostrEventId
                   })
                 });
+                if (patchRes.ok) {
+                  window.dispatchEvent(new Event('favorites-synced'));
+                }
               } catch (updateError) {
                 console.warn('Failed to update favorite with Nostr event ID:', updateError);
               }
