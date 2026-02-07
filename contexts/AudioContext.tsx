@@ -558,6 +558,13 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     }
   }, []); // Run only once on mount
 
+  // Sync playbackState with isPlaying — single source of truth for lock screen controls
+  useEffect(() => {
+    if ('mediaSession' in navigator) {
+      navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+    }
+  }, [isPlaying]);
+
   // Resume Web Audio context when page becomes visible (needed for non-iOS volume normalization)
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1373,47 +1380,13 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     };
 
     const handlePause = () => {
-      // Check if this pause is due to track ending naturally
-      // On iOS, the 'pause' event fires before/with 'ended' event
-      // We need to keep isPlaying true so seamless playback works for next track
+      // Ignore pause events from track ending — handleEnded handles transitions
       const currentElement = isVideoMode ? video : audio;
       if (currentElement.ended) {
-        console.log('🎵 Pause event ignored - track ended naturally, handleEnded will handle transition');
-        return;
-      }
-
-      // Check if this is an unexpected pause (not user-initiated)
-      // Could be caused by network stall, buffer underflow, etc.
-      if (!userInitiatedPauseRef.current && currentElement.currentTime > 0 && !currentElement.ended) {
-        console.log('⚠️ Unexpected pause detected at', currentElement.currentTime.toFixed(1), 's - attempting recovery');
-
-        // Try to resume after a short delay
-        setTimeout(() => {
-          // Double-check conditions still apply
-          if (!userInitiatedPauseRef.current && currentElement.paused && !currentElement.ended) {
-            console.log('🔧 Attempting auto-resume after unexpected pause');
-            currentElement.play().catch(err => {
-              console.warn('⚠️ Auto-resume failed:', err);
-              // If auto-resume fails, let it stay paused and update state
-              setIsPlaying(false);
-              if ('mediaSession' in navigator && navigator.mediaSession) {
-                navigator.mediaSession.playbackState = 'paused';
-              }
-            });
-            return; // Don't update state yet - wait to see if play() succeeds
-          }
-        }, 500);
-
-        // Don't update isPlaying yet - give auto-resume a chance
         return;
       }
 
       setIsPlaying(false);
-      // Update media session playback state immediately for iOS
-      if ('mediaSession' in navigator && navigator.mediaSession) {
-        navigator.mediaSession.playbackState = 'paused';
-      }
-      // NIP-38 status persists - shows last/current track
     };
 
     const handleEnded = async () => {
@@ -1453,9 +1426,6 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         // Don't let errors in auto-play crash the application
         isAutoTransitioningRef.current = false;
         setIsPlaying(false);
-        if ('mediaSession' in navigator && navigator.mediaSession) {
-          navigator.mediaSession.playbackState = 'paused';
-        }
       }
     };
 
@@ -2361,9 +2331,6 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     if (currentElement) {
       currentElement.pause();
       setIsPlaying(false);
-      if ('mediaSession' in navigator && navigator.mediaSession) {
-        navigator.mediaSession.playbackState = 'paused';
-      }
     }
   };
 
@@ -2386,23 +2353,14 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
       try {
         await currentElement.play();
         setIsPlaying(true);
-        if ('mediaSession' in navigator && navigator.mediaSession) {
-          navigator.mediaSession.playbackState = 'playing';
-        }
       } catch (err) {
         console.warn('Resume play() failed, retrying in 300ms...', err);
         setTimeout(async () => {
           try {
             await currentElement!.play();
             setIsPlaying(true);
-            if ('mediaSession' in navigator && navigator.mediaSession) {
-              navigator.mediaSession.playbackState = 'playing';
-            }
           } catch (retryErr) {
             console.error('Resume retry failed:', retryErr);
-            if ('mediaSession' in navigator && navigator.mediaSession) {
-              navigator.mediaSession.playbackState = 'paused';
-            }
           }
         }, 300);
       }
