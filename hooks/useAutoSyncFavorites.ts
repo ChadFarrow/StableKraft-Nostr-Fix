@@ -12,21 +12,19 @@ interface UseAutoSyncFavoritesOptions {
 
 /**
  * Hook to auto-sync unpublished favorites to Nostr when authenticated.
- * Runs once per session when the Favorites page loads.
+ * Runs on mount and retries once if the first attempt fails.
  */
 export function useAutoSyncFavorites(options: UseAutoSyncFavoritesOptions = {}) {
   const { enabled = true, onSyncComplete } = options;
   const { user, isAuthenticated } = useNostr();
 
-  // Track if we've already synced in this session to prevent repeated syncs
-  const hasSyncedRef = useRef(false);
   const isSyncingRef = useRef(false);
 
   // Don't sync for NIP-05 (read-only) users
   const isNip05Login = user?.loginType === 'nip05';
 
-  const performSync = useCallback(async () => {
-    if (!user || isSyncingRef.current) return;
+  const performSync = useCallback(async (): Promise<boolean> => {
+    if (!user || isSyncingRef.current) return false;
 
     isSyncingRef.current = true;
 
@@ -39,15 +37,14 @@ export function useAutoSyncFavorites(options: UseAutoSyncFavoritesOptions = {}) 
       });
 
       if (!countResponse.ok) {
-        return;
+        return false;
       }
 
       const countData = await countResponse.json();
       const unpublishedCount = countData.success ? countData.unpublished?.total || 0 : 0;
 
       if (unpublishedCount === 0) {
-        // Nothing to sync
-        return;
+        return true; // Nothing to sync — success
       }
 
       // Fetch favorites to sync
@@ -63,13 +60,10 @@ export function useAutoSyncFavorites(options: UseAutoSyncFavoritesOptions = {}) 
 
       const data = await response.json();
       if (!data.success || !data.items || data.items.length === 0) {
-        return;
+        return true;
       }
 
       const items: BatchPublishItem[] = data.items;
-
-      // Show syncing toast
-      toast.info(`Syncing ${items.length} favorites to Nostr...`);
 
       // Get user's relays if available
       const userRelays = user.relays && user.relays.length > 0 ? user.relays : undefined;
@@ -77,7 +71,7 @@ export function useAutoSyncFavorites(options: UseAutoSyncFavoritesOptions = {}) 
       // Batch publish to Nostr
       const result = await batchPublishFavoritesToNostr(
         items,
-        undefined, // No progress callback needed for auto-sync
+        undefined,
         userRelays
       );
 
@@ -114,36 +108,47 @@ export function useAutoSyncFavorites(options: UseAutoSyncFavoritesOptions = {}) 
         toast.success(`Synced ${result.successful.length} favorites to Nostr`);
       } else if (result.successful.length > 0 && result.failed.length > 0) {
         toast.warning(`Synced ${result.successful.length} favorites, ${result.failed.length} failed`);
-      } else if (result.failed.length > 0) {
-        toast.error(`Failed to sync ${result.failed.length} favorites`);
       }
 
       // Notify parent
       if (onSyncComplete) {
         onSyncComplete();
       }
+
+      return result.failed.length === 0;
     } catch (error) {
       console.error('Auto-sync favorites error:', error);
-      // Silent fail for auto-sync - user can still use manual Sync button
+      return false;
     } finally {
       isSyncingRef.current = false;
     }
   }, [user, onSyncComplete]);
 
   useEffect(() => {
-    // Skip if disabled, not authenticated, NIP-05, or already synced this session
-    if (!enabled || !isAuthenticated || !user || isNip05Login || hasSyncedRef.current) {
+    if (!enabled || !isAuthenticated || !user || isNip05Login) {
       return;
     }
 
-    // Mark as synced to prevent repeated attempts
-    hasSyncedRef.current = true;
+    let cancelled = false;
 
-    // Small delay to ensure signer is initialized
-    const timer = setTimeout(() => {
-      performSync();
-    }, 1500);
+    const runSync = async () => {
+      // Initial delay to ensure signer is initialized
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      if (cancelled) return;
 
-    return () => clearTimeout(timer);
+      const success = await performSync();
+
+      // Retry once after 5s if first attempt failed
+      if (!success && !cancelled) {
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        if (!cancelled) {
+          await performSync();
+        }
+      }
+    };
+
+    runSync();
+
+    return () => { cancelled = true; };
   }, [enabled, isAuthenticated, user, isNip05Login, performSync]);
 }
