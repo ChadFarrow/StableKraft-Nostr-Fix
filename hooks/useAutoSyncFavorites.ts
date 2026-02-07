@@ -117,7 +117,13 @@ export function useAutoSyncFavorites(options: UseAutoSyncFavoritesOptions = {}) 
 
       return result.failed.length === 0;
     } catch (error) {
-      console.error('Auto-sync favorites error:', error);
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      // Don't log relay connection errors as loud errors
+      if (errorMsg.includes('relay') || errorMsg.includes('connect')) {
+        console.warn('Auto-sync skipped: relay connection unavailable');
+      } else {
+        console.error('Auto-sync favorites error:', error);
+      }
       return false;
     } finally {
       isSyncingRef.current = false;
@@ -132,19 +138,11 @@ export function useAutoSyncFavorites(options: UseAutoSyncFavoritesOptions = {}) 
     let cancelled = false;
 
     const runSync = async () => {
-      // Initial delay to ensure signer is initialized
+      // Delay to ensure signer is initialized
       await new Promise(resolve => setTimeout(resolve, 1500));
       if (cancelled) return;
 
-      const success = await performSync();
-
-      // Retry once after 5s if first attempt failed
-      if (!success && !cancelled) {
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        if (!cancelled) {
-          await performSync();
-        }
-      }
+      await performSync();
     };
 
     runSync();
