@@ -256,6 +256,40 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Resolve missing images from album feeds by artist name
+    // Publisher feeds often don't store artwork, but their album feeds do
+    const publishersMissingImages = feedsWithFavorites.filter(f =>
+      f.type === 'publisher' && !f.image && f.artist && f.artist !== 'Unknown Publisher'
+    );
+    if (publishersMissingImages.length > 0) {
+      const albumsWithImages = await prisma.feed.findMany({
+        where: {
+          type: { not: 'publisher' },
+          image: { not: null },
+          artist: { not: null }
+        },
+        select: { artist: true, image: true }
+      });
+
+      // Build case-insensitive artist -> image map (first non-null image wins)
+      const imageByArtist = new Map<string, string>();
+      for (const album of albumsWithImages) {
+        if (!album.artist || !album.image) continue;
+        const key = album.artist.toLowerCase().trim();
+        if (!imageByArtist.has(key)) {
+          imageByArtist.set(key, album.image);
+        }
+      }
+
+      for (const pub of publishersMissingImages) {
+        const key = (pub.artist as string).toLowerCase().trim();
+        const albumImage = imageByArtist.get(key);
+        if (albumImage) {
+          (pub as any).image = albumImage;
+        }
+      }
+    }
+
     // Calculate album count for publisher favorites that don't have itemCount yet
     // (Synthetic artist IDs already have itemCount from the resolution above)
     const allPublisherFavorites = feedsWithFavorites.filter(f => f.type === 'publisher');
