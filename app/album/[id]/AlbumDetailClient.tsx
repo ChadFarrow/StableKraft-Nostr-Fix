@@ -810,14 +810,14 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
 
       {/* Content layer - relative positioned above background */}
       <div className="min-h-screen lg:h-full text-white relative z-10 lg:overflow-hidden">
-        <div className="container mx-auto px-6 pt-16 md:pt-12 pb-40 lg:pb-0 lg:h-full lg:flex lg:flex-col">
+        <div className="container mx-auto px-6 pt-16 md:pt-12 pb-40 lg:pb-8 lg:h-full lg:flex lg:flex-col">
         {/* Back button */}
         <div className="mb-6 lg:flex-shrink-0">
           <BackButton label="Back" />
         </div>
 
         {/* Two-column layout on desktop, single column on mobile */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 mb-8 lg:mb-0 lg:flex-1 lg:min-h-0 lg:grid-rows-1">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 mb-8 lg:mb-0 lg:min-h-0">
           {/* Left Column: Album Art and Info (2/5 width) */}
           <div className="flex flex-col gap-6 lg:col-span-2 lg:overflow-y-auto scrollbar-hide">
             {/* Album Art with Play Button Overlay */}
