@@ -1089,10 +1089,10 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
         </div>
 
           {/* Right Column: Track List (Desktop) / Below (Mobile) (3/5 width) */}
-          <div className="lg:col-span-3 lg:overflow-y-auto scrollbar-hide lg:pb-28">
+          <div className="lg:col-span-3 lg:min-h-0">
             {/* Track List */}
-            <div className="bg-black/40 backdrop-blur-sm rounded-lg p-4 md:p-6">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+            <div className="bg-black/40 backdrop-blur-sm rounded-lg p-4 md:p-6 lg:h-full lg:flex lg:flex-col lg:min-h-0">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4 lg:flex-shrink-0">
                 <h2 className="text-xl font-semibold text-center sm:text-left">Tracks</h2>
 
                 {/* Shuffle Controls */}
@@ -1113,7 +1113,7 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
                   className="flex-shrink-0"
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 lg:flex-1 lg:min-h-0 lg:overflow-y-auto lg:pb-28">
                 {filteredTracks.map((track, displayIndex) => {
                   // Find the original index in album.tracks for correct playback
                   const originalIndex = album.tracks.findIndex(t => t === track);
@@ -1274,10 +1274,9 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
                   </div>
                   );
                 })}
-              </div>
-            </div>
 
-            {/* PodRoll and Publisher Recommendations */}
+
+                {/* PodRoll and Publisher Recommendations */}
             {podrollAlbums.length > 0 && (
               <div className="bg-black/40 backdrop-blur-sm rounded-lg p-6 mt-6">
                 <h2 className="text-xl font-semibold mb-4">You Might Also Like</h2>
@@ -1318,6 +1317,8 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
                 </div>
               </div>
             )}
+              </div>
+            </div>
           </div>
         </div>
         </div>
