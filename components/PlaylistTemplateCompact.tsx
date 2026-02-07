@@ -783,14 +783,14 @@ export default function PlaylistTemplateCompact({ config }: PlaylistTemplateComp
 
       {/* Content overlay - positioned above background like album pages */}
       <div className="min-h-screen text-white relative z-10">
-        {/* Back to Albums Link */}
+        {/* Back to Playlists Link */}
         <div className="container mx-auto px-6 pt-6">
           <Link
-            href="/"
+            href="/?filter=playlist"
             className="inline-flex items-center gap-2 text-gray-400 hover:text-stablekraft-teal transition-colors text-sm mb-4"
           >
             <ChevronLeft className="w-4 h-4" />
-            <span>Back to Albums</span>
+            <span>Back to Playlists</span>
           </Link>
         </div>
 

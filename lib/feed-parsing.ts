@@ -173,7 +173,7 @@ export interface ImportFeedResult {
 export async function importFeedToDatabase(feedData: any, episodes: ParsedEpisode[], xmlText?: string): Promise<ImportFeedResult | null> {
   try {
     // Ensure feed ID is a string (Podcast Index returns numeric IDs)
-    const feedId = String(feedData.id || feedData.guid || `feed-${Date.now()}`);
+    let feedId = String(feedData.id || feedData.guid || `feed-${Date.now()}`);
 
     // Validate and normalize URL before storing
     const feedUrl = feedData.url || '';
@@ -183,9 +183,10 @@ export async function importFeedToDatabase(feedData: any, episodes: ParsedEpisod
       console.warn(`⚠️ Invalid feed URL for ${feedId}: ${feedUrl}`);
     }
 
-    // Check if URL already exists with a different ID
+    // Check if URL already exists with a different ID — use the existing feed for track import
+    let existingFeedById: { id: string; title: string } | null = null;
     if (normalizedFeedUrl) {
-      const existingByUrl = await prisma.feed.findFirst({
+      existingFeedById = await prisma.feed.findFirst({
         where: {
           originalUrl: normalizedFeedUrl,
           id: { not: feedId }
@@ -193,19 +194,10 @@ export async function importFeedToDatabase(feedData: any, episodes: ParsedEpisod
         select: { id: true, title: true }
       });
 
-      if (existingByUrl) {
-        console.log(`⚡ Feed URL already exists as "${existingByUrl.title}" (ID: ${existingByUrl.id}), using existing feed for ${feedId}`);
-        // Return info about the existing feed instead of failing
-        const existingTrackCount = await prisma.track.count({
-          where: { feedId: existingByUrl.id }
-        });
-        return {
-          feedId: existingByUrl.id,
-          title: existingByUrl.title || 'Unknown Feed',
-          trackCount: existingTrackCount,
-          hadTracks: existingTrackCount > 0,
-          newTracks: 0
-        };
+      if (existingFeedById) {
+        console.log(`⚡ Feed URL already exists as "${existingFeedById.title}" (ID: ${existingFeedById.id}), importing tracks into existing feed for ${feedId}`);
+        // Override feedId to use the existing feed — tracks will be imported below
+        feedId = existingFeedById.id;
       }
     }
 
