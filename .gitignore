@@ -184,6 +184,9 @@ android-twa/.gradle/
 android-twa/local.properties
 android-twa/debug.keystore
 
+# Deploy snapshots
+deploy-*/
+
 # Data files (generated/cached data)
 data/archived-json-database/
 data/backups/

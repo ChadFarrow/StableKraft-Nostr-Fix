@@ -148,11 +148,20 @@ Favorites can be published as a kind 34139 addressable Nostr event via "Share to
 - **WebSocket safety** — relay connections wrapped in `try/finally` to guarantee `disconnectAll()`
 - **Key files**: `lib/nostr/playlist-events.ts`, `components/favorites/PublishPlaylistButton.tsx`, `components/favorites/PublishPlaylistModal.tsx`
 
-### Favorite Publishers Resolution
-Publisher favorites stored by `feedId` (GUID). When a publisher isn't in the local DB or `KNOWN_PUBLISHERS`:
-- **API** (`app/api/favorites/albums/route.ts`) resolves title/artist/image from Podcast Index using `feedId` as GUID directly
-- **Album count** — batch `groupBy` query matches resolved artist name against non-publisher feeds in DB
-- Previously showed raw GUIDs as titles with placeholder images — fixed by falling back to Podcast Index lookup
+### Favorite Publishers Resolution (`app/api/favorites/albums/route.ts`)
+Publisher favorites can be stored with different feedId formats:
+- **Synthetic artist IDs** (`artist-adam-curry`) — from main `/api/publishers` page, resolved by querying album feeds by artist name
+- **Feed GUIDs** (`d7b4abee-...`) — looked up by `Feed.guid` column as fallback when `Feed.id` doesn't match
+- **Feed IDs** (`wavlake-publisher-aa909244`) — direct DB match on `Feed.id`
+
+**Image resolution chain**: DB feed image → Podcast Index API artwork → album feed image by artist name. Publisher feeds often don't store artwork, so the album feed fallback is essential.
+
+**Album count**: Case-insensitive artist name matching against non-publisher feeds. Falls back to the publisher feed's own Track count (album references) when artist matching finds 0.
+
+**NIP-51 republish**: Excluded for publisher favorites (`type: { not: 'publisher' }`) in both `unpublished-count` and `sync-to-nostr` APIs. Tracks and albums still support NIP-51 republishing.
+
+### BackButton Component (`components/BackButton.tsx`)
+Uses `window.history.length` to detect if there's a page to go back to. Falls back to `router.push(href)` (default `/`) only when `history.length <= 1` (direct link with no prior navigation). Do NOT use `document.referrer` — it doesn't update during SPA/client-side navigation.
 
 ### Episode/Play Count Markers
 Playlists can include `<podcast:txt purpose="episode">` or `<podcast:txt purpose="playcount">` markers in XML. These group tracks into collapsible sections:
