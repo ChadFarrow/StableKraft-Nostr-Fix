@@ -907,56 +907,59 @@ export default function PlaylistTemplateCompact({ config }: PlaylistTemplateComp
                 </div>
 
                 {/* Tracks Header */}
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <h2 className="text-xl font-semibold text-white">Tracks</h2>
-                    <span className="text-sm text-gray-400">
-                      {filteredTracks.length}
-                    </span>
+                <div className="mb-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <h2 className="text-xl font-semibold text-white">Tracks</h2>
+                      <span className="text-sm text-gray-400">
+                        {filteredTracks.length}
+                      </span>
+                    </div>
+
+                    {/* Episode View Toggle */}
+                    {hasEpisodeMarkers && episodes.length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setEpisodeViewMode('grouped')}
+                          className={`p-1.5 rounded transition-colors ${
+                            episodeViewMode === 'grouped'
+                              ? 'bg-[#00ffd5] text-black'
+                              : 'bg-white/10 text-gray-400 hover:bg-white/20'
+                          }`}
+                          title="Group by Episode"
+                        >
+                          <Layers className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setEpisodeViewMode('flat')}
+                          className={`p-1.5 rounded transition-colors ${
+                            episodeViewMode === 'flat'
+                              ? 'bg-[#00ffd5] text-black'
+                              : 'bg-white/10 text-gray-400 hover:bg-white/20'
+                          }`}
+                          title="All Tracks"
+                        >
+                          <List className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Episode View Toggle */}
-                  {hasEpisodeMarkers && episodes.length > 0 && (
-                    <div className="flex items-center gap-2">
+                  {/* Expand/Collapse buttons - separate row */}
+                  {hasEpisodeMarkers && episodes.length > 0 && episodeViewMode === 'grouped' && (
+                    <div className="flex items-center gap-2 mt-2">
                       <button
-                        onClick={() => setEpisodeViewMode('grouped')}
-                        className={`p-1.5 rounded transition-colors ${
-                          episodeViewMode === 'grouped'
-                            ? 'bg-[#00ffd5] text-black'
-                            : 'bg-white/10 text-gray-400 hover:bg-white/20'
-                        }`}
-                        title="Group by Episode"
+                        onClick={expandAllEpisodes}
+                        className="text-xs px-3 py-1.5 bg-white/10 hover:bg-white/20 text-gray-300 rounded transition-colors"
                       >
-                        <Layers className="w-4 h-4" />
+                        Expand All
                       </button>
                       <button
-                        onClick={() => setEpisodeViewMode('flat')}
-                        className={`p-1.5 rounded transition-colors ${
-                          episodeViewMode === 'flat'
-                            ? 'bg-[#00ffd5] text-black'
-                            : 'bg-white/10 text-gray-400 hover:bg-white/20'
-                        }`}
-                        title="All Tracks"
+                        onClick={collapseAllEpisodes}
+                        className="text-xs px-3 py-1.5 bg-white/10 hover:bg-white/20 text-gray-300 rounded transition-colors"
                       >
-                        <List className="w-4 h-4" />
+                        Collapse All
                       </button>
-                      {episodeViewMode === 'grouped' && (
-                        <>
-                          <span className="text-gray-600 mx-1">|</span>
-                          <button
-                            onClick={expandAllEpisodes}
-                            className="text-xs px-2 py-1 bg-white/20 hover:bg-white/30 text-white rounded transition-colors"
-                          >
-                            Expand All
-                          </button>
-                          <button
-                            onClick={collapseAllEpisodes}
-                            className="text-xs px-2 py-1 bg-white/20 hover:bg-white/30 text-white rounded transition-colors"
-                          >
-                            Collapse All
-                          </button>
-                        </>
-                      )}
                     </div>
                   )}
                 </div>
@@ -965,7 +968,7 @@ export default function PlaylistTemplateCompact({ config }: PlaylistTemplateComp
                 <div className="space-y-1">
                   {/* Grouped View with Episodes */}
                   {hasEpisodeMarkers && episodeViewMode === 'grouped' && filteredEpisodes.length > 0 ? (
-                    <div className="space-y-2">
+                    <div className="space-y-3 md:space-y-2">
                       {filteredEpisodes.map((episode) => (
                         <EpisodeSection
                           key={episode.id}
@@ -986,7 +989,7 @@ export default function PlaylistTemplateCompact({ config }: PlaylistTemplateComp
                             return (
                               <div
                                 key={`${track.id}-${trackIndex}`}
-                                className={`group flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-white/10 transition-colors ${
+                                className={`group flex items-center gap-2 py-2.5 md:py-1.5 px-2 rounded-lg hover:bg-white/10 transition-colors ${
                                   isCurrentTrack ? 'bg-stablekraft-teal/20' : 'bg-black/50'
                                 }`}
                               >
@@ -1042,12 +1045,12 @@ export default function PlaylistTemplateCompact({ config }: PlaylistTemplateComp
 
                                   {/* Track Info */}
                                   <div className="flex-1 min-w-0">
-                                    <h3 className={`text-sm font-medium truncate leading-tight ${
+                                    <h3 className={`text-sm font-medium truncate ${
                                       isCurrentTrack ? 'text-stablekraft-teal' : 'text-white'
                                     }`}>
                                       {track.valueForValue?.resolvedTitle || track.title}
                                     </h3>
-                                    <p className="text-xs text-white/80 truncate leading-tight">
+                                    <p className="text-xs text-white/80 truncate">
                                       {track.valueForValue?.resolvedArtist || track.artist}
                                     </p>
                                   </div>

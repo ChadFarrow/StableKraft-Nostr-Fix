@@ -655,7 +655,7 @@ export async function PATCH(request: NextRequest) {
     const updated = await prisma.favoriteAlbum.update({
       where: { id: existing.id },
       data: {
-        ...(nostrEventId ? { nostrEventId } : {})
+        ...(nostrEventId ? { nostrEventId, nip51Format: true } : {})
       }
     });
 

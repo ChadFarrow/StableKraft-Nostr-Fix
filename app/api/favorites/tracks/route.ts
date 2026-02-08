@@ -658,7 +658,7 @@ export async function PATCH(request: NextRequest) {
     const updated = await prisma.favoriteTrack.update({
       where: { id: existing.id },
       data: {
-        ...(nostrEventId ? { nostrEventId } : {})
+        ...(nostrEventId ? { nostrEventId, nip51Format: true } : {})
       }
     });
 
