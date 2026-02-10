@@ -819,7 +819,7 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
         {/* Two-column layout on desktop, single column on mobile */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 mb-8 lg:mb-0 lg:min-h-0">
           {/* Left Column: Album Art and Info (2/5 width) */}
-          <div className="flex flex-col gap-6 lg:col-span-2 lg:overflow-y-auto scrollbar-hide">
+          <div className="flex flex-col gap-6 lg:col-span-2">
             {/* Album Art with Play Button Overlay */}
             <div className="relative group mx-auto lg:mx-0 w-[280px] h-[280px] lg:w-full lg:h-auto lg:aspect-square lg:max-w-[400px]">
             <Image 

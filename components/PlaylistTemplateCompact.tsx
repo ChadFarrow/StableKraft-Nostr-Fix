@@ -774,7 +774,7 @@ export default function PlaylistTemplateCompact({ config }: PlaylistTemplateComp
 
   return (
     <AppLayout>
-      <div className="min-h-screen text-white relative overflow-hidden">
+      <div className="min-h-screen text-white relative overflow-hidden lg:fixed lg:inset-0 lg:z-[15]">
       {/* Background layer - similar to album pages */}
       <div 
         className="fixed inset-0"
@@ -782,23 +782,22 @@ export default function PlaylistTemplateCompact({ config }: PlaylistTemplateComp
       />
 
       {/* Content overlay - positioned above background like album pages */}
-      <div className="min-h-screen text-white relative z-10">
-        {/* Back to Playlists Link */}
-        <div className="container mx-auto px-6 pt-6">
-          <Link
-            href="/?filter=playlist"
-            className="inline-flex items-center gap-2 text-gray-400 hover:text-stablekraft-teal transition-colors text-sm mb-4"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            <span>Back to Playlists</span>
-          </Link>
-        </div>
+      <div className="min-h-screen lg:h-full text-white relative z-10 lg:overflow-hidden">
+        <div className="container mx-auto px-6 pt-6 pb-40 lg:pb-8 lg:h-full lg:flex lg:flex-col">
+          <div className="lg:flex-shrink-0">
+            <Link
+              href="/?filter=playlist"
+              className="inline-flex items-center gap-2 text-gray-400 hover:text-stablekraft-teal transition-colors text-sm mb-4"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span>Back to Playlists</span>
+            </Link>
+          </div>
 
-        {/* Main Content - Two Column Layout */}
-        <div className="container mx-auto px-6 py-8">
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+          {/* Main Content - Two Column Layout */}
+          <div className="py-8 lg:py-0 grid grid-cols-1 lg:grid-cols-5 gap-8 lg:min-h-0">
             {/* Left Column - Playlist Info (2/5 width) */}
-            <div className="flex flex-col gap-6 lg:col-span-2 lg:sticky lg:top-24 lg:self-start">
+            <div className="flex flex-col gap-6 lg:col-span-2">
               {/* Artwork - responsive sizing like album page */}
               <div
                 className="relative mx-auto lg:mx-0 w-[280px] h-[280px] lg:w-full lg:h-auto lg:aspect-square lg:max-w-[400px] bg-gray-900/60 backdrop-blur-sm rounded-lg overflow-hidden group cursor-pointer"
@@ -890,10 +889,10 @@ export default function PlaylistTemplateCompact({ config }: PlaylistTemplateComp
             </div>
 
             {/* Right Column - Track List (3/5 width) */}
-            <div className="lg:col-span-3">
-              <div className="bg-black/75 backdrop-blur-sm rounded-lg p-4 md:p-6 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto">
+            <div className="lg:col-span-3 lg:min-h-0">
+              <div className="bg-black/75 backdrop-blur-sm rounded-lg p-4 md:p-6 lg:h-full lg:flex lg:flex-col lg:min-h-0">
                 {/* Search */}
-                <div className="mb-4">
+                <div className="mb-4 lg:flex-shrink-0">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <input
@@ -907,7 +906,7 @@ export default function PlaylistTemplateCompact({ config }: PlaylistTemplateComp
                 </div>
 
                 {/* Tracks Header */}
-                <div className="mb-4">
+                <div className="mb-4 lg:flex-shrink-0">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <h2 className="text-xl font-semibold text-white">Tracks</h2>
@@ -965,7 +964,7 @@ export default function PlaylistTemplateCompact({ config }: PlaylistTemplateComp
                 </div>
 
                 {/* Track List */}
-                <div className="space-y-1">
+                <div className="space-y-1 lg:flex-1 lg:min-h-0 lg:overflow-y-auto lg:pb-28">
                   {/* Grouped View with Episodes */}
                   {hasEpisodeMarkers && episodeViewMode === 'grouped' && filteredEpisodes.length > 0 ? (
                     <div className="space-y-3 md:space-y-2">
