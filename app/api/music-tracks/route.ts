@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { MusicTrackParser } from '@/lib/music-track-parser';
 import { V4VResolver } from '@/lib/v4v-resolver';
-// Removed: enhanced-music-service (migrated to Prisma)
 import { logger } from '@/lib/logger';
 
 // In-memory cache for server-side caching
@@ -210,34 +209,7 @@ export async function GET(request: NextRequest) {
     
     logger.info(`🎵 Extracting music tracks from: ${feedUrl} (cache miss)`);
     
-    // Check if enhanced parsing is requested
-    const useEnhanced = searchParams.get('useEnhanced') === 'true';
-    
-    let result;
-    if (useEnhanced) {
-      logger.info('🚀 Using enhanced RSS parser with Podcast Index integration...');
-      try {
-        // Import enhanced RSS parser
-        const { enhancedRSSParser } = await import('@/lib/enhanced-rss-parser');
-        
-        // Parse with enhanced capabilities
-        const enhancedResult = await enhancedRSSParser.parseAlbumFeed(feedUrl, {
-          useEnhanced: true,
-          includePodcastIndex: true,
-          resolveRemoteItems: true,
-          extractValueForValue: true
-        });
-        
-        // Convert to compatible format if needed
-        result = enhancedResult;
-      } catch (enhancedError) {
-        console.warn('Enhanced parsing failed, falling back to legacy parser:', enhancedError);
-        result = await MusicTrackParser.extractMusicTracks(feedUrl);
-      }
-    } else {
-      // Use legacy parser
-      result = await MusicTrackParser.extractMusicTracks(feedUrl);
-    }
+    const result = await MusicTrackParser.extractMusicTracks(feedUrl);
     
     // Check if we should resolve V4V tracks
     if (resolveV4V && result?.tracks) {
@@ -313,12 +285,10 @@ export async function GET(request: NextRequest) {
           offset,
           limit,
           totalTracks: allTracks.length,
-          parser: useEnhanced ? 'enhanced-rss-parser' : 'legacy-parser',
-          enhanced: useEnhanced,
           lastUpdated: new Date().toISOString()
         }
       },
-      message: `Successfully extracted ${paginatedTracks.length} music tracks (${offset + 1}-${offset + paginatedTracks.length} of ${allTracks.length}) using ${useEnhanced ? 'enhanced' : 'legacy'} parser`
+      message: `Successfully extracted ${paginatedTracks.length} music tracks (${offset + 1}-${offset + paginatedTracks.length} of ${allTracks.length})`
     };
     
     // Cache the result

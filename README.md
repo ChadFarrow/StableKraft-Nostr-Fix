@@ -28,6 +28,8 @@ app/
 ├── search/                  # Fuzzy search with typo tolerance
 ├── library/                 # User library
 ├── radio/                   # Radio mode
+├── sandbox/                 # Development sandboxes
+├── test-amber/              # NIP-46 remote signer testing
 ├── admin/                   # Admin panel (Nostr auth)
 ├── settings/                # User settings
 └── api/                     # API routes
@@ -40,10 +42,19 @@ lib/
 ├── nostr/                   # Nostr integration
 │   ├── signer.ts           # NIP-07/NIP-46/NIP-55 signing
 │   ├── favorites.ts        # Favorites sync to Nostr
+│   ├── publish-queue.ts    # Debounced Nostr event publishing
+│   ├── playlist-events.ts  # Kind 34139 playlist publishing
+│   ├── relay.ts            # Relay connection management
 │   ├── zaps.ts             # Zap support
 │   └── nip05.ts            # NIP-05 verification
+├── playlist/                # Playlist configuration & resolution
+│   ├── configs.ts          # Playlist definitions
+│   ├── parser.ts           # XML feed parsing
+│   ├── resolver.ts         # Remote item resolution
+│   └── handler.ts          # API route handler factory
 ├── music-track-parser/      # Track extraction from feeds
 ├── rss-parser/              # RSS feed parsing
+├── feed-parsing.ts          # Feed import & track parsing
 ├── feed-discovery.ts        # Automated feed discovery from playlists
 ├── v4v-resolver.ts          # Value4Value resolution
 ├── fuzzy-search.ts          # pg_trgm fuzzy matching
@@ -54,10 +65,10 @@ components/
 ├── AdminPanel.tsx           # Feed management interface
 ├── NowPlayingBar.tsx        # Audio player controls
 ├── AlbumCard.tsx            # Album display cards
-├── BoostButton.tsx          # Lightning boost payments
+├── GlobalBoostModal.tsx     # Lightning boost payments
 ├── CDNImage.tsx             # Optimized image loading
-├── favorites/               # Favorite button components
-└── Nostr/                   # Nostr auth components
+├── favorites/               # Favorite/sync/playlist publish buttons
+└── Nostr/                   # Nostr auth & social components
 ```
 
 ## Features

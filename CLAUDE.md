@@ -11,6 +11,9 @@ npm run deploy       # Deploy via script
 ## Boundaries
 - Never commit secrets (`.env`, API keys)
 - Run `npm run build` before committing
+- No `src/` directory — all source lives in `app/`, `lib/`, `components/`, `contexts/`
+- No `deploy-*/` artifacts in the repo — add to `.gitignore` if generated
+- No JSON-file databases — all data is in PostgreSQL via Prisma (the old `data/archived-json-database/` was removed)
 
 ## Tech Stack
 - Next.js 15 (App Router), React 18, TypeScript, PostgreSQL/Prisma
