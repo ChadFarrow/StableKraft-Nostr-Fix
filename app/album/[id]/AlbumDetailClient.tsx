@@ -817,11 +817,11 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
         </div>
 
         {/* Two-column layout on desktop, single column on mobile */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 mb-8 lg:mb-0 lg:min-h-0">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 mb-8 lg:mb-0 lg:flex-1 lg:min-h-0">
           {/* Left Column: Album Art and Info (2/5 width) */}
-          <div className="flex flex-col gap-6 lg:col-span-2">
+          <div className="flex flex-col gap-6 lg:gap-4 lg:col-span-2 lg:min-h-0 lg:overflow-y-auto scrollbar-hide">
             {/* Album Art with Play Button Overlay */}
-            <div className="relative group mx-auto lg:mx-0 w-[280px] h-[280px] lg:w-full lg:h-auto lg:aspect-square lg:max-w-[400px]">
+            <div className="relative group mx-auto lg:mx-0 w-[280px] h-[280px] lg:w-full lg:h-auto lg:aspect-square lg:max-w-[320px]">
             <Image 
               src={albumArtError || !album?.coverArt ? getPlaceholderImageUrl('medium') : getAlbumArtworkUrl(album.coverArt, 'medium', true)} 
               alt={album.title}
@@ -1132,7 +1132,7 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
                     title={isUnavailable ? 'This track is currently unavailable' : undefined}
                   >
                     {/* Row 1: Artwork + Track Info */}
-                    <div className="flex items-center gap-3 flex-1">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
                       <div className="relative w-12 h-12 md:w-14 md:h-14 flex-shrink-0 overflow-hidden rounded">
                         {/* Use track-specific artwork if available, fallback to album artwork */}
                         <Image
