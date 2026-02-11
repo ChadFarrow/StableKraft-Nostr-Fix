@@ -191,7 +191,7 @@ function FavoritesPageContent() {
       if (albumsData.success) {
         const allAlbums = albumsData.data || [];
         // Separate publishers, playlists, and regular albums
-        const playlistTitles = ['hgh', 'mmm', 'sas', 'iam', 'itdv', 'mmt', 'b4ts', 'upbeats', 'flowgnar'];
+        const playlistTitles = ['hgh', 'mmm', 'sas', 'iam', 'itdv', 'mmt', 'b4ts', 'upbeats', 'flowgnar', 'greatesthits', 'lt'];
 
         const isPlaylist = (album: any) => {
           if (album.type === 'playlist') return true;
@@ -212,7 +212,7 @@ function FavoritesPageContent() {
           'b4ts': 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/b4ts-playlist-art.webp',
           'upbeats': 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/UpBEATs-music-playlist.webp',
           'flowgnar': 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/flowgnar-playlist-art.webp',
-          'greatest hits': 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/Greatest-Hits-music-playlist.png',
+          'greatesthits': 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/Greatest-Hits-music-playlist.png',
           'lt': 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/LT-music-playlist.png',
           'top100': 'https://podcastindex.org/android-chrome-256x256.png'
         };
