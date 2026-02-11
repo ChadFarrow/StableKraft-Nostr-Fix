@@ -212,6 +212,8 @@ function FavoritesPageContent() {
           'b4ts': 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/b4ts-playlist-art.webp',
           'upbeats': 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/UpBEATs-music-playlist.webp',
           'flowgnar': 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/flowgnar-playlist-art.webp',
+          'greatest hits': 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/Greatest-Hits-music-playlist.png',
+          'lt': 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/LT-music-playlist.png',
           'top100': 'https://podcastindex.org/android-chrome-256x256.png'
         };
 
@@ -1281,7 +1283,11 @@ function FavoritesPageContent() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                   {sortedPlaylists.map((playlist) => {
                     // Extract playlist slug from ID (e.g., 'hgh-playlist' -> 'hgh')
-                    const playlistSlug = playlist.id.replace('-playlist', '').toLowerCase();
+                    const playlistSlugOverrides: Record<string, string> = {
+                      'greatestHits-playlist': 'greatest-hits',
+                    };
+                    const playlistSlug = playlistSlugOverrides[playlist.id]
+                      || playlist.id.replace('-playlist', '').toLowerCase();
 
                     const playlistForCard = {
                       id: playlist.id,
