@@ -348,7 +348,8 @@ export default function AdminPanel() {
           warning: response.status === 206,
           feed: data.feed,
           publisherFeed: data.publisherFeed,
-          importedPublisherFeed: data.importedPublisherFeed
+          importedPublisherFeed: data.importedPublisherFeed,
+          linkedAlbums: data.linkedAlbums
         });
         setShowImportResultModal(true);
         setNewFeedUrl('');
@@ -689,6 +690,7 @@ export default function AdminPanel() {
                   onPaste={(e) => {
                     const pastedText = e.clipboardData.getData('text');
                     if (pastedText.trim()) {
+                      e.preventDefault();
                       setNewFeedUrl(pastedText.trim());
                     }
                   }}
@@ -740,6 +742,7 @@ export default function AdminPanel() {
                   onPaste={(e) => {
                     const pastedText = e.clipboardData.getData('text');
                     if (pastedText.trim()) {
+                      e.preventDefault();
                       setDeleteUrl(pastedText.trim());
                       setDeletePreview(null);
                     }
@@ -1287,10 +1290,17 @@ export default function AdminPanel() {
                       <p className="text-gray-300 mb-3">{importResult.feed.artist}</p>
                     )}
                     <div className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        <span className="text-gray-400">📀 Tracks:</span>
-                        <span className="text-white font-medium">{importResult.feed?._count?.Track || 0}</span>
-                      </div>
+                      {importResult.linkedAlbums ? (
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="text-gray-400">📀 Albums:</span>
+                          <span className="text-white font-medium">{importResult.linkedAlbums.totalLinked} linked ({importResult.linkedAlbums.imported} imported, {importResult.linkedAlbums.remoteItemsFound} referenced)</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="text-gray-400">📀 Tracks:</span>
+                          <span className="text-white font-medium">{importResult.feed?._count?.Track || 0}</span>
+                        </div>
+                      )}
                       {importResult.feed?.v4vRecipient && (
                         <div className="flex items-center gap-2 text-sm">
                           <span className="text-gray-400">⚡ Lightning:</span>
