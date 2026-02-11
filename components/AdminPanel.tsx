@@ -319,7 +319,7 @@ export default function AdminPanel() {
     try {
       // Auto-detect type from URL patterns, default to 'album'
       let detectedType = 'album';
-      if (feedUrl.includes('/artist/') || feedUrl.includes('/publisher/') || feedUrl.includes('-pubfeed')) {
+      if (feedUrl.includes('/artist/') || feedUrl.includes('/publisher') || feedUrl.includes('-pubfeed') || feedUrl.includes('publisher-feed')) {
         detectedType = 'publisher';
       } else if (feedUrl.includes('/playlist/')) {
         detectedType = 'playlist';
