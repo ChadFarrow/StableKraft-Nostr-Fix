@@ -7,6 +7,7 @@ import {
   importFeedToDatabase,
   getEpisodesFromAPI
 } from '@/lib/feed-parsing';
+import { discoverAndParsePublishers } from '@/lib/feed-discovery';
 
 const PODCAST_INDEX_API_KEY = process.env.PODCAST_INDEX_API_KEY;
 const PODCAST_INDEX_API_SECRET = process.env.PODCAST_INDEX_API_SECRET;
@@ -126,6 +127,13 @@ export async function POST(request: Request) {
     }
 
     console.log(`✅ Parse complete: ${parseResults.length} successful, ${failedParses.length} failed`);
+
+    // Discover publishers for newly parsed album feeds
+    const parsedFeedIds = parseResults.map(r => r.feedId).filter(Boolean);
+    if (parsedFeedIds.length > 0) {
+      const pubResult = await discoverAndParsePublishers(parsedFeedIds);
+      console.log(`🔗 Publisher discovery: ${pubResult.discovered} new, ${pubResult.linked} linked`);
+    }
 
     const totalTracks = parseResults.reduce((sum, result) => sum + (result.newTracks || 0), 0);
 

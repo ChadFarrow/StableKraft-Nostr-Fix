@@ -38,6 +38,8 @@ Playlists use `<podcast:remoteItem>` with `feedGuid` + `itemGuid`. On `?refresh`
 3. Parse new feeds (imports tracks + V4V data)
 4. Discover/link publisher feeds
 
+**Publisher discovery** (`discoverAndParsePublishers` in `lib/feed-discovery.ts`): First checks album XML for `<podcast:remoteItem medium="publisher">` tags. If absent, falls back to Podcast Index API search by artist name (`findPublisherFeed` in `lib/publisher-detector.ts`). Deduplicates PI API calls per-artist within a run. Daily workflow Step 4 (`POST /api/playlist/parse-feeds`) also runs publisher discovery after parsing.
+
 **Duplicate ID gotcha**: Podcast Index uses numeric IDs (`6876105`) while our DB uses GUIDs (`b2048129-...`). When `importFeedToDatabase` finds a URL already exists under a different ID, it redirects to the existing feed and imports tracks into it (see `lib/feed-parsing.ts`).
 
 **Resolution rate**: Expect 80-90%. Gaps come from dead feeds (removed from Podcast Index), duplicate GUIDs across platforms (Wavlake vs original publisher), and duplicate URLs under different feedGuid values.

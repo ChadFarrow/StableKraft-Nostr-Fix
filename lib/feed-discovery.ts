@@ -3,6 +3,7 @@ import { isValidFeedUrl, normalizeUrl } from '@/lib/url-utils';
 import { generatePodcastIndexHeaders, normalizeFeedResponse, getFeedByUrlPreferNewest } from '@/lib/podcast-index-api';
 import { parseFeedByGuid } from '@/lib/feed-parsing';
 import { extractPublisherFromXML, discoverAndStorePublisher } from '@/lib/publisher-discovery';
+import { findPublisherFeed } from '@/lib/publisher-detector';
 
 interface PodcastIndexResponse {
   status: string;
@@ -410,9 +411,13 @@ export async function discoverAndParsePublishers(albumFeedIds: string[]): Promis
       id: true,
       title: true,
       originalUrl: true,
-      publisherId: true
+      publisherId: true,
+      artist: true
     }
   });
+
+  // Track artists already searched via PI API to avoid redundant calls
+  const searchedArtists = new Set<string>();
 
   for (const album of albums) {
     // Skip if already linked to a publisher
@@ -472,6 +477,42 @@ export async function discoverAndParsePublishers(albumFeedIds: string[]): Promis
             });
             linked++;
             console.log(`🔗 Linked album "${album.title}" to publisher`);
+          }
+        }
+      } else if (album.artist) {
+        // Fallback: search Podcast Index API by artist name
+        const artistKey = album.artist.toLowerCase();
+        if (!searchedArtists.has(artistKey)) {
+          searchedArtists.add(artistKey);
+          const piResult = await findPublisherFeed(album.artist);
+          if (piResult.found && piResult.feedUrl) {
+            const normalizedUrl = normalizeUrl(piResult.feedUrl);
+            const wasAdded = await discoverAndStorePublisher({
+              feedGuid: piResult.guid || '',
+              feedUrl: normalizedUrl,
+              medium: 'publisher'
+            });
+            if (wasAdded) discovered++;
+          }
+        }
+
+        // Try to link album to publisher (may have been found for a previous album by same artist)
+        if (album.artist) {
+          const publisher = await prisma.feed.findFirst({
+            where: {
+              type: 'publisher',
+              artist: { equals: album.artist, mode: 'insensitive' }
+            },
+            select: { id: true }
+          });
+
+          if (publisher) {
+            await prisma.feed.update({
+              where: { id: album.id },
+              data: { publisherId: publisher.id }
+            });
+            linked++;
+            console.log(`🔗 Linked album "${album.title}" to publisher via PI API`);
           }
         }
       }
