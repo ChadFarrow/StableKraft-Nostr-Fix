@@ -355,35 +355,9 @@ export function BitcoinConnectProvider({ children }: { children: React.ReactNode
         const supportsBalance = !!provider.getBalance;
         const hasKeysendMethod = !!provider.keysend;
 
-        // Probe keysend capability - check if wallet truly supports keysend or just has the method
-        // This detects wallets that have the method but don't actually support keysend (e.g., Cashu)
-        let keysendActuallySupported = hasKeysendMethod;
-        if (hasKeysendMethod && provider.keysend) {
-          try {
-            // Try keysend with 1 sat to a valid-format but non-existent pubkey
-            // The error type tells us if keysend is fundamentally unsupported vs just routing issues
-            await provider.keysend({
-              destination: '02aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', // Valid format, non-existent
-              amount: '1',
-            });
-            // If we get here somehow, keysend is supported (unlikely to succeed)
-            keysendActuallySupported = true;
-          } catch (probeError) {
-            const errorMsg = probeError instanceof Error ? probeError.message.toLowerCase() : '';
-            // If error mentions "not supported" or "cashu", keysend is fundamentally not supported
-            if (errorMsg.includes('not supported') || errorMsg.includes('cashu') || errorMsg.includes('not implemented')) {
-              console.log('🔍 Keysend probe: NOT supported (wallet rejected keysend)');
-              keysendActuallySupported = false;
-            } else {
-              // Other errors (no route, invalid amount, timeout) mean keysend IS supported
-              // These are expected errors when probing with fake destination
-              console.log('🔍 Keysend probe: supported (keysend method works)');
-              keysendActuallySupported = true;
-            }
-          }
-        } else {
-          console.log('🔍 Keysend probe: method not available on provider');
-        }
+        // Infer keysend capability from provider type instead of probing with a real payment
+        // (probing triggers a payment popup in wallets like Alby extension)
+        const keysendActuallySupported = hasKeysendMethod && type !== 'unknown';
         setKeysendSupported(keysendActuallySupported);
 
         // Fetch Coinos profile for avatar and username
