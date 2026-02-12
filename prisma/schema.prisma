@@ -115,7 +115,9 @@ model Feed {
 
   @@index([guid])
   @@index([lastFetched])
+  @@index([oldestItemPubdate])
   @@index([publisherId])
+  @@index([publisherId, status])
   @@index([status])
   @@index([status, lastFetched])
   @@index([status, priority, createdAt])
@@ -237,6 +239,7 @@ model Track {
   @@index([album])
   @@index([artist, album])
   @@index([artist])
+  @@index([audioUrl])
   @@index([feedId])
   @@index([feedId, publishedAt])
   @@index([feedId, status])
