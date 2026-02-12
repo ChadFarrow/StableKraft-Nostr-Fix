@@ -208,6 +208,7 @@ export async function GET(request: NextRequest) {
           where: {
             AND: [
               { status: 'active' },
+              { type: { not: 'publisher' } },
               {
                 OR: [
                   { title: { contains: query, mode: 'insensitive' } },
