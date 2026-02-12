@@ -308,7 +308,12 @@ export default function AdminPanel() {
 
     // Basic URL validation
     try {
-      new URL(feedUrl);
+      const parsed = new URL(feedUrl);
+      // Reject stablekraft.app site URLs — these are pages, not RSS feeds
+      if (parsed.hostname === 'stablekraft.app' || parsed.hostname === 'www.stablekraft.app') {
+        toast.error('That\'s a site page URL, not an RSS feed URL. Use the actual XML feed URL instead.');
+        return;
+      }
     } catch {
       toast.error('Please enter a valid URL');
       return;
