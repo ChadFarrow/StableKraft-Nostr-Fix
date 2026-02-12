@@ -42,6 +42,8 @@ Playlists use `<podcast:remoteItem>` with `feedGuid` + `itemGuid`. On `?refresh`
 
 **Duplicate ID gotcha**: Podcast Index uses numeric IDs (`6876105`) while our DB uses GUIDs (`b2048129-...`). When `importFeedToDatabase` finds a URL already exists under a different ID, it redirects to the existing feed and imports tracks into it (see `lib/feed-parsing.ts`).
 
+**Feed deduplication pattern**: Both `import-albums/route.ts` and `process-remote-items/route.ts` use the same multi-check dedup: normalized URL, raw URL, feedGuid as ID, feedGuid as GUID column, feedGuid-in-URL substring. After parsing, a secondary check catches feeds by `podcastGuid` from the XML. New feeds get slug-based IDs (`artist-title` via `generateAlbumSlug`) and are linked to their publisher via `publisherId`. When modifying feed import code, follow this pattern — weak dedup (e.g., `findUnique` on raw URL only) causes duplicate entries.
+
 **Resolution rate**: Expect 80-90%. Gaps come from dead feeds (removed from Podcast Index), duplicate GUIDs across platforms (Wavlake vs original publisher), and duplicate URLs under different feedGuid values.
 
 ### Admin Feed Management (`/admin`)
@@ -49,6 +51,8 @@ Single input handles both add and reparse:
 - New feeds -> added and parsed automatically
 - Existing feeds -> reparsed to update content
 - Auto-detects type from URL (`-pubfeed` = publisher)
+
+**Fixing duplicate feeds**: Reparsing won't consolidate duplicates — delete all copies first, then re-add. Use `DELETE /api/feeds?id=<feedId>` for each duplicate, then paste the feed URL in the admin input. The delete-by-URL endpoint (`POST /api/admin/feeds/delete-by-url`) supports preview mode. The per-ID endpoint (`DELETE /api/admin/feeds/[id]`) is currently disabled (503).
 
 ### Search
 - Uses PostgreSQL trigram `similarity()` for fuzzy matching
