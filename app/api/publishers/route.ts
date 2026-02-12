@@ -6,6 +6,25 @@ export async function GET() {
   try {
     console.log('🔍 Publishers API: Loading publishers from database');
 
+    // Get actual publisher-type feeds from the database
+    const publisherFeeds = await prisma.feed.findMany({
+      where: {
+        type: 'publisher',
+        status: 'active'
+      },
+      select: {
+        id: true,
+        title: true,
+        artist: true,
+        image: true,
+        originalUrl: true,
+        createdAt: true,
+        updatedAt: true,
+      }
+    });
+
+    console.log(`📊 Found ${publisherFeeds.length} publisher feeds`);
+
     // Get all album feeds with track counts and images, grouped by artist
     const albumFeeds = await prisma.feed.findMany({
       where: {
@@ -30,7 +49,7 @@ export async function GET() {
 
     console.log(`📊 Found ${albumFeeds.length} album feeds`);
 
-    // Group albums by artist name to create publishers
+    // Group albums by artist name (lowercase) for lookup
     const artistAlbums = new Map<string, typeof albumFeeds>();
     for (const album of albumFeeds) {
       if (!album.artist || album._count.Track === 0) continue;
@@ -57,8 +76,62 @@ export async function GET() {
       dateAdded: string;
     }[] = [];
 
+    // Track which artists are covered by actual publisher feeds
+    const coveredArtists = new Set<string>();
+
+    // First: add entries from actual publisher feeds
+    for (const pubFeed of publisherFeeds) {
+      const artistName = pubFeed.artist || pubFeed.title;
+      if (!artistName) continue;
+
+      const artistKey = artistName.toLowerCase().trim();
+      coveredArtists.add(artistKey);
+
+      // Find matching album feeds by artist name
+      const albums = artistAlbums.get(artistKey) || [];
+      const trackCount = albums.reduce((sum, album) => sum + album._count.Track, 0);
+
+      // Use publisher feed's image, fall back to most recent album image
+      let image = pubFeed.image || '/placeholder-artist.png';
+      if (image === '/placeholder-artist.png' && albums.length > 0) {
+        const sortedAlbums = [...albums].sort((a, b) =>
+          new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime()
+        );
+        image = sortedAlbums.find(a => a.image)?.image || image;
+      }
+
+      // Use the oldest album's createdAt, or publisher feed's createdAt
+      let dateAdded = pubFeed.createdAt.toISOString();
+      if (albums.length > 0) {
+        const oldestAlbum = albums.reduce((oldest, album) =>
+          new Date(album.createdAt).getTime() < new Date(oldest.createdAt).getTime() ? album : oldest
+        );
+        dateAdded = oldestAlbum.createdAt.toISOString();
+      }
+
+      const displayTitle = pubFeed.title || artistName;
+
+      publisherList.push({
+        id: pubFeed.id,
+        title: displayTitle,
+        feedGuid: pubFeed.id,
+        originalUrl: pubFeed.originalUrl,
+        image,
+        description: albums.length > 0
+          ? `${albums.length} release${albums.length !== 1 ? 's' : ''}, ${trackCount} tracks`
+          : 'Publisher feed',
+        albums: [],
+        itemCount: albums.length || 1,
+        totalTracks: trackCount,
+        isPublisherCard: true,
+        publisherUrl: `/publisher/${generateAlbumSlug(displayTitle)}`,
+        dateAdded
+      });
+    }
+
+    // Second: add synthetic entries for artists with 2+ albums but no publisher feed
     for (const [artistKey, albums] of artistAlbums) {
-      // Only include artists with more than 1 release
+      if (coveredArtists.has(artistKey)) continue;
       if (albums.length <= 1) continue;
 
       const artistName = albums[0].artist || 'Unknown Artist';
@@ -95,7 +168,7 @@ export async function GET() {
     // Sort alphabetically by title
     const sortedList = publisherList.sort((a, b) => a.title.localeCompare(b.title));
 
-    console.log(`✅ Publishers API: Returning ${sortedList.length} publishers derived from ${albumFeeds.length} album feeds`);
+    console.log(`✅ Publishers API: Returning ${sortedList.length} publishers (${publisherFeeds.length} from publisher feeds, ${sortedList.length - publisherFeeds.length} from album grouping)`);
 
     const response = {
       publishers: sortedList,
