@@ -1,11 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { parseRSSFeedWithSegments } from '@/lib/rss-parser-db';
+import { parseRSSFeedWithSegments, calculateTrackOrder } from '@/lib/rss-parser-db';
+import { generateAlbumSlug, normalizeUrl } from '@/lib/url-utils';
 
 interface RemoteItem {
   feedGuid?: string;
   feedUrl?: string;
   medium?: string;
+}
+
+function generateFeedId(artist: string | undefined, title: string): string {
+  const parts = [];
+  if (artist) parts.push(generateAlbumSlug(artist));
+  parts.push(generateAlbumSlug(title));
+  let baseId = parts.join('-');
+  if (!baseId || baseId.length < 2) baseId = `feed-${Date.now()}`;
+  return baseId;
 }
 
 /**
@@ -97,13 +107,32 @@ export async function POST(
       }
 
       try {
-        // Check if feed already exists
-        const existingFeed = await prisma.feed.findUnique({
-          where: { originalUrl: remoteItem.feedUrl }
+        // Check if feed already exists (by normalized URL, raw URL, feedGuid, or GUID-in-URL)
+        const normalizedUrl = normalizeUrl(remoteItem.feedUrl);
+        const conditions: any[] = [
+          { originalUrl: normalizedUrl },
+          { originalUrl: remoteItem.feedUrl }
+        ];
+        if (remoteItem.feedGuid) {
+          conditions.push({ id: remoteItem.feedGuid });
+          conditions.push({ guid: remoteItem.feedGuid });
+          conditions.push({ originalUrl: { contains: remoteItem.feedGuid } });
+        }
+
+        const existingFeed = await prisma.feed.findFirst({
+          where: { OR: conditions }
         });
 
         if (existingFeed) {
-          console.log(`⚡ Feed already exists: ${remoteItem.feedUrl}`);
+          console.log(`⚡ Feed already exists: ${existingFeed.title} (${existingFeed.id})`);
+          // Link to publisher if not already linked
+          if (!existingFeed.publisherId) {
+            await prisma.feed.update({
+              where: { id: existingFeed.id },
+              data: { publisherId: id }
+            });
+            console.log(`🔗 Linked to publisher: ${id}`);
+          }
           results.skipped++;
           continue;
         }
@@ -113,12 +142,36 @@ export async function POST(
         // Parse the RSS feed
         const parsedFeed = await parseRSSFeedWithSegments(remoteItem.feedUrl);
 
+        // Generate slug-based ID (same pattern as import-albums)
+        let feedId = generateFeedId(parsedFeed.artist, parsedFeed.title);
+        const idExists = await prisma.feed.findUnique({ where: { id: feedId } });
+        if (idExists) feedId = `${feedId}-${Date.now()}`;
+
+        // Secondary GUID check after parsing (feed XML may reveal a GUID we didn't have before)
+        if (parsedFeed.podcastGuid) {
+          const guidExists = await prisma.feed.findFirst({
+            where: { guid: parsedFeed.podcastGuid }
+          });
+          if (guidExists) {
+            console.log(`⚡ Feed found by parsed GUID: ${guidExists.title} (${guidExists.id})`);
+            if (!guidExists.publisherId) {
+              await prisma.feed.update({
+                where: { id: guidExists.id },
+                data: { publisherId: id }
+              });
+            }
+            results.skipped++;
+            continue;
+          }
+        }
+
         // Create feed in database
         const feed = await prisma.feed.create({
           data: {
-            id: `feed-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-            originalUrl: remoteItem.feedUrl,
-            cdnUrl: remoteItem.feedUrl,
+            id: feedId,
+            guid: parsedFeed.podcastGuid || null,
+            originalUrl: normalizedUrl,
+            cdnUrl: normalizedUrl,
             type: 'album',
             priority: 'normal',
             title: parsedFeed.title,
@@ -127,9 +180,14 @@ export async function POST(
             image: parsedFeed.image,
             language: parsedFeed.language,
             category: parsedFeed.category,
+            podcastCategories: parsedFeed.podcastCategories || [],
             explicit: parsedFeed.explicit,
+            v4vRecipient: parsedFeed.v4vRecipient || null,
+            v4vValue: parsedFeed.v4vValue || null,
+            publisherId: id,
             lastFetched: new Date(),
             status: 'active',
+            createdAt: new Date(),
             updatedAt: new Date()
           }
         });
@@ -155,10 +213,12 @@ export async function POST(
             itunesDuration: item.itunesDuration,
             itunesKeywords: item.itunesKeywords || [],
             itunesCategories: item.itunesCategories || [],
+            podcastCategories: parsedFeed.podcastCategories || [],
             v4vRecipient: item.v4vRecipient,
             v4vValue: item.v4vValue,
             startTime: item.startTime,
             endTime: item.endTime,
+            trackOrder: item.episode ? calculateTrackOrder(item.episode, item.season) : index + 1,
             updatedAt: new Date()
           }));
 
