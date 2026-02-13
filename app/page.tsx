@@ -957,8 +957,12 @@ function HomePageContent() {
         offset: offset.toString(),
         tier: loadTier,
         filter: filter,
-        sort: sortType
       });
+      // Only send sort param for non-default sorts; 'name-asc' maps to the server's
+      // default format+alpha sort (Albums → EPs → Singles, then A-Z within each)
+      if (sortType !== 'name-asc') {
+        params.set('sort', sortType);
+      }
       
       if (process.env.NODE_ENV === 'development') {
         console.log(`🌐 Fetching: /api/albums-fast?${params}`);
