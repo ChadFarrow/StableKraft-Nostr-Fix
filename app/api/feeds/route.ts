@@ -524,7 +524,8 @@ export async function POST(request: NextRequest) {
               OR: [
                 { originalUrl: parsedFeed.publisherFeed.feedUrl },
                 { guid: parsedFeed.publisherFeed.feedGuid }
-              ]
+              ],
+              type: 'publisher'
             }
           });
 
@@ -653,8 +654,11 @@ export async function POST(request: NextRequest) {
 
           if (publisherFeedInfo.found) {
             // Check if publisher feed already exists
-            const existingPublisher = await prisma.feed.findUnique({
-              where: { originalUrl: publisherFeedInfo.feedUrl }
+            const existingPublisher = await prisma.feed.findFirst({
+              where: {
+                originalUrl: publisherFeedInfo.feedUrl,
+                type: 'publisher'
+              }
             });
 
             if (existingPublisher) {
