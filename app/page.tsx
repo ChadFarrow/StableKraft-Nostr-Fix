@@ -201,6 +201,36 @@ function HomePageContent() {
     return SORT_OPTIONS_ALBUMS;
   }, [activeFilter]);
 
+  // Re-fetch from server when sort changes (server-side sort for correct pagination)
+  const sortTypeRef = useRef(sortType);
+  useEffect(() => {
+    // Skip on initial render — data is already loaded with default sort
+    if (sortTypeRef.current === sortType) return;
+    sortTypeRef.current = sortType;
+
+    // Publishers and playlists don't use albums-fast API, skip server re-fetch
+    if (activeFilter === 'publishers' || activeFilter === 'playlist') return;
+
+    const loadSorted = async () => {
+      setIsLoading(true);
+      setCurrentPage(1);
+      setHasMoreAlbums(true);
+      try {
+        const { albums, totalCount } = await loadAlbumsData('all', ALBUMS_PER_PAGE, 0, activeFilter);
+        setDisplayedAlbums(albums);
+        setEnhancedAlbums(albums);
+        setCriticalAlbums(albums.slice(0, 12));
+        setTotalAlbums(totalCount);
+        setHasMoreAlbums(albums.length >= ALBUMS_PER_PAGE && albums.length < totalCount);
+      } catch (error) {
+        console.error('Error reloading with sort:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadSorted();
+  }, [sortType]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Cache for filter data to avoid re-fetching
   const [filterCache, setFilterCache] = useState<Map<FilterType, any>>(new Map());
 
@@ -903,7 +933,7 @@ function HomePageContent() {
       }
       
       // Simplified caching - only cache the main 'all' request with no filtering
-      if (typeof window !== 'undefined' && loadTier === 'all' && offset === 0 && filter === 'all') {
+      if (typeof window !== 'undefined' && loadTier === 'all' && offset === 0 && filter === 'all' && sortType === 'name-asc') {
         const cached = localStorage.getItem(`cachedAlbums_${ALBUMS_PER_PAGE}_${API_VERSION}`);
         const timestamp = localStorage.getItem(`albumsCacheTimestamp_${ALBUMS_PER_PAGE}_${API_VERSION}`);
         
@@ -926,8 +956,8 @@ function HomePageContent() {
         limit: limit.toString(),
         offset: offset.toString(),
         tier: loadTier,
-        filter: filter
-        // Remove cache busting for better performance
+        filter: filter,
+        sort: sortType
       });
       
       if (process.env.NODE_ENV === 'development') {

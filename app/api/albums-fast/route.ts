@@ -93,6 +93,7 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get('limit') || '50');
     const offset = parseInt(searchParams.get('offset') || '0');
     const filter = searchParams.get('filter') || 'all'; // albums, eps, singles, all
+    const sort = searchParams.get('sort') || 'default'; // Sort order: name-asc, added-desc, year-desc, etc.
     const forceRefresh = searchParams.get('refresh') === 'true'; // Force cache refresh
 
     // Clear cache if refresh requested
@@ -437,32 +438,57 @@ export async function GET(request: Request) {
       }
     }
     
-    // Sort albums by format (Albums → EPs → Singles) then alphabetically by title
-    filteredAlbums.sort((a, b) => {
-      // Get the original feed to check total track count (not just tracks with audio)
-      const aFeed = feeds.find(f => f.id === a.id);
-      const bFeed = feeds.find(f => f.id === b.id);
-      
-      const getTotalTrackCount = (feed: any) => feed?._count?.Track || 0;
-      
-      // Determine format based on total track count
-      const getFormatOrder = (trackCount: number) => {
-        if (trackCount >= 6) return 1; // Albums first
-        if (trackCount >= 2) return 2; // EPs second  
-        return 3; // Singles last
-      };
-      
-      const aFormatOrder = getFormatOrder(getTotalTrackCount(aFeed));
-      const bFormatOrder = getFormatOrder(getTotalTrackCount(bFeed));
-      
-      // First sort by format
-      if (aFormatOrder !== bFormatOrder) {
-        return aFormatOrder - bFormatOrder;
-      }
-      
-      // Then sort alphabetically by title within each format (case-insensitive)
-      return a.title.toLowerCase().localeCompare(b.title.toLowerCase());
-    });
+    // Sort albums based on requested sort order
+    switch (sort) {
+      case 'added-desc':
+        filteredAlbums.sort((a, b) => new Date(b.dateAdded || b.releaseDate || 0).getTime() - new Date(a.dateAdded || a.releaseDate || 0).getTime());
+        break;
+      case 'added-asc':
+        filteredAlbums.sort((a, b) => new Date(a.dateAdded || a.releaseDate || 0).getTime() - new Date(b.dateAdded || b.releaseDate || 0).getTime());
+        break;
+      case 'year-desc':
+        filteredAlbums.sort((a, b) => new Date(b.releaseDate || 0).getTime() - new Date(a.releaseDate || 0).getTime());
+        break;
+      case 'year-asc':
+        filteredAlbums.sort((a, b) => new Date(a.releaseDate || 0).getTime() - new Date(b.releaseDate || 0).getTime());
+        break;
+      case 'name-desc':
+        filteredAlbums.sort((a, b) => b.title.toLowerCase().localeCompare(a.title.toLowerCase()));
+        break;
+      case 'name-asc':
+        filteredAlbums.sort((a, b) => a.title.toLowerCase().localeCompare(b.title.toLowerCase()));
+        break;
+      case 'tracks-desc':
+        filteredAlbums.sort((a, b) => (b.trackCount || 0) - (a.trackCount || 0));
+        break;
+      case 'tracks-asc':
+        filteredAlbums.sort((a, b) => (a.trackCount || 0) - (b.trackCount || 0));
+        break;
+      default:
+        // Default: format (Albums → EPs → Singles) then alphabetically by title
+        filteredAlbums.sort((a, b) => {
+          const aFeed = feeds.find(f => f.id === a.id);
+          const bFeed = feeds.find(f => f.id === b.id);
+
+          const getTotalTrackCount = (feed: any) => feed?._count?.Track || 0;
+
+          const getFormatOrder = (trackCount: number) => {
+            if (trackCount >= 6) return 1; // Albums first
+            if (trackCount >= 2) return 2; // EPs second
+            return 3; // Singles last
+          };
+
+          const aFormatOrder = getFormatOrder(getTotalTrackCount(aFeed));
+          const bFormatOrder = getFormatOrder(getTotalTrackCount(bFeed));
+
+          if (aFormatOrder !== bFormatOrder) {
+            return aFormatOrder - bFormatOrder;
+          }
+
+          return a.title.toLowerCase().localeCompare(b.title.toLowerCase());
+        });
+        break;
+    }
     
     // Add playlist albums only when specifically requesting playlists
     if (filter === 'playlist') {
@@ -501,6 +527,7 @@ export async function GET(request: Request) {
         offset,
         limit,
         filter,
+        sort,
         cached: !shouldRefreshCache,
         cacheAge: now - cacheTimestamp,
         source: 'database',
