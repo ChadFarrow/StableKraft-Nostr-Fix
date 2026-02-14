@@ -331,33 +331,8 @@ function HomePageContent() {
   }, []); // Run only once on mount
 
 
-  // Load publisher stats separately to ensure they're always available, even when using cache
-  useEffect(() => {
-    const loadPublisherStats = async () => {
-      // Only load if not already loaded
-      if (publisherStats.length > 0) return;
-
-      try {
-        const response = await fetch('/api/albums-fast?limit=1&offset=0&tier=all&filter=all');
-        if (response.ok) {
-          const data = await response.json();
-          const stats = data.publisherStats || [];
-          if (stats.length > 0) {
-            setPublisherStats(stats);
-            if (process.env.NODE_ENV === 'development') {
-              console.log(`📊 Loaded ${stats.length} publisher stats separately`);
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Error loading publisher stats:', error);
-      }
-    };
-
-    // Load after a short delay to allow main content to load first
-    const timer = setTimeout(loadPublisherStats, 500);
-    return () => clearTimeout(timer);
-  }, [publisherStats.length]);
+  // Publisher stats are now loaded from the initial /api/albums-fast response
+  // and cached/restored via localStorage alongside album data
 
 
   // Show background image after critical content loads (no artificial delay)
@@ -700,23 +675,13 @@ function HomePageContent() {
           hasMore: pageAlbums.length < totalCount
         };
       } else {
-        // Parallel fetch for count and data
-        const [totalCountResponse, albumsResult] = await Promise.all([
-          fetch(`/api/albums-fast?limit=1&offset=0&filter=${newFilter}`),
-          loadAlbumsData('all', ALBUMS_PER_PAGE, 0, newFilter)
-        ]);
-        
-        const totalCountData = await totalCountResponse.json();
-        const totalCountFromAPI = totalCountData.totalCount || 0;
-        const { albums: pageAlbums, totalCount } = albumsResult;
-        
-        // Use the totalCount from loadAlbumsData (more accurate) or fall back to API count
-        const finalTotalCount = totalCount > 0 ? totalCount : totalCountFromAPI;
-        
+        // Single fetch - loadAlbumsData already returns totalCount
+        const { albums: pageAlbums, totalCount } = await loadAlbumsData('all', ALBUMS_PER_PAGE, 0, newFilter);
+
         resultData = {
           albums: pageAlbums,
-          totalCount: finalTotalCount,
-          hasMore: pageAlbums.length < finalTotalCount
+          totalCount,
+          hasMore: pageAlbums.length < totalCount
         };
       }
       
@@ -944,6 +909,14 @@ function HomePageContent() {
               console.log('📦 Using cached albums');
             }
             const cachedAlbums = JSON.parse(cached);
+            // Restore publisher stats from cache to avoid redundant API call
+            const cachedStats = localStorage.getItem(`cachedPublisherStats_${API_VERSION}`);
+            if (cachedStats) {
+              try {
+                const stats = JSON.parse(cachedStats);
+                if (stats.length > 0) setPublisherStats(stats);
+              } catch { /* ignore parse errors */ }
+            }
             // For cached data, we need to estimate totalCount - use a large number to allow pagination
             // The actual totalCount will be updated from the next API call
             return { albums: cachedAlbums, totalCount: cachedAlbums.length >= ALBUMS_PER_PAGE ? 10000 : cachedAlbums.length };
@@ -1053,6 +1026,7 @@ function HomePageContent() {
         try {
           localStorage.setItem(`cachedAlbums_${ALBUMS_PER_PAGE}_${API_VERSION}`, JSON.stringify(rssAlbums));
           localStorage.setItem(`albumsCacheTimestamp_${ALBUMS_PER_PAGE}_${API_VERSION}`, Date.now().toString());
+          localStorage.setItem(`cachedPublisherStats_${API_VERSION}`, JSON.stringify(publisherStatsFromAPI));
           console.log(`💾 Cached ${rssAlbums.length} albums with ${publisherStatsFromAPI.length} publisher stats`);
         } catch (error) {
           // Handle quota exceeded error by clearing old caches

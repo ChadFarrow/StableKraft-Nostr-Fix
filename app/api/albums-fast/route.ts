@@ -125,8 +125,6 @@ export async function GET(request: Request) {
     
     let feeds: FeedWithTracks[];
     let publisherStats: Array<{ name: string; albumCount: number }>;
-    let totalFeedCount = 0; // Will be set below for use in totalCount calculation
-    let shouldPaginate = false; // Will be set below
     
     if (shouldRefreshCache) {
       if (process.env.NODE_ENV === 'development') {
@@ -134,31 +132,12 @@ export async function GET(request: Request) {
       }
       
       // Load all feeds to maintain global sort order
-      // Even for 'all' filter, we need all feeds to ensure correct sorting
-      // (Albums → EPs → Singles, then alphabetically within each format)
-      // Exclude sidebar-only items from main site display
-      totalFeedCount = await prisma.feed.count({
-        where: {
-          status: 'active'
-          // Note: 'sidebar-only' status feeds are excluded from main site
-        }
-      });
-      
-      // Always load all feeds to maintain global sort order
       // Pagination happens after sorting, not at the database level
-      shouldPaginate = false; // Disable DB-level pagination to maintain sort order
-      const feedsToLoad = totalFeedCount; // Load all feeds
-      
-      // Get active feeds with their tracks directly from database
-      // Exclude sidebar-only items from main site display
-      // Load all feeds - no artificial limit
-      const maxFeedsToLoad = feedsToLoad;
       
       try {
         // Fetch feeds with minimal track data (optimized select)
         feeds = await prisma.feed.findMany({
           where: { status: 'active' },
-          take: maxFeedsToLoad,
           select: {
             id: true,
             guid: true,
@@ -265,8 +244,6 @@ export async function GET(request: Request) {
       }
     } else {
       // Use cached data - no need for count query since cache has all feeds
-      totalFeedCount = cachedData!.feeds.length; // Use cached count instead of DB query
-
       // Use cached data - cache contains all feeds, so we can slice after sorting
       if (process.env.NODE_ENV === 'development') {
         console.log(`⚡ Using cached database results (${cachedData!.feeds.length} feeds)`);
@@ -464,22 +441,23 @@ export async function GET(request: Request) {
       case 'tracks-asc':
         filteredAlbums.sort((a, b) => (a.trackCount || 0) - (b.trackCount || 0));
         break;
-      default:
+      default: {
         // Default: format (Albums → EPs → Singles) then alphabetically by title
+        // Build a Map for O(1) feed lookups instead of O(n) .find() per album
+        const feedMap = new Map(feeds.map(f => [f.id, f]));
+
+        const getFormatOrder = (trackCount: number) => {
+          if (trackCount >= 6) return 1; // Albums first
+          if (trackCount >= 2) return 2; // EPs second
+          return 3; // Singles last
+        };
+
         filteredAlbums.sort((a, b) => {
-          const aFeed = feeds.find(f => f.id === a.id);
-          const bFeed = feeds.find(f => f.id === b.id);
+          const aCount = feedMap.get(a.id)?._count?.Track || 0;
+          const bCount = feedMap.get(b.id)?._count?.Track || 0;
 
-          const getTotalTrackCount = (feed: any) => feed?._count?.Track || 0;
-
-          const getFormatOrder = (trackCount: number) => {
-            if (trackCount >= 6) return 1; // Albums first
-            if (trackCount >= 2) return 2; // EPs second
-            return 3; // Singles last
-          };
-
-          const aFormatOrder = getFormatOrder(getTotalTrackCount(aFeed));
-          const bFormatOrder = getFormatOrder(getTotalTrackCount(bFeed));
+          const aFormatOrder = getFormatOrder(aCount);
+          const bFormatOrder = getFormatOrder(bCount);
 
           if (aFormatOrder !== bFormatOrder) {
             return aFormatOrder - bFormatOrder;
@@ -488,6 +466,7 @@ export async function GET(request: Request) {
           return a.title.toLowerCase().localeCompare(b.title.toLowerCase());
         });
         break;
+      }
     }
     
     // Add playlist albums only when specifically requesting playlists
