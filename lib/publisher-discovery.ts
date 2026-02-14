@@ -77,7 +77,7 @@ async function linkAlbumsToPublisher(publisherId: string, remoteItems: RemoteIte
     const result = await prisma.feed.updateMany({
       where: {
         OR: conditions,
-        type: { in: ['album', 'music'] },
+        type: { in: ['album', 'music', 'podcast'] },
         publisherId: null // Only update if not already linked
       },
       data: { publisherId }
@@ -271,7 +271,7 @@ export async function discoverAllPublishers(): Promise<{
 
   const albumFeeds = await prisma.feed.findMany({
     where: {
-      type: { in: ['album', 'music'] },
+      type: { in: ['album', 'music', 'podcast'] },
       status: 'active'
     },
     select: {

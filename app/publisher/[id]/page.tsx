@@ -296,7 +296,7 @@ async function loadPublisherData(publisherId: string) {
       // Find the first album feed with exact artist match (try all variants)
       let firstAlbumFeed = await prisma.feed.findFirst({
         where: {
-          type: { in: ['album', 'music'] },
+          type: { in: ['album', 'music', 'podcast'] },
           status: 'active',
           OR: artistSearchVariants.map(variant => ({
             artist: { equals: variant, mode: 'insensitive' as const }
@@ -317,7 +317,7 @@ async function loadPublisherData(publisherId: string) {
         console.log(`🔍 No exact artist match, trying ID pattern match for "${publisherId}"`);
         firstAlbumFeed = await prisma.feed.findFirst({
           where: {
-            type: { in: ['album', 'music'] },
+            type: { in: ['album', 'music', 'podcast'] },
             status: 'active',
             id: { startsWith: `-${publisherId}`, mode: 'insensitive' } // Match IDs like "-2-holla-album-name"
           },
@@ -535,7 +535,7 @@ async function loadPublisherData(publisherId: string) {
       relatedFeeds = await prisma.feed.findMany({
         where: {
           OR: allConditions,
-          type: { in: ['album', 'music'] },
+          type: { in: ['album', 'music', 'podcast'] },
           status: 'active'
         },
           select: {
@@ -611,7 +611,7 @@ async function loadPublisherData(publisherId: string) {
     const publisherIdFeeds = await prisma.feed.findMany({
       where: {
         publisherId: { in: allPublisherFeedIds },
-        type: { in: ['album', 'music'] },
+        type: { in: ['album', 'music', 'podcast'] },
         status: 'active'
       },
       select: {
@@ -687,7 +687,7 @@ async function loadPublisherData(publisherId: string) {
           OR: artistVariants.map(variant => ({
             artist: { equals: variant, mode: 'insensitive' as const }
           })),
-          type: { in: ['album', 'music'] },
+          type: { in: ['album', 'music', 'podcast'] },
           status: 'active'
         },
           select: {

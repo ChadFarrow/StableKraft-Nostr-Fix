@@ -109,7 +109,8 @@ export async function GET() {
         dateAdded = oldestAlbum.createdAt.toISOString();
       }
 
-      const displayTitle = pubFeed.title || artistName;
+      // Prefer artist name over feed title to avoid "Untitled Feed" display
+      const displayTitle = artistName || pubFeed.title || 'Unknown Artist';
 
       publisherList.push({
         id: pubFeed.id,

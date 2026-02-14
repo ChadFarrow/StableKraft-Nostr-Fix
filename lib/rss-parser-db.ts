@@ -1100,7 +1100,7 @@ export async function parseRSSFeed(feedUrl: string): Promise<ParsedFeed> {
     }
     
     return {
-      title: feed.title || 'Untitled Feed',
+      title: feed.title || feedArtist || 'Untitled Feed',
       description: feed.description || feed.itunes?.summary,
       image: feedImage,
       artist: feedArtist,

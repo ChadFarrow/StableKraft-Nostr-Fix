@@ -206,7 +206,7 @@ export async function GET(
       lastParsed: new Date().toISOString(),
       publisherInfo: {
         name: primaryFeed?.artist || primaryFeed?.title || publisherId,
-        title: primaryFeed?.title || primaryFeed?.artist || publisherId,
+        title: primaryFeed?.artist || primaryFeed?.title || publisherId,
         artist: primaryFeed?.artist,
         feedGuid: primaryFeed?.id || '',
         feedUrl: primaryFeed?.originalUrl || '',

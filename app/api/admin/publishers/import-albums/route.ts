@@ -1,32 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { parseRSSFeedWithSegments, calculateTrackOrder } from '@/lib/rss-parser-db';
+import { generatePodcastIndexHeaders } from '@/lib/podcast-index-api';
+import { getEpisodesFromAPI, parseDuration } from '@/lib/feed-parsing';
+import { calculateTrackOrder } from '@/lib/rss-parser-db';
 import { generateAlbumSlug, normalizeUrl } from '@/lib/url-utils';
 
+const API_BASE_URL = 'https://api.podcastindex.org/api/1.0';
+
 /**
- * Extract remoteItem tags from publisher feed XML
+ * Search Podcast Index API for music feeds by artist name
  */
-function extractRemoteItemsFromXML(xml: string): Array<{ feedGuid: string; feedUrl: string }> {
-  const items: Array<{ feedGuid: string; feedUrl: string }> = [];
-  const regex = /<podcast:remoteItem[^>]*>/gi;
-  const matches = xml.match(regex) || [];
+async function searchMusicFeedsByArtist(artistName: string): Promise<any[]> {
+  try {
+    const headers = await generatePodcastIndexHeaders();
+    const url = `${API_BASE_URL}/search/byterm?q=${encodeURIComponent(artistName)}`;
+    const response = await fetch(url, {
+      headers,
+      signal: AbortSignal.timeout(10000)
+    });
 
-  for (const match of matches) {
-    const feedGuidMatch = match.match(/feedGuid=["']([^"']+)["']/i);
-    const feedUrlMatch = match.match(/feedUrl=["']([^"]+)["']/i);
-    const mediumMatch = match.match(/medium=["']([^"]+)["']/i);
-
-    if (mediumMatch?.[1] === 'publisher') continue;
-
-    if (feedUrlMatch?.[1]) {
-      items.push({
-        feedGuid: feedGuidMatch?.[1] || '',
-        feedUrl: feedUrlMatch[1]
-      });
+    if (!response.ok) {
+      console.warn(`⚠️ PI search failed for "${artistName}": ${response.status}`);
+      return [];
     }
-  }
 
-  return items;
+    const data = await response.json();
+    if (data.status !== 'true' || !data.feeds) return [];
+
+    // Filter to music medium feeds with exact author match (case insensitive)
+    const searchLower = artistName.toLowerCase();
+    return data.feeds.filter((feed: any) => {
+      if (feed.medium !== 'music') return false;
+      const author = (feed.author || '').toLowerCase();
+      return author === searchLower;
+    });
+  } catch (error) {
+    console.error(`❌ PI search error for "${artistName}":`, error);
+    return [];
+  }
 }
 
 function generateFeedId(artist: string | undefined, title: string): string {
@@ -40,7 +51,8 @@ function generateFeedId(artist: string | undefined, title: string): string {
 
 /**
  * POST /api/admin/publishers/import-albums
- * Import missing album feeds from all publisher feeds
+ * Import missing album feeds using Podcast Index API search by artist name.
+ * No direct Wavlake fetching — all lookups go through PI API.
  * Body: { publisherId?: string } - optional, if not provided imports for all publishers
  */
 export async function POST(request: NextRequest) {
@@ -70,12 +82,15 @@ export async function POST(request: NextRequest) {
       }, { status: 404 });
     }
 
-    console.log(`🚀 Processing ${publishers.length} publisher(s) for album import`);
+    console.log(`🚀 Processing ${publishers.length} publisher(s) for album import via PI API`);
+
+    // Deduplicate PI API searches: multiple publishers may share the same artist name
+    const searchedArtists = new Set<string>();
 
     const results: Array<{
       publisherId: string;
       title: string;
-      remoteItems: number;
+      piResults: number;
       imported: number;
       skipped: number;
       failed: number;
@@ -87,7 +102,7 @@ export async function POST(request: NextRequest) {
       const result = {
         publisherId: publisher.id,
         title: publisher.title || publisher.id,
-        remoteItems: 0,
+        piResults: 0,
         imported: 0,
         skipped: 0,
         failed: 0,
@@ -95,47 +110,47 @@ export async function POST(request: NextRequest) {
         skippedDetails: [] as string[]
       };
 
-      if (!publisher.originalUrl) {
-        result.errors.push('No feed URL');
+      const artistName = publisher.artist || publisher.title;
+      if (!artistName) {
+        result.errors.push('No artist name');
         results.push(result);
         continue;
       }
 
       try {
-        console.log(`\n📋 Processing: ${publisher.title}`);
+        console.log(`\n📋 Processing: ${publisher.title} (artist: "${artistName}")`);
 
-        // Fetch publisher feed
-        const response = await fetch(publisher.originalUrl, {
-          signal: AbortSignal.timeout(15000)
-        });
+        // Deduplicate: skip PI search if we already searched this artist
+        const artistKey = artistName.toLowerCase();
+        let piFeeds: any[] = [];
 
-        if (!response.ok) {
-          result.errors.push(`HTTP ${response.status}`);
-          results.push(result);
-          continue;
+        if (searchedArtists.has(artistKey)) {
+          console.log(`   ⏭️ Already searched PI for "${artistName}", skipping search`);
+        } else {
+          searchedArtists.add(artistKey);
+          piFeeds = await searchMusicFeedsByArtist(artistName);
+          result.piResults = piFeeds.length;
+          console.log(`   Found ${piFeeds.length} music feeds on PI for "${artistName}"`);
         }
 
-        const xml = await response.text();
-        const remoteItems = extractRemoteItemsFromXML(xml);
-        result.remoteItems = remoteItems.length;
-
-        console.log(`   Found ${remoteItems.length} album references`);
-
-        // Import each album
-        for (const item of remoteItems) {
-          if (!item.feedUrl) {
-            result.skippedDetails.push('no-feedUrl');
-            result.skipped++;
-            continue;
-          }
+        // Process each PI result
+        for (const piFeed of piFeeds) {
+          const feedUrl = normalizeUrl(piFeed.url || piFeed.originalUrl || '');
+          const podcastGuid = piFeed.podcastGuid || '';
 
           try {
-            // Check if exists
-            const conditions: any[] = [{ originalUrl: item.feedUrl }];
-            if (item.feedGuid) {
-              conditions.push({ id: item.feedGuid });
-              conditions.push({ guid: item.feedGuid });
-              conditions.push({ originalUrl: { contains: item.feedGuid } });
+            // Multi-check dedup: URL, podcastGuid as ID, podcastGuid as guid column
+            const conditions: any[] = [];
+            if (feedUrl) conditions.push({ originalUrl: feedUrl });
+            if (podcastGuid) {
+              conditions.push({ id: podcastGuid });
+              conditions.push({ guid: podcastGuid });
+            }
+
+            if (conditions.length === 0) {
+              result.skippedDetails.push(`no-identifiers:${piFeed.title}`);
+              result.skipped++;
+              continue;
             }
 
             const existing = await prisma.feed.findFirst({
@@ -143,7 +158,7 @@ export async function POST(request: NextRequest) {
             });
 
             if (existing) {
-              console.log(`   ⏭️ Skipping (exists): ${existing.title} (${existing.id})`);
+              console.log(`   ⏭️ Exists: ${existing.title} (${existing.id})`);
               result.skippedDetails.push(`exists:${existing.id}|${existing.title}|pubId:${existing.publisherId}`);
               if (!existing.publisherId) {
                 await prisma.feed.update({
@@ -156,16 +171,23 @@ export async function POST(request: NextRequest) {
               continue;
             }
 
-            // Parse and import
-            const parsedFeed = await parseRSSFeedWithSegments(item.feedUrl);
+            // Get episodes via PI API
+            const episodes = await getEpisodesFromAPI(piFeed.id);
+            if (!episodes || episodes.length === 0) {
+              result.skippedDetails.push(`no-episodes:${piFeed.title}`);
+              result.skipped++;
+              continue;
+            }
 
-            let feedId = generateFeedId(parsedFeed.artist, parsedFeed.title);
+            // Generate feed ID
+            let feedId = generateFeedId(piFeed.author, piFeed.title);
             const idExists = await prisma.feed.findUnique({ where: { id: feedId } });
             if (idExists) feedId = `${feedId}-${Date.now()}`;
 
-            if (parsedFeed.podcastGuid) {
+            // Secondary dedup by podcastGuid
+            if (podcastGuid) {
               const guidExists = await prisma.feed.findFirst({
-                where: { guid: parsedFeed.podcastGuid }
+                where: { guid: podcastGuid }
               });
               if (guidExists) {
                 result.skippedDetails.push(`guid:${guidExists.id}|${guidExists.title}|pubId:${guidExists.publisherId}`);
@@ -180,25 +202,45 @@ export async function POST(request: NextRequest) {
               }
             }
 
+            // Format feed-level v4v data from PI API
+            let v4vValue = null;
+            let v4vRecipient = null;
+            if (piFeed.value?.model && piFeed.value?.destinations) {
+              v4vValue = {
+                type: piFeed.value.model.type || 'lightning',
+                method: piFeed.value.model.method || 'keysend',
+                suggested: piFeed.value.model.suggested,
+                recipients: piFeed.value.destinations.map((r: any) => ({
+                  name: r.name,
+                  type: r.type,
+                  address: r.address,
+                  split: r.split,
+                  customKey: r.customKey,
+                  customValue: r.customValue,
+                  fee: r.fee || false
+                }))
+              };
+              v4vRecipient = piFeed.value.destinations[0]?.address || null;
+            }
+
             // Create feed
             const feed = await prisma.feed.create({
               data: {
                 id: feedId,
-                guid: parsedFeed.podcastGuid || null,
-                originalUrl: normalizeUrl(item.feedUrl),
-                cdnUrl: normalizeUrl(item.feedUrl),
+                guid: podcastGuid || null,
+                originalUrl: feedUrl,
+                cdnUrl: feedUrl,
                 type: 'album',
                 priority: 'normal',
-                title: parsedFeed.title,
-                description: parsedFeed.description,
-                artist: parsedFeed.artist,
-                image: parsedFeed.image,
-                language: parsedFeed.language,
-                category: parsedFeed.category,
-                podcastCategories: parsedFeed.podcastCategories || [],
-                explicit: parsedFeed.explicit,
-                v4vRecipient: parsedFeed.v4vRecipient || null,
-                v4vValue: parsedFeed.v4vValue || null,
+                title: piFeed.title,
+                description: piFeed.description || null,
+                artist: piFeed.author || null,
+                image: piFeed.artwork || piFeed.image || null,
+                language: piFeed.language || null,
+                category: piFeed.categories ? (Object.values(piFeed.categories)[0] as string) : null,
+                explicit: piFeed.explicit === 1,
+                ...(v4vValue && { v4vValue }),
+                ...(v4vRecipient && { v4vRecipient }),
                 publisherId: publisher.id,
                 lastFetched: new Date(),
                 status: 'active',
@@ -207,35 +249,46 @@ export async function POST(request: NextRequest) {
               }
             });
 
-            // Create tracks
-            if (parsedFeed.items.length > 0) {
-              const tracksData = parsedFeed.items.map((track, index) => ({
-                id: `${feed.id}-${track.guid || `track-${index}-${Date.now()}`}`,
-                feedId: feed.id,
-                guid: track.guid,
-                title: track.title,
-                subtitle: track.subtitle,
-                description: track.description,
-                artist: track.artist,
-                audioUrl: track.audioUrl,
-                duration: track.duration,
-                explicit: track.explicit,
-                image: track.image,
-                publishedAt: track.publishedAt,
-                itunesAuthor: track.itunesAuthor,
-                itunesSummary: track.itunesSummary,
-                itunesImage: track.itunesImage,
-                itunesDuration: track.itunesDuration,
-                itunesKeywords: track.itunesKeywords || [],
-                itunesCategories: track.itunesCategories || [],
-                podcastCategories: parsedFeed.podcastCategories || [],
-                v4vRecipient: track.v4vRecipient,
-                v4vValue: track.v4vValue,
-                startTime: track.startTime,
-                endTime: track.endTime,
-                trackOrder: track.episode ? calculateTrackOrder(track.episode, track.season) : index + 1,
-                updatedAt: new Date()
-              }));
+            // Create tracks from PI API episodes
+            if (episodes.length > 0) {
+              const tracksData = episodes.map((ep, index) => {
+                // Format episode-level v4v data
+                let trackV4v = null;
+                let trackV4vRecipient = null;
+                if (ep.v4vValue?.destinations) {
+                  trackV4v = {
+                    type: ep.v4vValue.model?.type || 'lightning',
+                    method: ep.v4vValue.model?.method || 'keysend',
+                    suggested: ep.v4vValue.model?.suggested,
+                    recipients: ep.v4vValue.destinations.map((r: any) => ({
+                      name: r.name,
+                      type: r.type,
+                      address: r.address,
+                      split: r.split,
+                      customKey: r.customKey,
+                      customValue: r.customValue,
+                      fee: r.fee || false
+                    }))
+                  };
+                  trackV4vRecipient = ep.v4vValue.destinations[0]?.address || null;
+                }
+
+                return {
+                  id: `${feed.id}-${ep.guid || `track-${index}-${Date.now()}`}`,
+                  feedId: feed.id,
+                  guid: ep.guid,
+                  title: ep.title,
+                  description: ep.description || null,
+                  audioUrl: ep.audioUrl,
+                  duration: parseDuration(ep.duration),
+                  image: ep.image || null,
+                  publishedAt: ep.pubDate ? new Date(ep.pubDate) : new Date(),
+                  trackOrder: ep.episode ? calculateTrackOrder(ep.episode, ep.season) : index + 1,
+                  ...(trackV4v && { v4vValue: trackV4v }),
+                  ...(trackV4vRecipient && { v4vRecipient: trackV4vRecipient }),
+                  updatedAt: new Date()
+                };
+              });
 
               await prisma.track.createMany({
                 data: tracksData,
@@ -243,23 +296,22 @@ export async function POST(request: NextRequest) {
               });
             }
 
-            console.log(`   ✅ ${parsedFeed.title} (${parsedFeed.items.length} tracks)`);
+            console.log(`   ✅ ${piFeed.title} (${episodes.length} tracks)`);
             result.imported++;
 
             await new Promise(r => setTimeout(r, 100));
           } catch (error) {
             result.failed++;
-            result.errors.push(`${item.feedUrl}: ${error instanceof Error ? error.message : 'Unknown'}`);
+            result.errors.push(`${piFeed.title}: ${error instanceof Error ? error.message : 'Unknown'}`);
           }
         }
 
-        // Also link by artist name
-        const artistName = publisher.artist || publisher.title;
+        // Link existing unlinked albums by artist name
         if (artistName) {
           await prisma.feed.updateMany({
             where: {
               artist: { equals: artistName, mode: 'insensitive' },
-              type: { in: ['album', 'music'] },
+              type: { in: ['album', 'music', 'podcast'] },
               publisherId: null
             },
             data: { publisherId: publisher.id }

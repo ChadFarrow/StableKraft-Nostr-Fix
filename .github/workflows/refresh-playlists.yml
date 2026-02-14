@@ -131,6 +131,22 @@ jobs:
           echo "⚠️ Publisher parsing had issues (HTTP $HTTP_CODE) - non-critical"
         fi
 
+        # Step 5b: Import missing albums from publisher feeds
+        echo ""
+        echo "📋 Step 5b: Importing missing albums from publisher feeds..."
+
+        IMPORT_RESPONSE=$(curl -s -X POST -w "\n%{http_code}" "${BASE_URL}/api/admin/publishers/import-albums")
+        HTTP_CODE=$(echo "$IMPORT_RESPONSE" | tail -n1)
+        RESPONSE_BODY=$(echo "$IMPORT_RESPONSE" | sed '$d')
+
+        if [ "$HTTP_CODE" -eq 200 ]; then
+          IMPORTED=$(echo "$RESPONSE_BODY" | jq -r '.totals.imported // 0' 2>/dev/null || echo "?")
+          SKIPPED=$(echo "$RESPONSE_BODY" | jq -r '.totals.skipped // 0' 2>/dev/null || echo "?")
+          echo "✅ Publisher album import: ${IMPORTED} imported, ${SKIPPED} skipped"
+        else
+          echo "⚠️ Publisher album import had issues (HTTP $HTTP_CODE) - non-critical"
+        fi
+
         # Step 6: Final playlist refresh to include newly parsed tracks
         echo ""
         echo "📋 Step 6: Final playlist refresh to include newly parsed tracks in SystemPlaylist..."
