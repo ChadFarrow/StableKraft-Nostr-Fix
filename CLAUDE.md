@@ -59,10 +59,14 @@ Single input handles both add and reparse:
 - Artist search groups by `LOWER(artist)` to avoid case duplicates
 - Exact mode: `?fuzzy=false`
 
-### Publisher Pages
+### Publisher Pages (`app/publisher/[id]/page.tsx`)
 Matched by: title slug, artist slug, or URL path (e.g., `/setto/` matches "setto")
 - `<podcast:podroll>` sections filtered out (not albums)
 - `-pubfeed.xml` URLs skipped
+
+**Multi-feed support**: Artists can have multiple publisher feeds (e.g., separate Wavlake and fountain.fm feeds). `loadPublisherData` finds all publisher feeds for the artist (using name variants for `And→&`, `Plus→+`) and fetches XML from each to collect remote items. Image is extracted from the primary feed only.
+
+**Album resolution order**: (1) Remote item GUIDs/URLs from all publisher feed XMLs → (2) `publisherId`-linked albums in DB (filtered by podroll blocklist) → (3) Artist name matching for remaining albums. GUID matching checks `Feed.id`, `Feed.guid` column (critical for Wavlake), partial ID, and URL patterns.
 
 ### Duration Filtering
 Tracks over 2 hours filtered as non-music (silent, no warnings)
