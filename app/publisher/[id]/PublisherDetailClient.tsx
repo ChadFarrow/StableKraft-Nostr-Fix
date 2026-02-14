@@ -944,7 +944,7 @@ export default function PublisherDetailClient({ publisherId, initialData }: Publ
         <Link
           key={`${album.title}-${index}`}
           href={generateAlbumUrl(album.title)}
-          className="group bg-white/5 backdrop-blur-sm rounded-xl overflow-hidden hover:bg-white/10 transition-all duration-300 border border-white/10 hover:border-white/20 shadow-lg hover:shadow-xl hover:scale-105"
+          className="group bg-gray-900/80 rounded-xl overflow-hidden hover:bg-gray-800/90 transition-colors duration-200 border border-white/10 hover:border-white/20 shadow-lg"
         >
           <div className="relative aspect-square">
             {album.coverArt ? (
@@ -965,13 +965,13 @@ export default function PublisherDetailClient({ publisherId, initialData }: Publ
               </div>
             )}
 
-            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all duration-300 flex items-center justify-center">
-              <div className="bg-white/90 hover:bg-white text-black rounded-full p-3 transform scale-0 group-hover:scale-100 transition-all duration-200 shadow-xl">
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors duration-200 flex items-center justify-center">
+              <div className="bg-white/90 hover:bg-white text-black rounded-full p-3 transform scale-0 group-hover:scale-100 transition-transform duration-200 shadow-xl">
                 <Play className="w-6 h-6" />
               </div>
             </div>
 
-            <div className="absolute top-3 right-3 bg-black/70 backdrop-blur-sm text-white text-xs px-2 py-1 rounded-full">
+            <div className="absolute top-3 right-3 bg-black/80 text-white text-xs px-2 py-1 rounded-full">
               {album.tracks?.length || 0} tracks
             </div>
 
@@ -981,7 +981,7 @@ export default function PublisherDetailClient({ publisherId, initialData }: Publ
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
                 onTouchStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
               >
-                <div className="bg-black/60 backdrop-blur-sm rounded-full w-8 h-8 flex items-center justify-center pointer-events-auto touch-manipulation hover:bg-black/80 transition-colors">
+                <div className="bg-black/80 rounded-full w-8 h-8 flex items-center justify-center pointer-events-auto touch-manipulation hover:bg-black/90 transition-colors">
                   <FavoriteButton feedId={album.feedId || album.id} size={18} className="text-white" />
                 </div>
               </div>
@@ -1018,7 +1018,7 @@ export default function PublisherDetailClient({ publisherId, initialData }: Publ
         <Link
           key={`${album.title}-${index}`}
           href={generateAlbumUrl(album.title)}
-          className="group flex items-center gap-4 p-4 bg-white/5 backdrop-blur-sm rounded-xl hover:bg-white/10 transition-all duration-200 border border-white/10 hover:border-white/20"
+          className="group flex items-center gap-4 p-4 bg-gray-900/80 rounded-xl hover:bg-gray-800/90 transition-colors duration-200 border border-white/10 hover:border-white/20"
         >
           <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0">
             {album.coverArt ? (
@@ -1072,7 +1072,7 @@ export default function PublisherDetailClient({ publisherId, initialData }: Publ
     <div className="min-h-screen text-white relative">
       {/* Enhanced Background */}
       {(publisherInfo?.coverArt || publisherInfo?.avatarArt) && !backgroundImageError ? (
-        <div className="fixed inset-0 z-0">
+        <div className="fixed inset-0 z-0" style={{ transform: 'translateZ(0)', willChange: 'transform' }}>
           <Image
             src={getAlbumArtworkUrl(publisherInfo.coverArt || publisherInfo.avatarArt || '', 'large', true)}
             alt={publisherInfo.title || "Publisher background"}
@@ -1104,7 +1104,7 @@ export default function PublisherDetailClient({ publisherId, initialData }: Publ
           <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-black/70 to-black/90"></div>
         </div>
       ) : (
-        <div className="fixed inset-0 bg-gradient-to-br from-purple-900 via-gray-900 to-black z-0" />
+        <div className="fixed inset-0 bg-gradient-to-br from-purple-900 via-gray-900 to-black z-0" style={{ transform: 'translateZ(0)' }} />
       )}
       
       {/* Content */}
@@ -1164,7 +1164,7 @@ export default function PublisherDetailClient({ publisherId, initialData }: Publ
             {/* Artist Information */}
             <div className="flex-1 lg:mb-4">
               <div className="flex items-center gap-3 mb-4">
-                <span className="px-3 py-1 bg-white/10 backdrop-blur-sm rounded-full text-sm font-medium">
+                <span className="px-3 py-1 bg-white/10 rounded-full text-sm font-medium">
                   <Music className="w-4 h-4 inline mr-1" />
                   Artist
                 </span>
@@ -1227,7 +1227,7 @@ export default function PublisherDetailClient({ publisherId, initialData }: Publ
         </div>
 
         {/* Content Section */}
-        <div className="bg-black/20 backdrop-blur-sm min-h-screen">
+        <div className="bg-black/40 min-h-screen">
           <div className="container mx-auto px-4 py-8 pb-28">
             {albumsLoading ? (
               <div className="text-center py-20">
@@ -1317,7 +1317,7 @@ export default function PublisherDetailClient({ publisherId, initialData }: Publ
                   This artist&apos;s albums haven&apos;t been indexed yet.
                 </p>
                 {publisherInfo?.description && publisherInfo.description !== 'Independent artist and music creator' && (
-                  <div className="max-w-md mx-auto bg-white/5 backdrop-blur-sm rounded-lg p-6 border border-white/10">
+                  <div className="max-w-md mx-auto bg-gray-900/80 rounded-lg p-6 border border-white/10">
                     <p className="text-sm text-gray-300 mb-4">
                       <strong className="text-white">About:</strong> {publisherInfo.description.replace(/<[^>]*>/g, '')}
                     </p>

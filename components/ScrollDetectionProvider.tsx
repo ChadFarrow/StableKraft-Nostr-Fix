@@ -1,7 +1,7 @@
 'use client';
 
 import { useScrollDetection } from '@/hooks/useScrollDetection';
-import { createContext, useContext, ReactNode } from 'react';
+import { createContext, useContext, useMemo, ReactNode } from 'react';
 
 interface ScrollDetectionContextType {
   isScrolling: boolean;
@@ -20,16 +20,23 @@ interface ScrollDetectionProviderProps {
 }
 
 export default function ScrollDetectionProvider({ children }: ScrollDetectionProviderProps) {
-  const { 
-    isScrolling, 
-    handleTouchStart, 
-    handleTouchMove, 
-    handleTouchEnd, 
-    shouldPreventClick 
+  const {
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd,
+    shouldPreventClick
   } = useScrollDetection();
 
+  // Memoize context value to prevent unnecessary consumer re-renders.
+  // shouldPreventClick is a stable useCallback ref that reads from refs internally,
+  // so it never changes identity and this value object stays stable.
+  const contextValue = useMemo(() => ({
+    isScrolling: false,
+    shouldPreventClick
+  }), [shouldPreventClick]);
+
   return (
-    <ScrollDetectionContext.Provider value={{ isScrolling, shouldPreventClick }}>
+    <ScrollDetectionContext.Provider value={contextValue}>
       <div
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
