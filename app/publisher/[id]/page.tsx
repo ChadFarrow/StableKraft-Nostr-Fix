@@ -513,10 +513,11 @@ async function loadPublisherData(publisherId: string) {
     if (remoteItemGuids.length > 0 || remoteItemUrls.length > 0) {
       console.log(`🔍 Looking for albums by ${remoteItemGuids.length} GUIDs and ${remoteItemUrls.length} URLs...`);
 
-      // Create OR conditions for each GUID (match by ID or URL)
+      // Create OR conditions for each GUID (match by ID, guid column, or URL)
       const guidConditions = remoteItemGuids.map(guid => ({
         OR: [
           { id: { equals: guid } },
+          { guid: { equals: guid } }, // Match the podcast GUID column (most reliable for Wavlake)
           { id: { contains: guid.split('-')[0] } }, // Try partial match
           { originalUrl: { contains: guid } }, // Match GUID in URL
           { originalUrl: { contains: guid.replace(/-/g, '') } } // Match without hyphens
