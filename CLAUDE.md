@@ -86,7 +86,7 @@ iOS suspends audio when the PWA is backgrounded. Mitigated in `contexts/AudioCon
 **Server-side sort**: `/api/albums-fast` accepts a `sort` query param (`added-desc`, `added-asc`, `year-desc`, `year-asc`, `name-asc`, `name-desc`, `tracks-desc`, `tracks-asc`). Sort is applied *before* pagination so paginated results are in the correct order. The client (`app/page.tsx`) only sends `sort` for non-default sorts — omitting it gives the server's default format+alpha sort (Albums → EPs → Singles, then A-Z within each). **Do NOT send `sort=name-asc` as default** — it bypasses format grouping. The client re-fetches from page 1 when sort changes via a `useEffect` on `sortType`. localStorage cache is skipped for non-default sorts.
 
 Date fields (not obvious from UI):
-- `Feed.oldestItemPubdate` — Album release date (from tracks). Backfill: `POST /api/admin/backfill-oldest-pubdate`
+- `Feed.oldestItemPubdate` — Album release date (from tracks). Auto-set during feed parsing (`importFeedToDatabase`) and album import (`import-albums/route.ts`). Manual backfill: `POST /api/admin/backfill-oldest-pubdate`
 - `Feed.createdAt` — When added to site
 - Publishers use oldest album's `createdAt` as their `dateAdded`
 
