@@ -368,17 +368,45 @@ async function loadPublisherData(publisherId: string) {
       artistName = publisherFeed.artist || publisherFeed.title;
     }
 
-    // Try to fetch and parse publisher feed to get remote items and artwork
+    // Find ALL publisher feeds for this artist (supports multiple publisher feeds per artist)
+    let allPublisherFeeds = [publisherFeed];
+    if (artistName) {
+      const artistVariantsForPub = [artistName];
+      const ampVariant = artistName.replace(/\bAnd\b/gi, '&');
+      if (ampVariant !== artistName) artistVariantsForPub.push(ampVariant);
+      const plusVariant = artistName.replace(/\bPlus\b/gi, '+');
+      if (plusVariant !== artistName) artistVariantsForPub.push(plusVariant);
+
+      const additionalPubFeeds = await prisma.feed.findMany({
+        where: {
+          type: { in: ['publisher', 'test'] },
+          id: { not: publisherFeed.id },
+          OR: [
+            ...artistVariantsForPub.map(v => ({ artist: { equals: v, mode: 'insensitive' as const } })),
+            ...artistVariantsForPub.map(v => ({ title: { equals: v, mode: 'insensitive' as const } })),
+          ]
+        }
+      });
+
+      if (additionalPubFeeds.length > 0) {
+        console.log(`🏢 Found ${additionalPubFeeds.length} additional publisher feed(s) for "${artistName}"`);
+        allPublisherFeeds = [publisherFeed, ...additionalPubFeeds];
+      }
+    }
+
+    // Fetch and parse ALL publisher feeds to get remote items and artwork
     let remoteItemGuids: string[] = [];
     let remoteItemUrls: string[] = []; // Also collect feedUrls for matching
     let podrollGuids = new Set<string>(); // Blocklist: never show these in Official Releases
     let podrollUrls = new Set<string>();
     let feedImage: string | null = publisherFeed.image || null;
 
-    if (publisherFeed.originalUrl && publisherFeed.originalUrl.trim() !== '') {
+    for (const pubFeed of allPublisherFeeds) {
+      if (!pubFeed.originalUrl || pubFeed.originalUrl.trim() === '') continue;
+
       try {
-        console.log(`📡 Fetching publisher feed XML to extract remote items: ${publisherFeed.originalUrl}`);
-        const feedResponse = await fetch(publisherFeed.originalUrl, {
+        console.log(`📡 Fetching publisher feed XML to extract remote items: ${pubFeed.originalUrl}`);
+        const feedResponse = await fetch(pubFeed.originalUrl, {
           signal: AbortSignal.timeout(10000), // 10 second timeout (increased from 5)
         });
 
@@ -402,23 +430,23 @@ async function loadPublisherData(publisherId: string) {
             }
           }
 
-          // ALWAYS extract artwork/image from feed (prioritize feed over database)
-          // Try iTunes image first
-          const itunesImageMatch = xmlText.match(/<itunes:image[^>]*href=["']([^"']+)["']/i);
-          if (itunesImageMatch && itunesImageMatch[1]) {
-            feedImage = itunesImageMatch[1].trim();
-            console.log(`🎨 Found iTunes image in feed: ${feedImage}`);
-          } else {
-            // Try standard image tag
-            const imageMatch = xmlText.match(/<image>[\s\S]*?<url>([^<]+)<\/url>/i);
-            if (imageMatch && imageMatch[1]) {
-              feedImage = imageMatch[1].trim();
-              console.log(`🎨 Found image in feed: ${feedImage}`);
+          // Extract artwork/image from PRIMARY publisher feed only (prioritize feed over database)
+          if (pubFeed.id === publisherFeed.id) {
+            const itunesImageMatch = xmlText.match(/<itunes:image[^>]*href=["']([^"']+)["']/i);
+            if (itunesImageMatch && itunesImageMatch[1]) {
+              feedImage = itunesImageMatch[1].trim();
+              console.log(`🎨 Found iTunes image in feed: ${feedImage}`);
             } else {
-              console.warn(`⚠️ No image found in publisher feed XML`);
+              const imageMatch = xmlText.match(/<image>[\s\S]*?<url>([^<]+)<\/url>/i);
+              if (imageMatch && imageMatch[1]) {
+                feedImage = imageMatch[1].trim();
+                console.log(`🎨 Found image in feed: ${feedImage}`);
+              } else {
+                console.warn(`⚠️ No image found in publisher feed XML`);
+              }
             }
           }
-          
+
           // Extract podcast:remoteItem tags (for music/album feeds, not publisher references)
           // First, remove podroll section to avoid including related feeds as albums
           const xmlWithoutPodroll = xmlText.replace(/<podcast:podroll>[\s\S]*?<\/podcast:podroll>/gi, '');
@@ -435,7 +463,6 @@ async function loadPublisherData(publisherId: string) {
 
             // Only collect album/music remote items, not publisher references
             if (medium === 'publisher') {
-              // Skip publisher references - we only want albums
               continue;
             }
 
@@ -452,21 +479,17 @@ async function loadPublisherData(publisherId: string) {
             if (feedGuidMatch && feedGuidMatch[1]) {
               const guid = feedGuidMatch[1];
 
-              // Check if URL indicates this is a music/album feed (not a publisher feed)
-              // For wavlake, remote items from artist feeds can point to music feeds
               const isAlbumFeed = feedUrlMatch && (
                 feedUrlMatch[1].includes('/feed/music/') ||
                 (feedUrlMatch[1].includes('/feed/') && !feedUrlMatch[1].includes('/feed/artist/')) ||
                 medium === 'music' ||
-                !mediumMatch // Default to music if no medium
+                !mediumMatch
               );
 
-              // Also include if the medium is explicitly 'music' or 'album'
               const isExplicitAlbum = medium === 'music' || medium === 'album';
 
               if ((isAlbumFeed || isExplicitAlbum) && !remoteItemGuids.includes(guid)) {
                 remoteItemGuids.push(guid);
-                // Also collect the feedUrl for matching (more reliable than GUID for fountain feeds)
                 if (feedUrlMatch && feedUrlMatch[1] && !remoteItemUrls.includes(feedUrlMatch[1])) {
                   remoteItemUrls.push(feedUrlMatch[1]);
                 }
@@ -475,11 +498,11 @@ async function loadPublisherData(publisherId: string) {
             }
           }
 
-          console.log(`📋 Found ${remoteItemGuids.length} album remote items, ${remoteItemUrls.length} URLs in publisher feed`);
+          console.log(`📋 Running total: ${remoteItemGuids.length} album remote items, ${remoteItemUrls.length} URLs after parsing ${pubFeed.originalUrl}`);
         }
       } catch (error) {
-        console.warn('⚠️ Could not fetch publisher feed XML:', error);
-        // Continue with artist-based matching as fallback
+        console.warn(`⚠️ Could not fetch publisher feed XML (${pubFeed.originalUrl}):`, error);
+        // Continue with other feeds / artist-based matching as fallback
       }
     }
     
@@ -490,10 +513,11 @@ async function loadPublisherData(publisherId: string) {
     if (remoteItemGuids.length > 0 || remoteItemUrls.length > 0) {
       console.log(`🔍 Looking for albums by ${remoteItemGuids.length} GUIDs and ${remoteItemUrls.length} URLs...`);
 
-      // Create OR conditions for each GUID (match by ID or URL)
+      // Create OR conditions for each GUID (match by ID, guid column, or URL)
       const guidConditions = remoteItemGuids.map(guid => ({
         OR: [
           { id: { equals: guid } },
+          { guid: { equals: guid } }, // Match the podcast GUID column (most reliable for Wavlake)
           { id: { contains: guid.split('-')[0] } }, // Try partial match
           { originalUrl: { contains: guid } }, // Match GUID in URL
           { originalUrl: { contains: guid.replace(/-/g, '') } } // Match without hyphens
@@ -582,10 +606,11 @@ async function loadPublisherData(publisherId: string) {
       }
     }
 
-    // First, find albums linked via publisherId (most reliable)
+    // Find albums linked via publisherId to ANY of this artist's publisher feeds
+    const allPublisherFeedIds = allPublisherFeeds.map(f => f.id);
     const publisherIdFeeds = await prisma.feed.findMany({
       where: {
-        publisherId: publisherFeed.id,
+        publisherId: { in: allPublisherFeedIds },
         type: { in: ['album', 'music'] },
         status: 'active'
       },
@@ -622,11 +647,19 @@ async function loadPublisherData(publisherId: string) {
       ]
     });
 
-    console.log(`✅ Found ${publisherIdFeeds.length} albums via publisherId`);
+    console.log(`✅ Found ${publisherIdFeeds.length} albums via publisherId (across ${allPublisherFeedIds.length} publisher feeds)`);
 
-    // Do NOT merge publisherIdFeeds into relatedFeeds for Official Releases.
-    // Official Releases = only feeds from <podcast:remoteItem> outside <podcast:podroll> (already stripped above).
-    // Merging publisherIdFeeds would include podroll-sourced albums that were incorrectly linked.
+    // Merge publisherIdFeeds into relatedFeeds (Official Releases), excluding podroll items
+    // and deduplicating against feeds already found via remote item GUIDs/URLs
+    const existingIds = new Set(relatedFeeds.map(f => f.id));
+    for (const feed of publisherIdFeeds) {
+      if (existingIds.has(feed.id)) continue;
+      if (podrollGuids.has(feed.id)) continue;
+      if (feed.originalUrl && podrollUrls.has(feed.originalUrl)) continue;
+      relatedFeeds.push(feed);
+      existingIds.add(feed.id);
+    }
+    console.log(`✅ After merging publisherId albums: ${relatedFeeds.length} total Official Releases`);
 
     // Artist matching: Find additional albums not linked via remote items or publisherId
     // Use artist from the publisher feed we found, OR from the known publisher mapping
