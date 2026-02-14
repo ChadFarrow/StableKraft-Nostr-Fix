@@ -5,7 +5,8 @@
 npm run dev          # Start dev server
 npm run build        # Build for production
 npm run db:studio    # Open Prisma Studio
-npm run deploy       # Deploy via script
+npm run deploy       # Build deployment package (local)
+git push origin main # Deploy to production (Railway auto-deploys from git)
 ```
 
 ## Boundaries
@@ -17,7 +18,7 @@ npm run deploy       # Deploy via script
 
 ## Tech Stack
 - Next.js 15 (App Router), React 18, TypeScript, PostgreSQL/Prisma
-- Podcast Index API for feed resolution (not Wavlake)
+- Podcast Index API for all feed lookups and resolution (never fetch directly from Wavlake — use PI API)
 - Nostr for auth, Lightning (Alby/WebLN) for payments
 
 ## Architecture
@@ -27,7 +28,7 @@ npm run deploy       # Deploy via script
 - **stablekraft-app** (this repo) - Consumes and displays playlists
 
 ### Daily Workflow (`.github/workflows/refresh-playlists.yml`)
-Runs at 4 AM EST: clears cache -> reparses feeds -> refreshes playlists -> parses publishers
+Runs at 4 AM EST: clears cache -> reparses feeds -> refreshes playlists -> parses publishers -> imports missing albums from publisher feeds (Step 5b via PI API)
 
 ## Key Behaviors
 
@@ -40,9 +41,13 @@ Playlists use `<podcast:remoteItem>` with `feedGuid` + `itemGuid`. On `?refresh`
 
 **Publisher discovery** (`discoverAndParsePublishers` in `lib/feed-discovery.ts`): First checks album XML for `<podcast:remoteItem medium="publisher">` tags. If absent, falls back to Podcast Index API search by artist name (`findPublisherFeed` in `lib/publisher-detector.ts`). Deduplicates PI API calls per-artist within a run. Daily workflow Step 4 (`POST /api/playlist/parse-feeds`) also runs publisher discovery after parsing.
 
+**Publisher album import** (`POST /api/admin/publishers/import-albums`): Uses PI API search by artist name (`/search/byterm`) to find music feeds, then PI API episodes (`/episodes/byfeedid`) for track data. No direct Wavlake XML fetching — avoids 429 rate limiting. Deduplicates PI searches per-artist across multiple publisher feeds. Daily workflow Step 5b calls this automatically.
+
 **Duplicate ID gotcha**: Podcast Index uses numeric IDs (`6876105`) while our DB uses GUIDs (`b2048129-...`). When `importFeedToDatabase` finds a URL already exists under a different ID, it redirects to the existing feed and imports tracks into it (see `lib/feed-parsing.ts`).
 
 **Feed deduplication pattern**: Both `import-albums/route.ts` and `process-remote-items/route.ts` use the same multi-check dedup: normalized URL, raw URL, feedGuid as ID, feedGuid as GUID column, feedGuid-in-URL substring. After parsing, a secondary check catches feeds by `podcastGuid` from the XML. New feeds get slug-based IDs (`artist-title` via `generateAlbumSlug`) and are linked to their publisher via `publisherId`. When modifying feed import code, follow this pattern — weak dedup (e.g., `findUnique` on raw URL only) causes duplicate entries.
+
+**Type filter gotcha**: Wavlake feeds imported via Podcast Index API often get `type: 'podcast'` (when PI returns `feedData.type !== 1`). All DB queries for album/music content must include `'podcast'` in the type filter: `type: { in: ['album', 'music', 'podcast'] }`. This applies to publisher page queries, publisher discovery/linking, and import-albums artist linking.
 
 **Resolution rate**: Expect 80-90%. Gaps come from dead feeds (removed from Podcast Index), duplicate GUIDs across platforms (Wavlake vs original publisher), and duplicate URLs under different feedGuid values.
 
