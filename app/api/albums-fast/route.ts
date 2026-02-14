@@ -384,12 +384,12 @@ export async function GET(request: Request) {
       switch (filter) {
         case 'albums':
           filteredAlbums = deduplicatedAlbums.filter(album =>
-            album.tracks && album.tracks.length >= 8
+            album.tracks && album.tracks.length >= 6
           );
           break;
         case 'eps':
           filteredAlbums = deduplicatedAlbums.filter(album =>
-            album.tracks && album.tracks.length >= 2 && album.tracks.length < 8
+            album.tracks && album.tracks.length >= 2 && album.tracks.length <= 5
           );
           break;
         case 'singles':

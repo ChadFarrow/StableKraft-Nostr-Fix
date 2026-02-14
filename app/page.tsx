@@ -208,6 +208,9 @@ function HomePageContent() {
     if (sortTypeRef.current === sortType) return;
     sortTypeRef.current = sortType;
 
+    // Invalidate filter cache since sort changed — cached data has the old sort order
+    setFilterCache(new Map());
+
     // Publishers and playlists don't use albums-fast API, skip server re-fetch
     if (activeFilter === 'publishers' || activeFilter === 'playlist') return;
 
