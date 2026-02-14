@@ -294,6 +294,19 @@ export async function POST(request: NextRequest) {
                 data: tracksData,
                 skipDuplicates: true
               });
+
+              // Backfill oldestItemPubdate from tracks just imported
+              const oldestPubDate = episodes
+                .filter(e => e.pubDate)
+                .map(e => new Date(e.pubDate))
+                .sort((a, b) => a.getTime() - b.getTime())[0];
+
+              if (oldestPubDate) {
+                await prisma.feed.update({
+                  where: { id: feed.id },
+                  data: { oldestItemPubdate: oldestPubDate }
+                });
+              }
             }
 
             console.log(`   ✅ ${piFeed.title} (${episodes.length} tracks)`);
