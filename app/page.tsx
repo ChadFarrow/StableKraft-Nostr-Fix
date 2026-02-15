@@ -102,6 +102,35 @@ devLog('🚀 PERFORMANCE OPTIMIZATION ENABLED - Dynamic feed loading');
 devLog('🔧 Environment check:', { NODE_ENV: process.env.NODE_ENV });
 devLog('🚀 Feeds will be loaded dynamically from /api/feeds endpoint');
 
+// Convert publisher API data to album-like format for display in AlbumCard grid
+function convertPublishersToAlbums(publishers: any[]): RSSAlbum[] {
+  return publishers.map((publisher: any) => {
+    const publisherSlug = generatePublisherSlug({
+      title: publisher.title,
+      artist: publisher.title,
+      feedGuid: publisher.feedGuid || publisher.id
+    });
+
+    return {
+      id: publisher.id,
+      feedId: publisher.id,
+      title: publisher.title,
+      artist: publisher.title,
+      description: publisher.description || `${publisher.itemCount} releases`,
+      coverArt: publisher.image,
+      tracks: [],
+      releaseDate: publisher.dateAdded || new Date().toISOString(),
+      dateAdded: publisher.dateAdded,
+      link: `/publisher/${publisherSlug}`,
+      feedUrl: publisher.originalUrl,
+      isPublisherCard: true,
+      publisherUrl: `/publisher/${publisherSlug}`,
+      albumCount: publisher.itemCount,
+      totalTracks: publisher.totalTracks
+    };
+  });
+}
+
 function HomePageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -211,8 +240,35 @@ function HomePageContent() {
     // Invalidate filter cache since sort changed — cached data has the old sort order
     setFilterCache(new Map());
 
-    // Publishers and playlists don't use albums-fast API, skip server re-fetch
-    if (activeFilter === 'publishers' || activeFilter === 'playlist') return;
+    // Playlists don't support server-side sorting
+    if (activeFilter === 'playlist') return;
+
+    // Publishers use their own paginated API with sort support
+    if (activeFilter === 'publishers') {
+      const loadSortedPublishers = async () => {
+        setIsLoading(true);
+        setCurrentPage(1);
+        setHasMoreAlbums(true);
+        try {
+          const publishersResponse = await fetch(`/api/publishers?limit=${ALBUMS_PER_PAGE}&offset=0&sort=${sortType}`);
+          if (!publishersResponse.ok) throw new Error(`Publishers API failed: ${publishersResponse.status}`);
+          const publishersData = await publishersResponse.json();
+          const publishers = publishersData.publishers || [];
+          const publisherAlbums = convertPublishersToAlbums(publishers);
+          setDisplayedAlbums(publisherAlbums);
+          setEnhancedAlbums(publisherAlbums);
+          setCriticalAlbums(publisherAlbums.slice(0, 12));
+          setTotalAlbums(publishersData.total || publishers.length);
+          setHasMoreAlbums(publishersData.hasMore ?? false);
+        } catch (error) {
+          console.error('Error reloading publishers with sort:', error);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      loadSortedPublishers();
+      return;
+    }
 
     const loadSorted = async () => {
       setIsLoading(true);
@@ -407,10 +463,29 @@ function HomePageContent() {
   const loadMoreAlbums = useCallback(async () => {
     if (isLoading || !hasMoreAlbums) return;
 
-    // Don't load more for publishers filter - all publishers are already loaded
+    // Publishers use their own paginated API
     if (activeFilter === 'publishers') {
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`🚫 loadMoreAlbums: Skipping - all publishers already loaded for ${activeFilter} filter`);
+      setIsLoading(true);
+      try {
+        const currentCount = displayedAlbums.length;
+        const publishersResponse = await fetch(`/api/publishers?limit=${ALBUMS_PER_PAGE}&offset=${currentCount}&sort=${sortType}`);
+        if (!publishersResponse.ok) {
+          throw new Error(`Publishers API failed: ${publishersResponse.status}`);
+        }
+        const publishersData = await publishersResponse.json();
+        const publishers = publishersData.publishers || [];
+        if (publishers.length > 0) {
+          const newPublisherAlbums = convertPublishersToAlbums(publishers);
+          setDisplayedAlbums(prev => [...prev, ...newPublisherAlbums]);
+          setHasMoreAlbums(publishersData.hasMore ?? false);
+          setCurrentPage(prev => prev + 1);
+        } else {
+          setHasMoreAlbums(false);
+        }
+      } catch (error) {
+        console.error('Error loading more publishers:', error);
+      } finally {
+        setIsLoading(false);
       }
       return;
     }
@@ -611,62 +686,25 @@ function HomePageContent() {
         if (process.env.NODE_ENV === 'development') {
           console.log(`🎯 handleFilterChange: Processing ${newFilter} filter`);
         }
-        // Load publishers instead of albums
-        const publishersResponse = await fetch('/api/publishers');
+        // Load first page of publishers with server-side sorting
+        const publishersResponse = await fetch(`/api/publishers?limit=${ALBUMS_PER_PAGE}&offset=0&sort=${sortType}`);
         if (!publishersResponse.ok) {
           throw new Error(`Publishers API failed: ${publishersResponse.status}`);
         }
         const publishersData = await publishersResponse.json();
         const publishers = publishersData.publishers || [];
+        const publisherTotal = publishersData.total || publishers.length;
         if (process.env.NODE_ENV === 'development') {
-          console.log(`🎯 handleFilterChange: Received ${publishers.length} publishers from API`);
+          console.log(`🎯 handleFilterChange: Received ${publishers.length}/${publisherTotal} publishers from API`);
         }
-        
-        // Update publisher stats for sidebar from publishers data
-        const publisherStatsFromPublishers = publishers.map((publisher: any) => ({
-          name: publisher.title,
-          feedGuid: publisher.feedGuid || publisher.id,
-          albumCount: publisher.itemCount || 0
-        }));
-        setPublisherStats(publisherStatsFromPublishers);
-        
+
         // Convert publishers to album-like format for display
-        const publisherAlbums = publishers.map((publisher: any) => {
-          // Use generatePublisherSlug to create clean URLs from artist names
-          const publisherSlug = generatePublisherSlug({ 
-            title: publisher.title, 
-            artist: publisher.title,
-            feedGuid: publisher.feedGuid || publisher.id 
-          });
-          
-          return {
-            id: publisher.id,
-            feedId: publisher.id, // Add feedId for favorite button (use publisher ID)
-            title: publisher.title,
-            artist: publisher.title,
-            description: publisher.description || `${publisher.itemCount} releases`,
-            coverArt: publisher.image,
-            tracks: Array(publisher.totalTracks || 1).fill(null).map((_, i) => ({
-              id: `track-${i}`,
-              title: `Track ${i + 1}`,
-              duration: '0:00',
-              url: publisher.originalUrl
-            })),
-            releaseDate: publisher.dateAdded || new Date().toISOString(),
-            dateAdded: publisher.dateAdded,
-            link: `/publisher/${publisherSlug}`,
-            feedUrl: publisher.originalUrl,
-            isPublisherCard: true,
-            publisherUrl: `/publisher/${publisherSlug}`,
-            albumCount: publisher.itemCount,
-            totalTracks: publisher.totalTracks
-          };
-        });
-        
+        const publisherAlbums = convertPublishersToAlbums(publishers);
+
         resultData = {
           albums: publisherAlbums,
-          totalCount: publishers.length,
-          hasMore: false
+          totalCount: publisherTotal,
+          hasMore: publishersData.hasMore ?? (publishers.length < publisherTotal)
         };
       } else if (newFilter === 'playlist') {
         // Special handling for playlist filter - multiple playlists
@@ -1369,17 +1407,6 @@ function HomePageContent() {
     sortAlbums(filteredAlbums, sortType),
     [filteredAlbums, sortType, sortAlbums]
   );
-
-  // Debug filtered albums when activeFilter is 'publishers'
-  if (activeFilter === 'publishers') {
-    console.log(`🔍 Debug filteredAlbums for publishers filter:`, {
-      displayedAlbums: displayedAlbums.length,
-      enhancedAlbums: enhancedAlbums.length,
-      criticalAlbums: criticalAlbums.length,
-      filteredAlbums: filteredAlbums.length,
-      activeFilter
-    });
-  }
 
   // Show loading state for progressive loading
   const showProgressiveLoading = isCriticalLoaded && !isEnhancedLoaded && filteredAlbums.length > 0;

@@ -163,21 +163,6 @@ function AlbumCard({ album, isPlaying = false, onPlay, className = '', linkFilte
 
   const hasV4V = checkHasV4V(album as any);
   
-  // Debug: Log album data for first few albums to see what fields are available
-  if (typeof window !== 'undefined' && Math.random() < 0.1) {  // ~10% of albums
-    console.log(`🔍 AlbumCard data for "${album.title}":`, {
-      id: album.id,
-      feedId: (album as any).feedId,
-      feedUrl: (album as any).feedUrl,
-      link: album.link,
-      feedGuid: (album as any).feedGuid,
-      remoteFeedGuid: (album as any).remoteFeedGuid,
-      guid: (album as any).guid,
-      episodeGuid: (album as any).episodeGuid,
-      hasV4V
-    });
-  }
-  
 
   return (
     <>

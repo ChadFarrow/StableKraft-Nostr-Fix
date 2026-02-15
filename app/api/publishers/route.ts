@@ -1,10 +1,15 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { generateAlbumSlug } from '@/lib/url-utils';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    console.log('🔍 Publishers API: Loading publishers from database');
+    const { searchParams } = new URL(request.url);
+    const sort = searchParams.get('sort') || 'name-asc';
+    const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10) || 50, 200);
+    const offset = parseInt(searchParams.get('offset') || '0', 10) || 0;
+
+    console.log(`🔍 Publishers API: Loading publishers (sort=${sort}, limit=${limit}, offset=${offset})`);
 
     // Get actual publisher-type feeds from the database
     const publisherFeeds = await prisma.feed.findMany({
@@ -179,14 +184,34 @@ export async function GET() {
       });
     }
 
-    // Sort alphabetically by title
-    const sortedList = publisherList.sort((a, b) => a.title.localeCompare(b.title));
+    // Sort based on requested sort parameter
+    const sortedList = publisherList.sort((a, b) => {
+      switch (sort) {
+        case 'name-desc':
+          return b.title.localeCompare(a.title);
+        case 'added-desc':
+          return new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime();
+        case 'added-asc':
+          return new Date(a.dateAdded).getTime() - new Date(b.dateAdded).getTime();
+        case 'tracks-desc':
+          return b.totalTracks - a.totalTracks;
+        case 'tracks-asc':
+          return a.totalTracks - b.totalTracks;
+        case 'name-asc':
+        default:
+          return a.title.localeCompare(b.title);
+      }
+    });
 
-    console.log(`✅ Publishers API: Returning ${sortedList.length} publishers (${coveredArtists.size} from publisher feeds, ${sortedList.length - coveredArtists.size} from album grouping, ${publisherFeeds.length - coveredArtists.size} duplicate feeds deduplicated)`);
+    const total = sortedList.length;
+    const paginatedList = sortedList.slice(offset, offset + limit);
+
+    console.log(`✅ Publishers API: Returning ${paginatedList.length}/${total} publishers (offset=${offset}, sort=${sort})`);
 
     const response = {
-      publishers: sortedList,
-      total: sortedList.length,
+      publishers: paginatedList,
+      total,
+      hasMore: offset + limit < total,
       timestamp: new Date().toISOString()
     };
 
