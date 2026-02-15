@@ -69,9 +69,11 @@ Matched by: title slug, artist slug, or URL path (e.g., `/setto/` matches "setto
 - `<podcast:podroll>` sections filtered out (not albums)
 - `-pubfeed.xml` URLs skipped
 
-**Multi-feed support**: Artists can have multiple publisher feeds (e.g., separate Wavlake and fountain.fm feeds). `loadPublisherData` finds all publisher feeds for the artist (using name variants for `And→&`, `Plus→+`) and fetches XML from each to collect remote items. Image is extracted from the primary feed only.
+**Multi-feed support**: Artists can have multiple publisher feeds (e.g., separate Wavlake and Fountain.fm feeds). `loadPublisherData` finds all publisher feeds for the artist (using name variants for `And→&`, `Plus→+`) and fetches XML from each to collect remote items. Image is extracted from the primary feed only.
 
-**Album resolution order**: (1) Remote item GUIDs/URLs from all publisher feed XMLs → (2) `publisherId`-linked albums in DB (filtered by podroll blocklist) → (3) Artist name matching for remaining albums. GUID matching checks `Feed.id`, `Feed.guid` column (critical for Wavlake), partial ID, and URL patterns.
+**Per-platform sections**: When a publisher has albums from multiple platforms, the "Official Releases" section is split into per-platform sections (e.g., "Prosperous Soul (Wavlake)", "Prosperous Soul (RSS Blue)", "Prosperous Soul (Fountain.fm)"). Albums are assigned to sections by: (1) `publisherId` from DB, then (2) GUID match to source feed XML, then (3) URL match, then (4) fallback to primary feed. If a single publisher feed's albums span multiple platforms (e.g., Wavlake publisher with RSS Blue albums linked via `publisherId`), the section is split by `getPlatformName()` which detects platform from album `originalUrl` hostname. Single-feed, single-platform publishers show the original "Official Releases" header with no platform suffix. Client renders sections via `feedSections` prop in `PublisherDetailClient.tsx`.
+
+**Album resolution order**: (1) Remote item GUIDs/URLs from all publisher feed XMLs → (2) `publisherId`-linked albums in DB (filtered by podroll blocklist) → (3) Artist name matching for remaining albums. GUID matching checks `Feed.id`, `Feed.guid` column (critical for Wavlake), and URL patterns.
 
 ### Duration Filtering
 Tracks over 2 hours filtered as non-music (silent, no warnings)
