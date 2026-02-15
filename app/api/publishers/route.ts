@@ -79,12 +79,25 @@ export async function GET() {
     // Track which artists are covered by actual publisher feeds
     const coveredArtists = new Set<string>();
 
-    // First: add entries from actual publisher feeds
+    // First: add entries from actual publisher feeds (deduplicate by artist name)
     for (const pubFeed of publisherFeeds) {
       const artistName = pubFeed.artist || pubFeed.title;
       if (!artistName) continue;
 
       const artistKey = artistName.toLowerCase().trim();
+
+      // Skip duplicate publisher feeds for the same artist
+      if (coveredArtists.has(artistKey)) {
+        // If the existing entry has no image but this feed does, update it
+        if (pubFeed.image) {
+          const existing = publisherList.find(p => p.title.toLowerCase().trim() === artistKey);
+          if (existing && existing.image === '/placeholder-artist.png') {
+            existing.image = pubFeed.image;
+          }
+        }
+        continue;
+      }
+
       coveredArtists.add(artistKey);
 
       // Find matching album feeds by artist name
@@ -169,7 +182,7 @@ export async function GET() {
     // Sort alphabetically by title
     const sortedList = publisherList.sort((a, b) => a.title.localeCompare(b.title));
 
-    console.log(`✅ Publishers API: Returning ${sortedList.length} publishers (${publisherFeeds.length} from publisher feeds, ${sortedList.length - publisherFeeds.length} from album grouping)`);
+    console.log(`✅ Publishers API: Returning ${sortedList.length} publishers (${coveredArtists.size} from publisher feeds, ${sortedList.length - coveredArtists.size} from album grouping, ${publisherFeeds.length - coveredArtists.size} duplicate feeds deduplicated)`);
 
     const response = {
       publishers: sortedList,
