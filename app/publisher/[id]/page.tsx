@@ -6,6 +6,18 @@ import { prisma } from '@/lib/prisma';
 // Force dynamic rendering to always fetch fresh publisher data from database
 export const dynamic = 'force-dynamic';
 
+function getPlatformName(url: string): string {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    if (hostname.includes('wavlake')) return 'Wavlake';
+    if (hostname.includes('fountain')) return 'Fountain.fm';
+    if (hostname.includes('rssblue')) return 'RSS Blue';
+    if (hostname.includes('rss.com')) return 'RSS.com';
+    // Fallback: use the hostname (e.g., "frankieperoni.com")
+    return hostname.replace(/^(www|feeds?)\./, '');
+  } catch { return 'Feed'; }
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
   const publisherId = decodeURIComponent(id);
@@ -401,6 +413,10 @@ async function loadPublisherData(publisherId: string) {
     let podrollUrls = new Set<string>();
     let feedImage: string | null = publisherFeed.image || null;
 
+    // Track which publisher feed each GUID/URL came from (for per-feed sections)
+    const guidToSourceFeed = new Map<string, typeof publisherFeed>();
+    const urlToSourceFeed = new Map<string, typeof publisherFeed>();
+
     for (const pubFeed of allPublisherFeeds) {
       if (!pubFeed.originalUrl || pubFeed.originalUrl.trim() === '') continue;
 
@@ -490,8 +506,10 @@ async function loadPublisherData(publisherId: string) {
 
               if ((isAlbumFeed || isExplicitAlbum) && !remoteItemGuids.includes(guid)) {
                 remoteItemGuids.push(guid);
+                guidToSourceFeed.set(guid, pubFeed);
                 if (feedUrlMatch && feedUrlMatch[1] && !remoteItemUrls.includes(feedUrlMatch[1])) {
                   remoteItemUrls.push(feedUrlMatch[1]);
+                  urlToSourceFeed.set(feedUrlMatch[1], pubFeed);
                 }
                 console.log(`📋 Added remote item GUID: ${guid} (medium: ${medium}, url: ${feedUrlMatch?.[1]})`);
               }
@@ -623,6 +641,7 @@ async function loadPublisherData(publisherId: string) {
         lastFetched: true,
         createdAt: true,
         originalUrl: true,
+        publisherId: true,
         Track: {
           where: {
             audioUrl: { not: '' }
@@ -647,6 +666,14 @@ async function loadPublisherData(publisherId: string) {
       ]
     });
 
+    // Build a map from album ID -> publisherId for section assignment
+    const albumPublisherIdMap = new Map<string, string>();
+    for (const feed of publisherIdFeeds) {
+      if (feed.publisherId) {
+        albumPublisherIdMap.set(feed.id, feed.publisherId);
+      }
+    }
+
     console.log(`✅ Found ${publisherIdFeeds.length} albums via publisherId (across ${allPublisherFeedIds.length} publisher feeds)`);
 
     // Merge publisherIdFeeds into relatedFeeds (Official Releases), excluding podroll items
@@ -660,6 +687,147 @@ async function loadPublisherData(publisherId: string) {
       existingIds.add(feed.id);
     }
     console.log(`✅ After merging publisherId albums: ${relatedFeeds.length} total Official Releases`);
+
+    // --- Build per-feed sections for multi-feed publishers ---
+    // Group each album in relatedFeeds by its source publisher feed
+    const feedSectionMap = new Map<string, { feed: typeof publisherFeed; albums: typeof relatedFeeds }>();
+
+    // Initialize a section for each publisher feed that has a URL
+    for (const pf of allPublisherFeeds) {
+      if (pf.originalUrl && pf.originalUrl.trim() !== '') {
+        feedSectionMap.set(pf.id, { feed: pf, albums: [] });
+      }
+    }
+
+    for (const album of relatedFeeds) {
+      let matched = false;
+
+      // Priority 1: Use publisherId if this album has one (most reliable)
+      const pubId = albumPublisherIdMap.get(album.id);
+      if (pubId && feedSectionMap.has(pubId)) {
+        const section = feedSectionMap.get(pubId)!;
+        if (!section.albums.some(a => a.id === album.id)) {
+          section.albums.push(album);
+          matched = true;
+        }
+      }
+
+      // Priority 2: Try matching via GUID source (exact matches only)
+      if (!matched) {
+        for (const guid of remoteItemGuids) {
+          const src = guidToSourceFeed.get(guid);
+          if (!src) continue;
+          if (
+            album.id === guid ||
+            (album as any).guid === guid ||
+            (album.originalUrl && album.originalUrl.includes(guid))
+          ) {
+            const section = feedSectionMap.get(src.id);
+            if (section && !section.albums.some(a => a.id === album.id)) {
+              section.albums.push(album);
+              matched = true;
+            }
+            break;
+          }
+        }
+      }
+
+      // Priority 3: Try matching via URL source
+      if (!matched) {
+        for (const url of remoteItemUrls) {
+          const src = urlToSourceFeed.get(url);
+          if (!src) continue;
+          if (album.originalUrl === url) {
+            const section = feedSectionMap.get(src.id);
+            if (section && !section.albums.some(a => a.id === album.id)) {
+              section.albums.push(album);
+              matched = true;
+            }
+            break;
+          }
+        }
+      }
+
+      // Fallback: assign to primary publisher feed
+      if (!matched) {
+        const primarySection = feedSectionMap.get(publisherFeed.id);
+        if (primarySection && !primarySection.albums.some(a => a.id === album.id)) {
+          primarySection.albums.push(album);
+        }
+      }
+    }
+
+    // Build feedSections with disambiguated titles
+    // When a single section contains albums from multiple platforms (e.g., Wavlake + RSS Blue),
+    // split it into sub-sections by platform so each platform gets its own heading.
+    const expandedSections: Array<{ title: string; feedUrl: string; feedId: string; albums: typeof relatedFeeds; _albumPlatform?: string | null }> = [];
+
+    for (const { feed, albums: sectionAlbums } of feedSectionMap.values()) {
+      if (sectionAlbums.length === 0) continue;
+
+      // Detect platforms present in this section
+      const byPlatform = new Map<string, typeof relatedFeeds>();
+      for (const album of sectionAlbums) {
+        const platform = album.originalUrl ? getPlatformName(album.originalUrl) : getPlatformName(feed.originalUrl || '');
+        if (!byPlatform.has(platform)) byPlatform.set(platform, []);
+        byPlatform.get(platform)!.push(album);
+      }
+
+      if (byPlatform.size <= 1) {
+        // Single platform — keep as one section
+        // Detect the platform from album URLs (more accurate than the publisher feed URL)
+        const albumPlatform = sectionAlbums[0]?.originalUrl
+          ? getPlatformName(sectionAlbums[0].originalUrl)
+          : null;
+        expandedSections.push({
+          title: feed.title || feed.artist || 'Official Releases',
+          feedUrl: feed.originalUrl || '',
+          feedId: feed.id,
+          albums: sectionAlbums,
+          _albumPlatform: albumPlatform // used for disambiguation below
+        });
+      } else {
+        // Multiple platforms — split into sub-sections
+        const baseName = feed.title || feed.artist || 'Official Releases';
+        for (const [platform, albums] of byPlatform) {
+          expandedSections.push({
+            title: `${baseName} (${platform})`,
+            feedUrl: feed.originalUrl || '',
+            feedId: `${feed.id}-${platform.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
+            albums
+          });
+        }
+      }
+    }
+
+    // Disambiguate any remaining duplicate titles across sections
+    const titleCounts = new Map<string, number>();
+    for (const s of expandedSections) {
+      const t = s.title.toLowerCase().trim();
+      titleCounts.set(t, (titleCounts.get(t) || 0) + 1);
+    }
+    // Also check if there are multiple sections total — if so, label all of them
+    const needsLabels = expandedSections.length > 1;
+    for (const s of expandedSections) {
+      const key = s.title.toLowerCase().trim();
+      const isDuplicate = (titleCounts.get(key) || 0) > 1;
+      if ((isDuplicate || needsLabels) && !s.title.includes('(')) {
+        // Use album platform if available (more accurate), fall back to feed URL
+        const platform = s._albumPlatform || (s.feedUrl ? getPlatformName(s.feedUrl) : null);
+        if (platform) {
+          s.title = `${s.title} (${platform})`;
+        }
+      }
+    }
+
+    const feedSections = expandedSections.map(s => ({
+      feedTitle: s.title,
+      feedUrl: s.feedUrl,
+      feedId: s.feedId,
+      albums: s.albums
+    }));
+
+    console.log(`📂 Built ${feedSections.length} feed sections: ${feedSections.map(s => `${s.feedTitle} (${s.albums.length})`).join(', ')}`);
 
     // Artist matching: Find additional albums not linked via remote items or publisherId
     // Use artist from the publisher feed we found, OR from the known publisher mapping
@@ -808,6 +976,14 @@ async function loadPublisherData(publisherId: string) {
     // Create publisher items (this might be empty for some publishers)
     const publisherItems: any[] = []; // TODO: Extract from publisher feed if needed
 
+    // Transform feed sections for client
+    const transformedFeedSections = feedSections.map(s => ({
+      feedTitle: s.feedTitle,
+      feedUrl: s.feedUrl,
+      feedId: s.feedId,
+      albums: transformFeedsToAlbums(s.albums)
+    }));
+
     // Convert to expected format
     const data = {
       publisherInfo: {
@@ -823,6 +999,7 @@ async function loadPublisherData(publisherId: string) {
       albums, // Combined albums for backwards compatibility
       officialAlbums, // GUID-matched albums (Official Releases)
       artistMatchedAlbums, // Artist-only albums (More from Artist)
+      feedSections: transformedFeedSections, // Per-publisher-feed sections
       feedId: publisherFeed.id
     };
     
