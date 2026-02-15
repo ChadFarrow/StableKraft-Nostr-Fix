@@ -15,6 +15,13 @@ import dataService from '@/lib/data-service';
 import BackButton from '@/components/BackButton';
 import FavoriteButton from '@/components/favorites/FavoriteButton';
 
+interface FeedSection {
+  feedTitle: string;
+  feedUrl: string;
+  feedId: string;
+  albums: RSSAlbum[];
+}
+
 interface PublisherDetailClientProps {
   publisherId: string;
   initialData?: {
@@ -23,6 +30,12 @@ interface PublisherDetailClientProps {
     albums?: any[]; // Combined albums for backwards compatibility
     officialAlbums?: any[]; // GUID-matched albums (Official Releases)
     artistMatchedAlbums?: any[]; // Artist-only albums (More from Artist)
+    feedSections?: Array<{
+      feedTitle: string;
+      feedUrl: string;
+      feedId: string;
+      albums: any[];
+    }>;
     feedId: string;
   } | null;
 }
@@ -97,6 +110,20 @@ export default function PublisherDetailClient({ publisherId, initialData }: Publ
     if (initialData?.artistMatchedAlbums && initialData.artistMatchedAlbums.length > 0) {
       console.log('🎯 Using artist-matched albums from server:', initialData.artistMatchedAlbums.length);
       return transformServerAlbums(initialData.artistMatchedAlbums);
+    }
+    return [];
+  });
+
+  // Per-publisher-feed sections (for multi-feed artists)
+  const [feedSections, setFeedSections] = useState<FeedSection[]>(() => {
+    if (initialData?.feedSections && initialData.feedSections.length > 0) {
+      console.log('🎯 Using feed sections from server:', initialData.feedSections.length);
+      return initialData.feedSections.map(s => ({
+        feedTitle: s.feedTitle,
+        feedUrl: s.feedUrl,
+        feedId: s.feedId,
+        albums: transformServerAlbums(s.albums)
+      }));
     }
     return [];
   });
@@ -1260,25 +1287,53 @@ export default function PublisherDetailClient({ publisherId, initialData }: Publ
                   className="mb-8"
                 />
 
-                {/* Official Releases Section */}
-                {filteredOfficialAlbums.length > 0 && (
-                  <div className="mb-12">
-                    <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-                      <Disc className="w-6 h-6 text-blue-400" />
-                      Official Releases
-                      <div className="relative group">
-                        <Info className="w-4 h-4 text-gray-400 cursor-help" />
-                        <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-xl z-10 text-sm font-normal">
-                          <p className="text-gray-300">Albums linked directly from the publisher feed</p>
-                          <div className="absolute left-2 top-full w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-gray-700"></div>
-                        </div>
+                {/* Per-Feed Official Releases Sections (multi-feed publishers) */}
+                {feedSections.length > 1 ? (
+                  feedSections.map((section) => {
+                    const sectionAlbumIds = new Set(section.albums.map(a => a.id));
+                    const filteredSectionAlbums = filteredAlbums.filter(a => sectionAlbumIds.has(a.id));
+                    if (filteredSectionAlbums.length === 0) return null;
+                    return (
+                      <div key={section.feedId} className="mb-12">
+                        <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+                          <Disc className="w-6 h-6 text-blue-400" />
+                          {section.feedTitle}
+                          <div className="relative group">
+                            <Info className="w-4 h-4 text-gray-400 cursor-help" />
+                            <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-xl z-10 text-sm font-normal">
+                              <p className="text-gray-300">Albums linked from this publisher feed</p>
+                              <div className="absolute left-2 top-full w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-gray-700"></div>
+                            </div>
+                          </div>
+                          <span className="text-sm font-normal text-gray-400 ml-2">
+                            ({filteredSectionAlbums.length})
+                          </span>
+                        </h2>
+                        {viewType === 'grid' ? renderAlbumGrid(filteredSectionAlbums) : renderAlbumList(filteredSectionAlbums)}
                       </div>
-                      <span className="text-sm font-normal text-gray-400 ml-2">
-                        ({filteredOfficialAlbums.length})
-                      </span>
-                    </h2>
-                    {viewType === 'grid' ? renderAlbumGrid(filteredOfficialAlbums) : renderAlbumList(filteredOfficialAlbums)}
-                  </div>
+                    );
+                  })
+                ) : (
+                  /* Single feed or no feed sections — show original "Official Releases" */
+                  filteredOfficialAlbums.length > 0 && (
+                    <div className="mb-12">
+                      <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+                        <Disc className="w-6 h-6 text-blue-400" />
+                        Official Releases
+                        <div className="relative group">
+                          <Info className="w-4 h-4 text-gray-400 cursor-help" />
+                          <div className="absolute left-0 bottom-full mb-2 hidden group-hover:block w-64 bg-gray-900 border border-gray-700 rounded-lg p-3 shadow-xl z-10 text-sm font-normal">
+                            <p className="text-gray-300">Albums linked directly from the publisher feed</p>
+                            <div className="absolute left-2 top-full w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-gray-700"></div>
+                          </div>
+                        </div>
+                        <span className="text-sm font-normal text-gray-400 ml-2">
+                          ({filteredOfficialAlbums.length})
+                        </span>
+                      </h2>
+                      {viewType === 'grid' ? renderAlbumGrid(filteredOfficialAlbums) : renderAlbumList(filteredOfficialAlbums)}
+                    </div>
+                  )
                 )}
 
                 {/* More from Artist Section */}
