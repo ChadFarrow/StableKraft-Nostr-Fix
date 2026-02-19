@@ -1,6 +1,7 @@
 import { ValueRecipient, ValueTag } from './value-parser';
 import { LNURLService } from './lnurl';
 import { LIGHTNING_CONFIG } from './config';
+import { BoostBoxService } from './boostbox';
 import type { WalletProviderType } from './wallet-detection';
 
 export interface PaymentResult {
@@ -148,7 +149,7 @@ export class ValueSplitsService {
             }
 
             // Pay via Lightning Address (LNURL) - either as fallback or primary method
-            return await this.payLightningAddress(recipient, amount, message, sendPayment);
+            return await this.payLightningAddress(recipient, amount, message, sendPayment, helipadMetadata);
           } else if (recipient.type === 'node') {
             // If wallet doesn't support keysend and we have LNURL fallback, use it directly
             if (supportsKeysend === false && recipient.lnurlFallback) {
@@ -158,7 +159,7 @@ export class ValueSplitsService {
                 type: 'lnaddress',
                 address: recipient.lnurlFallback
               };
-              return await this.payLightningAddress(lnurlRecipient, amount, message, sendPayment);
+              return await this.payLightningAddress(lnurlRecipient, amount, message, sendPayment, helipadMetadata);
             }
 
             // If wallet doesn't support keysend and no fallback, return error
@@ -182,7 +183,7 @@ export class ValueSplitsService {
                 type: 'lnaddress',
                 address: recipient.lnurlFallback
               };
-              return await this.payLightningAddress(lnurlRecipient, amount, message, sendPayment);
+              return await this.payLightningAddress(lnurlRecipient, amount, message, sendPayment, helipadMetadata);
             }
 
             return keysendResult;
@@ -284,19 +285,37 @@ export class ValueSplitsService {
   }
 
   /**
-   * Pay to a Lightning Address recipient
+   * Pay to a Lightning Address recipient.
+   * When helipadMetadata is provided and BoostBox is enabled, stores the
+   * metadata in BoostBox and uses the returned description as the LNURL
+   * invoice comment so recipients can retrieve full payment context.
    */
   private static async payLightningAddress(
     recipient: ValueRecipient,
     amount: number,
     message: string | undefined,
-    sendPayment: (invoice: string) => Promise<{ preimage?: string; error?: string }>
+    sendPayment: (invoice: string) => Promise<{ preimage?: string; error?: string }>,
+    helipadMetadata?: Record<string, any>
   ): Promise<PaymentResult> {
     try {
+      // Store metadata in BoostBox for LNURL payments (graceful degradation)
+      let comment = message;
+      if (LIGHTNING_CONFIG.features.boostbox && helipadMetadata) {
+        const desc = await BoostBoxService.storeMetadata(
+          helipadMetadata,
+          recipient.name,
+          recipient.address,
+          recipient.split ? Number(recipient.split) / 100 : 1
+        );
+        if (desc) {
+          comment = desc;
+        }
+      }
+
       const { invoice } = await LNURLService.payLightningAddress(
         recipient.address,
         amount,
-        message
+        comment
       );
 
       const result = await sendPayment(invoice);

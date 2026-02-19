@@ -7,6 +7,7 @@ import { useNostr } from '@/contexts/NostrContext';
 import { useUserSettings } from '@/hooks/useUserSettings';
 import { LIGHTNING_CONFIG } from '@/lib/lightning/config';
 import { LNURLService } from '@/lib/lightning/lnurl';
+import { BoostBoxService } from '@/lib/lightning/boostbox';
 import { ValueSplitsService } from '@/lib/lightning/value-splits';
 import { Zap, Send, X, Mail, Check, ChevronDown, ChevronUp, AlertCircle, Info } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -253,10 +254,38 @@ export function BoostButton({
         // Pay to Lightning Address via LNURL-pay
 
         try {
+          // Store metadata in BoostBox for LNURL payments
+          let comment = message;
+          if (LIGHTNING_CONFIG.features.boostbox) {
+            const lnurlMetadata: Record<string, any> = {
+              podcast: artistName || 'Unknown Artist',
+              episode: trackTitle || 'Unknown Track',
+              action: 'boost',
+              app_name: 'StableKraft',
+              value_msat: amount * 1000,
+              value_msat_total: amount * 1000,
+              sender_name: senderName || 'Anonymous',
+              uuid: `boost-${Date.now()}-${Math.floor(Math.random() * 999)}`
+            };
+            if (feedUrl) { lnurlMetadata.url = feedUrl; lnurlMetadata.feed = feedUrl; }
+            if (remoteFeedGuid) { lnurlMetadata.remote_feed_guid = remoteFeedGuid; }
+            if (episodeGuid || trackId) {
+              lnurlMetadata.remote_item_guid = episodeGuid || trackId;
+              lnurlMetadata.episode_guid = episodeGuid || trackId;
+            }
+            if (albumName) { lnurlMetadata.album = albumName; }
+            if (message) { lnurlMetadata.message = message; }
+
+            const desc = await BoostBoxService.storeMetadata(lnurlMetadata, undefined, lightningAddress);
+            if (desc) {
+              comment = desc;
+            }
+          }
+
           const { invoice } = await LNURLService.payLightningAddress(
             lightningAddress,
             amount,
-            message
+            comment
           );
 
           result = await sendPayment(invoice);
