@@ -12,9 +12,6 @@
  * @see https://github.com/noblepayne/boostbox
  */
 
-const BOOSTBOX_URL = 'https://boostbox.cloud';
-const BOOSTBOX_API_KEY = 'v4v4me';
-
 export interface BoostBoxPayload {
   action: 'boost' | 'stream';
   split: number;
@@ -64,11 +61,17 @@ function mapHelipadToBoostBox(
     sender_name: helipadMetadata.sender_name,
     recipient_name: recipientName,
     recipient_address: recipientAddress,
+    // feed_guid and remote_feed_guid are the same value because we only have
+    // the remote GUID from <podcast:remoteItem> — the playlist feed's own GUID
+    // is not meaningful here.
     feed_guid: helipadMetadata.remote_feed_guid,
-    feed_title: helipadMetadata.podcast,
+    // The feed IS the album, so use album name first, fall back to artist name
+    feed_title: helipadMetadata.album || helipadMetadata.podcast,
     item_guid: helipadMetadata.episode_guid || helipadMetadata.remote_item_guid,
     item_title: helipadMetadata.episode,
     publisher_guid: helipadMetadata.publisher_guid,
+    // The publisher IS the artist
+    publisher_title: helipadMetadata.podcast,
     remote_feed_guid: helipadMetadata.remote_feed_guid,
     remote_item_guid: helipadMetadata.remote_item_guid,
   };
@@ -90,41 +93,19 @@ export class BoostBoxService {
     try {
       const payload = mapHelipadToBoostBox(helipadMetadata, recipientName, recipientAddress, split);
 
-      const isBrowser = typeof window !== 'undefined';
-      let data: BoostBoxResponse;
+      // Always use server-side proxy (this is only called client-side)
+      const response = await fetch('/api/lightning/boostbox', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-      if (isBrowser) {
-        // Use server-side proxy to avoid CORS issues
-        const response = await fetch('/api/lightning/boostbox', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-          console.warn(`BoostBox proxy error: HTTP ${response.status}`);
-          return null;
-        }
-
-        data = await response.json();
-      } else {
-        // Server-side: direct call
-        const response = await fetch(`${BOOSTBOX_URL}/boost`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Api-Key': BOOSTBOX_API_KEY,
-          },
-          body: JSON.stringify(payload),
-        });
-
-        if (!response.ok) {
-          console.warn(`BoostBox error: HTTP ${response.status}`);
-          return null;
-        }
-
-        data = await response.json();
+      if (!response.ok) {
+        console.warn(`BoostBox proxy error: HTTP ${response.status}`);
+        return null;
       }
+
+      const data: BoostBoxResponse = await response.json();
 
       if (data.desc) {
         console.log(`BoostBox stored: ${data.url}`);

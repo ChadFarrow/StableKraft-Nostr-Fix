@@ -202,6 +202,46 @@ export function BoostButton({
     );
   }
 
+  // Build Helipad metadata object for boost payments.
+  // Used by direct keysend, LNURL (via BoostBox), and value splits paths.
+  const buildHelipadMetadata = (amount: number, msg?: string): Record<string, any> => {
+    const metadata: Record<string, any> = {
+      podcast: artistName || 'Unknown Artist',
+      episode: trackTitle || 'Unknown Track',
+      action: 'boost',
+      app_name: 'StableKraft',
+      value_msat: amount * 1000,
+      value_msat_total: amount * 1000,
+      sender_name: senderName || 'Anonymous',
+      name: 'StableKraft',
+      app_version: '1.0.0',
+      uuid: `boost-${Date.now()}-${Math.floor(Math.random() * 999)}`
+    };
+
+    if (feedUrl) {
+      metadata.url = feedUrl;
+      metadata.feed = feedUrl;
+    }
+    if (feedId) {
+      metadata.feedId = feedId;
+    }
+    if (remoteFeedGuid) {
+      metadata.remote_feed_guid = remoteFeedGuid;
+    }
+    if (episodeGuid || trackId) {
+      metadata.remote_item_guid = episodeGuid || trackId;
+      metadata.episode_guid = episodeGuid || trackId;
+    }
+    if (albumName) {
+      metadata.album = albumName;
+    }
+    if (msg) {
+      metadata.message = msg;
+    }
+
+    return metadata;
+  };
+
   const handleBoost = async () => {
     if (!isConnected) {
       await connect();
@@ -257,26 +297,11 @@ export function BoostButton({
           // Store metadata in BoostBox for LNURL payments
           let comment = message;
           if (LIGHTNING_CONFIG.features.boostbox) {
-            const lnurlMetadata: Record<string, any> = {
-              podcast: artistName || 'Unknown Artist',
-              episode: trackTitle || 'Unknown Track',
-              action: 'boost',
-              app_name: 'StableKraft',
-              value_msat: amount * 1000,
-              value_msat_total: amount * 1000,
-              sender_name: senderName || 'Anonymous',
-              uuid: `boost-${Date.now()}-${Math.floor(Math.random() * 999)}`
-            };
-            if (feedUrl) { lnurlMetadata.url = feedUrl; lnurlMetadata.feed = feedUrl; }
-            if (remoteFeedGuid) { lnurlMetadata.remote_feed_guid = remoteFeedGuid; }
-            if (episodeGuid || trackId) {
-              lnurlMetadata.remote_item_guid = episodeGuid || trackId;
-              lnurlMetadata.episode_guid = episodeGuid || trackId;
-            }
-            if (albumName) { lnurlMetadata.album = albumName; }
-            if (message) { lnurlMetadata.message = message; }
-
-            const desc = await BoostBoxService.storeMetadata(lnurlMetadata, undefined, lightningAddress);
+            const desc = await BoostBoxService.storeMetadata(
+              buildHelipadMetadata(amount, message),
+              undefined,
+              lightningAddress
+            );
             if (desc) {
               comment = desc;
             }
@@ -296,54 +321,7 @@ export function BoostButton({
       } else if (lightningAddress && lightningAddress.length === 66 && (lightningAddress.startsWith('02') || lightningAddress.startsWith('03'))) {
         // Pay to node pubkey via keysend
         try {
-          // Debug: Log what values we're receiving
-          console.log('🔍 BoostButton values:', {
-            feedUrl,
-            feedId,
-            remoteFeedGuid,
-            episodeGuid,
-            trackId,
-            albumName,
-            artistName,
-            trackTitle
-          });
-
-          // Create Helipad metadata matching exact working format from logs
-          const helipadMetadata: any = {
-            podcast: artistName || 'Unknown Artist',
-            episode: trackTitle || 'Unknown Track',
-            action: 'boost',
-            app_name: 'StableKraft',
-            value_msat: amount * 1000, // Integer as per Helipad spec
-            value_msat_total: amount * 1000, // Integer as per Helipad spec
-            sender_name: senderName || 'Anonymous',
-            name: 'StableKraft',
-            app_version: '1.0.0',
-            uuid: `boost-${Date.now()}-${Math.floor(Math.random() * 999)}`
-          };
-
-          // Add required fields matching exact working format
-          if (feedUrl) {
-            helipadMetadata.url = feedUrl;
-            helipadMetadata.feed = feedUrl; // Working logs show both url and feed fields
-          }
-          if (feedId) {
-            helipadMetadata.feedId = feedId; // Keep as string - working logs show "6590183" not integer
-          }
-          if (remoteFeedGuid) {
-            helipadMetadata.remote_feed_guid = remoteFeedGuid;
-          }
-          if (episodeGuid || trackId) {
-            helipadMetadata.remote_item_guid = episodeGuid || trackId;
-            helipadMetadata.episode_guid = episodeGuid || trackId; // Working logs show episode_guid field
-          }
-          if (albumName) {
-            helipadMetadata.album = albumName; // Working logs show album field
-          }
-          if (message) {
-            helipadMetadata.message = message;
-          }
-
+          const helipadMetadata = buildHelipadMetadata(amount, message);
           console.log('📋 Final Helipad metadata:', helipadMetadata);
 
           result = await sendKeysend(lightningAddress, amount, message, helipadMetadata);
@@ -877,54 +855,7 @@ export function BoostButton({
       ]));
       setPaymentStatuses(initialStatuses);
 
-      // Debug: Log what values we're receiving for value splits
-      console.log('🔍 BoostButton values (value splits):', {
-        feedUrl,
-        feedId,
-        remoteFeedGuid,
-        episodeGuid,
-        trackId,
-        albumName,
-        artistName,
-        trackTitle
-      });
-
-      // Create Helipad metadata matching exact working format from logs
-      const helipadMetadata: any = {
-        podcast: artistName || 'Unknown Artist',
-        episode: trackTitle || 'Unknown Track',
-        action: 'boost',
-        app_name: 'StableKraft',
-        value_msat: totalAmount * 1000, // Integer as per Helipad spec
-        value_msat_total: totalAmount * 1000, // Integer as per Helipad spec
-        sender_name: senderName || 'Anonymous',
-        name: 'StableKraft',
-        app_version: '1.0.0',
-        uuid: `boost-${Date.now()}-${Math.floor(Math.random() * 999)}`
-      };
-
-      // Add required fields matching exact working format
-      if (feedUrl) {
-        helipadMetadata.url = feedUrl;
-        helipadMetadata.feed = feedUrl; // Working logs show both url and feed fields
-      }
-      if (feedId) {
-        helipadMetadata.feedId = feedId; // Keep as string - working logs show "6590183" not integer
-      }
-      if (remoteFeedGuid) {
-        helipadMetadata.remote_feed_guid = remoteFeedGuid;
-      }
-      if (episodeGuid || trackId) {
-        helipadMetadata.remote_item_guid = episodeGuid || trackId;
-        helipadMetadata.episode_guid = episodeGuid || trackId; // Working logs show episode_guid field
-      }
-      if (albumName) {
-        helipadMetadata.album = albumName; // Working logs show album field
-      }
-      if (message) {
-        helipadMetadata.message = message;
-      }
-
+      const helipadMetadata = buildHelipadMetadata(totalAmount, message);
       console.log('📋 Final Helipad metadata (value splits):', helipadMetadata);
 
       // Progress callback to update UI as each payment completes

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 const BOOSTBOX_URL = 'https://boostbox.cloud';
-const BOOSTBOX_API_KEY = 'v4v4me';
+const BOOSTBOX_API_KEY = process.env.BOOSTBOX_API_KEY || 'v4v4me';
 
 /**
  * Server-side proxy for BoostBox API to avoid CORS issues.

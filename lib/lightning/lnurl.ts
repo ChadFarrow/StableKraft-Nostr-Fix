@@ -295,8 +295,12 @@ export class LNURLService {
       );
     }
 
-    if (comment && params.commentAllowed && comment.length > params.commentAllowed) {
-      throw new Error(`Comment too long. Maximum ${params.commentAllowed} characters allowed`);
+    // Truncate comment to server's allowed length instead of throwing.
+    // BoostBox URLs are at the start of desc, so truncation preserves the metadata link.
+    let finalComment = comment;
+    if (finalComment && params.commentAllowed && finalComment.length > params.commentAllowed) {
+      console.warn(`LNURL comment truncated from ${finalComment.length} to ${params.commentAllowed} chars`);
+      finalComment = finalComment.slice(0, params.commentAllowed);
     }
 
     try {
@@ -310,7 +314,7 @@ export class LNURLService {
           body: JSON.stringify({
             callback: params.callback,
             amount,
-            comment,
+            comment: finalComment,
             payerData,
           }),
         });
@@ -327,8 +331,8 @@ export class LNURLService {
       const callbackUrl = new URL(params.callback);
       callbackUrl.searchParams.set('amount', amount.toString());
 
-      if (comment) {
-        callbackUrl.searchParams.set('comment', comment);
+      if (finalComment) {
+        callbackUrl.searchParams.set('comment', finalComment);
       }
 
       if (payerData) {
