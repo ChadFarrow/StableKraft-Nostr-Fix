@@ -31,6 +31,10 @@ export async function detectWalletProviderType(): Promise<{
     const config = getConnectorConfig();
 
     if (!config) {
+      // No Bitcoin Connect config — check for a WebLN browser extension (e.g. Alby)
+      if (typeof window !== 'undefined' && (window as any).webln) {
+        return { type: 'extension', name: 'WebLN Extension' };
+      }
       return { type: 'unknown', name: 'Unknown Wallet' };
     }
 
