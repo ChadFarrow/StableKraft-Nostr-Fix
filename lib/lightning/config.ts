@@ -43,6 +43,7 @@ export const LIGHTNING_CONFIG = {
     boostagrams: true,
     nostrIntegration: true, // Enabled for Nostr boost posting
     helipadIntegration: false, // Disabled until configured
+    boostbox: true, // BoostBox metadata storage for LNURL payments
   },
 };
 

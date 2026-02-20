@@ -139,5 +139,15 @@ Uses `window.history.length` to detect prior navigation. Do NOT use `document.re
 ### Lightning Wallet Detection (`components/Lightning/BitcoinConnectProvider.tsx`)
 Keysend capability is inferred from provider type (`hasKeysendMethod && type !== 'unknown'`). Do NOT probe by sending a real keysend payment — wallets like Alby extension surface this as a user-facing payment popup on every page load.
 
+### BoostBox Integration (`lib/lightning/boostbox.ts`)
+LNURL payments use [BoostBox](https://boostbox.cloud) to store Podcasting 2.0 boost metadata. Before requesting an LNURL invoice, metadata is POSTed to BoostBox which returns a `desc` string (e.g., `rss::payment::boost https://boostbox.cloud/boost/01K9... message`). That `desc` becomes the LNURL invoice comment so recipients can fetch full payment context. Keysend payments are unaffected — they use Helipad TLV records directly.
+
+- API spec: https://boostbox.cloud/openapi.json
+- Docs: https://boostbox.cloud/docs
+- Source: https://github.com/noblepayne/boostbox
+- Server-side proxy: `app/api/lightning/boostbox/route.ts` (avoids CORS)
+- Feature flag: `LIGHTNING_CONFIG.features.boostbox` in `lib/lightning/config.ts`
+- If BoostBox is unreachable, payments proceed without metadata (graceful degradation)
+
 ### Episode/Play Count Markers
 Playlists can include `<podcast:txt purpose="episode">` or `<podcast:txt purpose="playcount">` markers in XML to group tracks into collapsible sections. After adding markers, refresh: `curl https://stablekraft.app/api/playlist/[id]?refresh`
