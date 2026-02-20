@@ -1266,7 +1266,7 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
                             valueSplits={formatValueSplitsForBoost(track, album.artist) || formatValueSplitsForBoost(album, album.artist)}
                             lightningAddress={getPrimaryRecipient(track) || getPrimaryRecipient(album)}
                             episodeGuid={track.v4vValue?.itemGuid || track.guid}
-                            remoteFeedGuid={track.v4vValue?.feedGuid}
+                            remoteFeedGuid={track.v4vValue?.feedGuid || album.feedGuid || album.feedId}
                             feedUrl={album.feedUrl}
                             albumName={album.title}
                             publisherGuid={album.publisher?.feedGuid}

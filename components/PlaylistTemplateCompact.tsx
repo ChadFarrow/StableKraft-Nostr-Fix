@@ -1113,6 +1113,7 @@ export default function PlaylistTemplateCompact({ config }: PlaylistTemplateComp
                                         : undefined}
                                       episodeGuid={track.valueForValue?.itemGuid || track.itemGuid}
                                       remoteFeedGuid={track.valueForValue?.feedGuid || track.feedGuid}
+                                      albumName={track.feedTitle || track.albumTitle}
                                       className="text-xs"
                                     />
                                   </div>
@@ -1299,6 +1300,7 @@ export default function PlaylistTemplateCompact({ config }: PlaylistTemplateComp
                           : undefined}
                         episodeGuid={track.valueForValue?.itemGuid || track.itemGuid}
                         remoteFeedGuid={track.valueForValue?.feedGuid || track.feedGuid}
+                        albumName={track.feedTitle || track.albumTitle}
                         className="text-xs"
                       />
                     </div>

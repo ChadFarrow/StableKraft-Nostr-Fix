@@ -1209,6 +1209,7 @@ function FavoritesPageContent() {
                             }))}
                             feedUrl={track.Feed?.originalUrl || undefined}
                             episodeGuid={track.guid || track.id}
+                            remoteFeedGuid={(track.Feed as any)?.guid || track.Feed?.id}
                             albumName={track.album || track.Feed?.title}
                             iconOnly={true}
                             className="w-8 h-8 sm:w-9 sm:h-9"

@@ -414,6 +414,7 @@ export default function PlaylistAlbum({ tracks: rawTracks, config, onTrackResolv
                   : undefined}
                 episodeGuid={track.valueForValue?.itemGuid}
                 remoteFeedGuid={track.valueForValue?.feedGuid}
+                albumName={(track as any).albumTitle || (track as any).feedTitle}
                 className="text-xs"
               />
               <span className="text-xs md:text-sm text-gray-400">

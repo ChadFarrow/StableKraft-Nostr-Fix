@@ -151,8 +151,14 @@ LNURL payments use [BoostBox](https://boostbox.cloud) to store Podcasting 2.0 bo
 - LNURL comment length: `requestInvoice()` in `lib/lightning/lnurl.ts` truncates comments exceeding the server's `commentAllowed` limit instead of throwing — preserves the BoostBox URL at the start of `desc`
 - `boostbox.ts` is client-only — always uses the `/api/lightning/boostbox` proxy (no direct BoostBox calls or API keys in the client bundle)
 
+**BoostBox metadata field mapping**: `buildHelipadMetadata` → `mapHelipadToBoostBox` populates BoostBox payload fields from Helipad metadata. Key mappings: `feed_guid` ← `remote_feed_guid`, `feed_title` ← `album` (falls back to `podcast`/artist name), `publisher_guid` ← `publisher_guid`, `item_guid` ← `episode_guid`/`remote_item_guid`. Note: `url`/`feed` fields from Helipad metadata are NOT mapped to BoostBox payload (only used in keysend TLV records).
+
+**BoostBox vs keysend**: Value splits try keysend first (preferred for Helipad TLV metadata). BoostBox is only called when a recipient falls through to LNURL — either because the recipient's Lightning Address doesn't return keysend info (e.g., Strike, Zeus, Primal) or the wallet doesn't support keysend. Fountain.fm addresses skip keysend by design (see `isFountain` check in `value-splits.ts`). Whether the BoostBox `desc` URL is visible in the sender/recipient wallet depends on the LNURL server's `commentAllowed` support — Strike shows it, Fountain.fm does not.
+
 ### Helipad Metadata (`components/Lightning/BoostButton.tsx`)
 Helipad metadata for boost payments is built by `buildHelipadMetadata(amount, msg)` inside `BoostButton`. This single helper is used by all 3 payment paths (direct LNURL, direct keysend, value splits). Do NOT duplicate the metadata construction — add new fields to the helper. The platform fee metaboost in `sendPlatformFeeMetaboost()` intentionally builds its own metadata (different amount/uuid).
+
+**BoostButton props for metadata**: When adding BoostButton to a page, pass these props for complete BoostBox/Helipad metadata: `feedUrl` (album RSS URL), `remoteFeedGuid` (album's podcast:guid or feedId), `albumName` (album/feed title), `publisherGuid` (publisher's feed ID), `episodeGuid` (track GUID). The album slug API (`/api/albums/[slug]`) returns `feedGuid` (the `Feed.guid` column from the DB) alongside `feedId`. For track-level BoostButtons on album pages, `remoteFeedGuid` should fall back to the album: `track.v4vValue?.feedGuid || album.feedGuid || album.feedId`.
 
 ### Episode/Play Count Markers
 Playlists can include `<podcast:txt purpose="episode">` or `<podcast:txt purpose="playcount">` markers in XML to group tracks into collapsible sections. After adding markers, refresh: `curl https://stablekraft.app/api/playlist/[id]?refresh`

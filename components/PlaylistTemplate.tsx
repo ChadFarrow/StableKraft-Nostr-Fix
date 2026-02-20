@@ -596,6 +596,7 @@ export default function PlaylistTemplate({ config }: PlaylistTemplateProps) {
                               : undefined}
                             episodeGuid={track.valueForValue?.itemGuid || track.itemGuid}
                             remoteFeedGuid={track.valueForValue?.feedGuid || track.feedGuid}
+                            albumName={track.feedTitle || track.albumTitle}
                             className="text-xs"
                           />
                           {/* Source Badge */}
