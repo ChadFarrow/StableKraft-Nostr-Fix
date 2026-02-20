@@ -1229,6 +1229,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         funding: null,
         feedId: feed.id,
         feedUrl: feed.originalUrl,
+        feedGuid: feed.guid || null,
         lastUpdated: feed.updatedAt,
         v4vRecipient: feed.v4vRecipient || feed.Track?.[0]?.v4vRecipient || null,
         v4vValue: parseV4VValue(feed.v4vValue) || parseV4VValue(feed.Track?.[0]?.v4vValue) || null,
@@ -1395,6 +1396,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
           funding: null,
           feedId: feed.id,
           feedUrl: feed.originalUrl,
+          feedGuid: feed.guid || null,
           lastUpdated: feed.updatedAt,
           v4vRecipient: feed.v4vRecipient || feed.Track?.[0]?.v4vRecipient || null,
           v4vValue: parseV4VValue(feed.v4vValue) || parseV4VValue(feed.Track?.[0]?.v4vValue) || null

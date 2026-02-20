@@ -235,6 +235,9 @@ export function BoostButton({
     if (albumName) {
       metadata.album = albumName;
     }
+    if (publisherGuid) {
+      metadata.publisher_guid = publisherGuid;
+    }
     if (msg) {
       metadata.message = msg;
     }
