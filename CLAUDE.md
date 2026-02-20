@@ -137,7 +137,7 @@ Publisher favorites use three feedId formats:
 Uses `window.history.length` to detect prior navigation. Do NOT use `document.referrer` — it doesn't update during SPA navigation.
 
 ### Lightning Wallet Detection (`components/Lightning/BitcoinConnectProvider.tsx`)
-Keysend capability is inferred from provider type (`hasKeysendMethod && type !== 'unknown'`). Do NOT probe by sending a real keysend payment — wallets like Alby extension surface this as a user-facing payment popup on every page load.
+Keysend capability is inferred from provider type (`hasKeysendMethod && type !== 'unknown'`). Do NOT probe by sending a real keysend payment — wallets like Alby extension surface this as a user-facing payment popup on every page load. When the Alby extension auto-connects via `window.webln` (bypassing Bitcoin Connect), `detectWalletProviderType()` in `lib/lightning/wallet-detection.ts` falls back to checking `window.webln` and returns `type: 'extension'` — without this, keysend detection fails for the Alby extension.
 
 ### BoostBox Integration (`lib/lightning/boostbox.ts`)
 LNURL payments use [BoostBox](https://boostbox.cloud) to store Podcasting 2.0 boost metadata. Before requesting an LNURL invoice, metadata is POSTed to BoostBox which returns a `desc` string (e.g., `rss::payment::boost https://boostbox.cloud/boost/01K9... message`). That `desc` becomes the LNURL invoice comment so recipients can fetch full payment context. Keysend payments are unaffected — they use Helipad TLV records directly.
@@ -145,9 +145,14 @@ LNURL payments use [BoostBox](https://boostbox.cloud) to store Podcasting 2.0 bo
 - API spec: https://boostbox.cloud/openapi.json
 - Docs: https://boostbox.cloud/docs
 - Source: https://github.com/noblepayne/boostbox
-- Server-side proxy: `app/api/lightning/boostbox/route.ts` (avoids CORS)
+- Server-side proxy: `app/api/lightning/boostbox/route.ts` (avoids CORS, API key via `BOOSTBOX_API_KEY` env var)
 - Feature flag: `LIGHTNING_CONFIG.features.boostbox` in `lib/lightning/config.ts`
 - If BoostBox is unreachable, payments proceed without metadata (graceful degradation)
+- LNURL comment length: `requestInvoice()` in `lib/lightning/lnurl.ts` truncates comments exceeding the server's `commentAllowed` limit instead of throwing — preserves the BoostBox URL at the start of `desc`
+- `boostbox.ts` is client-only — always uses the `/api/lightning/boostbox` proxy (no direct BoostBox calls or API keys in the client bundle)
+
+### Helipad Metadata (`components/Lightning/BoostButton.tsx`)
+Helipad metadata for boost payments is built by `buildHelipadMetadata(amount, msg)` inside `BoostButton`. This single helper is used by all 3 payment paths (direct LNURL, direct keysend, value splits). Do NOT duplicate the metadata construction — add new fields to the helper. The platform fee metaboost in `sendPlatformFeeMetaboost()` intentionally builds its own metadata (different amount/uuid).
 
 ### Episode/Play Count Markers
 Playlists can include `<podcast:txt purpose="episode">` or `<podcast:txt purpose="playcount">` markers in XML to group tracks into collapsible sections. After adding markers, refresh: `curl https://stablekraft.app/api/playlist/[id]?refresh`
