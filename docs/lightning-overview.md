@@ -1,5 +1,20 @@
 # Lightning Payment Implementation Overview
 
+## Libraries & Dependencies
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| [`@getalby/bitcoin-connect`](https://github.com/getAlby/bitcoin-connect) | ^3.11.0 | Wallet connection modal, WebLN provider abstraction, NWC support |
+| [`webln`](https://github.com/joule-labs/webln) | ^0.3.2 | WebLN type definitions and interface for browser Lightning wallets |
+| [`@webbtc/webln-types`](https://github.com/nickhamer/webbtc-webln-types) | ^3.0.0 | Extended WebLN TypeScript types (keysend, makeInvoice, getBalance) |
+| [`nostr-tools`](https://github.com/nbd-wtf/nostr-tools) | ^2.15.0 | Nostr event signing/verification, NIP-19 encoding, NIP-44 encryption, relay connections |
+
+### How They Fit Together
+
+- **Bitcoin Connect** provides the wallet connection UI (modal) and abstracts over multiple wallet types (Alby, Alby Hub, Coinos, NWC, browser extensions). It returns a WebLN provider on connection.
+- **WebLN** is the standard interface used to send payments (`sendPayment`), keysends (`keysend`), generate invoices (`makeInvoice`), and check balances (`getBalance`) through the connected wallet.
+- **nostr-tools** handles Nostr event creation, signing, and relay publishing for boost events (kind 1), as well as NIP-05 resolution for discovering musician Nostr pubkeys from Lightning Addresses.
+
 ## Core Architecture
 
 The system is built around **3 payment methods** with intelligent fallback chains:
