@@ -117,7 +117,8 @@ export class ValueSplitsService {
             // Keysend is preferred because it includes Helipad metadata for podcast apps
             // This enables better integration with podcast players that support Helipad protocol
             // Skip keysend if wallet doesn't support it (e.g., Cashu wallets)
-            if (recipient.keysendFallback && supportsKeysend !== false) {
+            const isFountain = recipient.address.toLowerCase().endsWith('@fountain.fm');
+            if (recipient.keysendFallback && supportsKeysend !== false && !isFountain) {
               console.log(`⚡ Trying keysend first for ${recipient.address} (has keysend fallback)`);
 
               // Merge keysend custom records with Helipad metadata
