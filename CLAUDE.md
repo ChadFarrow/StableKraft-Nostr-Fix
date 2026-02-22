@@ -51,6 +51,11 @@ Playlists use `<podcast:remoteItem>` with `feedGuid` + `itemGuid`. On `?refresh`
 
 **Resolution rate**: Expect 80-90%. Gaps come from dead feeds (removed from Podcast Index), duplicate GUIDs across platforms (Wavlake vs original publisher), and duplicate URLs under different feedGuid values.
 
+**Podroll exclusion**: `process-remote-items/route.ts` strips `<podcast:podroll>` sections from publisher feed XML before extracting `<podcast:remoteItem>` tags (same regex as `publisher-discovery.ts` and `link-albums`). Without this, podroll-referenced feeds (related feeds, not official releases) get imported as albums.
+
+### Feed Blacklist (`lib/feed-exclusions.ts`)
+Central exclusion config for feeds that should never be imported or displayed. Contains `BLACKLISTED_FEED_IDS` (test feeds, unwanted albums) and `BLACKLISTED_FEED_URLS`. Helper functions: `isBlacklistedFeedId()`, `isBlacklistedFeedUrl()`, `getBlacklistedFeedIds()`. Currently used by `process-remote-items/route.ts`; available for future consolidation of scattered exclusions in search, albums-fast, fuzzy-search, etc.
+
 ### Admin Feed Management (`/admin`)
 Single input handles both add and reparse:
 - New feeds -> added and parsed automatically
