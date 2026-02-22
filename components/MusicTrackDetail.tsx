@@ -296,6 +296,10 @@ export default function MusicTrackDetail({
                 feedId={track.feedUrl}
                 trackTitle={track.title}
                 artistName={track.artist}
+                remoteFeedGuid={track.valueForValue?.feedGuid}
+                episodeGuid={track.valueForValue?.itemGuid}
+                lightningAddress={track.valueForValue?.lightningAddress}
+                albumName={track.episodeTitle}
                 className="w-full"
               />
             </div>

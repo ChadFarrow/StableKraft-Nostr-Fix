@@ -370,6 +370,9 @@ function BaseMusicTrackCard({
                   feedId={track.feedUrl}
                   trackTitle={track.title}
                   artistName={track.artist}
+                  remoteFeedGuid={track.valueForValue?.feedGuid}
+                  episodeGuid={track.valueForValue?.itemGuid}
+                  albumName={track.episodeTitle}
                   className="text-sm"
                 />
               </div>
