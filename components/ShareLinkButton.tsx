@@ -20,6 +20,7 @@ export default function ShareLinkButton() {
       // Copy to clipboard
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(url);
+        toast.success('Link copied to clipboard!');
       } else {
         // Fallback for older browsers
         const textArea = document.createElement('textarea');
@@ -31,6 +32,7 @@ export default function ShareLinkButton() {
         textArea.select();
         try {
           document.execCommand('copy');
+          toast.success('Link copied to clipboard!');
         } catch (err) {
           console.error('Failed to copy link');
         }
