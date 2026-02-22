@@ -991,6 +991,7 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
                     valueSplits={formatValueSplitsForBoost(album, album.artist)}
                     feedUrl={album.feedUrl}
                     remoteFeedGuid={album.feedGuid || album.feedId}
+                    episodeGuid={album.feedGuid || album.feedId}
                     albumName={album.title}
                     publisherGuid={album.publisher?.feedGuid}
                     publisherUrl={album.publisher?.feedGuid ? `https://stablekraft.app${generatePublisherUrl({ artist: album.artist, feedGuid: album.publisher.feedGuid })}` : undefined}
