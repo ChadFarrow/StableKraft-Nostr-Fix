@@ -6,12 +6,15 @@ export const BLACKLISTED_FEED_IDS = [
   'lnurl-test-feed',
   'podtards-test',
   'bitpunkfm-unwound',
+  'bitpunk-fm-unwound-1768079479444',  // bitpunk.fm unwound podcast
+  'f38e27af-fb9e-46ef-9ed9-5d8046d094a9',  // Before The Sch3m3s source podcast
 ];
 
 // Feed URLs that should never be imported
 export const BLACKLISTED_FEED_URLS = [
   'https://zine.bitpunk.fm/feeds/unwound.xml',
   'https://zine.bitpunk.fm/feeds/bitpunk-fm.xml',
+  'https://music.behindthesch3m3s.com/b4ts%20feed/feed.xml',  // B4TS source podcast
 ];
 
 const normalizedBlacklistedUrls = BLACKLISTED_FEED_URLS.map(normalizeUrl);

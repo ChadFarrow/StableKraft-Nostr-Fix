@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { Feed, Track } from '@prisma/client';
 import { getPlaylistUrls, getAllPlaylistIds } from '@/lib/playlist/configs';
+import { getBlacklistedFeedIds, BLACKLISTED_FEED_URLS } from '@/lib/feed-exclusions';
 
 interface FeedWithTracks extends Feed {
   Track: Track[];
@@ -379,12 +380,15 @@ export async function GET(request: Request) {
       return Array.from(seen.values());
     })();
 
-    // Filter out playlist feeds (by ID and originalUrl)
+    // Filter out playlist feeds and blacklisted feeds
     const playlistUrls = getPlaylistUrls();
     const playlistIds = getAllPlaylistIds();
+    const blacklistedIds = getBlacklistedFeedIds();
     const nonPlaylistAlbums = deduplicatedAlbums.filter(album =>
       !playlistIds.includes(album.id) &&
-      (!album.feedUrl || !playlistUrls.includes(album.feedUrl))
+      !blacklistedIds.includes(album.id) &&
+      (!album.feedUrl || !playlistUrls.includes(album.feedUrl)) &&
+      (!album.feedUrl || !BLACKLISTED_FEED_URLS.includes(album.feedUrl))
     );
 
     // Apply filtering

@@ -4,6 +4,7 @@ import { ApiCache } from '@/lib/api-utils';
 import { parseSearchQuery, buildTsQuery, normalizeQuery, buildFieldFilters } from '@/lib/search-utils';
 import { fuzzySearchTracks, fuzzySearchAlbums, fuzzySearchArtists, calculateThreshold } from '@/lib/fuzzy-search';
 import { searchPlaylists, getPlaylistUrls, getAllPlaylistIds } from '@/lib/playlist/configs';
+import { getBlacklistedFeedIds } from '@/lib/feed-exclusions';
 
 const prisma = new PrismaClient();
 
@@ -209,13 +210,14 @@ export async function GET(request: NextRequest) {
         // Fallback to exact match search
         const playlistUrls = getPlaylistUrls();
         const playlistIds = getAllPlaylistIds();
+        const blacklistedIds = getBlacklistedFeedIds();
         const albums = await prisma.feed.findMany({
           where: {
             AND: [
               { status: 'active' },
               { type: { not: 'publisher' } },
               { originalUrl: { notIn: playlistUrls } },
-              { id: { notIn: playlistIds } },
+              { id: { notIn: [...playlistIds, ...blacklistedIds] } },
               {
                 OR: [
                   { title: { contains: query, mode: 'insensitive' } },
