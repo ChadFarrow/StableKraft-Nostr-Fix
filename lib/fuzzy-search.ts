@@ -1,7 +1,7 @@
 import { prisma } from './prisma';
 import { Prisma } from '@prisma/client';
 import { getPlaylistUrls, getAllPlaylistIds } from './playlist/configs';
-import { getBlacklistedFeedIds } from './feed-exclusions';
+import { getBlacklistedFeedIds, BLACKLISTED_FEED_URLS } from './feed-exclusions';
 
 export interface FuzzySearchOptions {
   query: string;
@@ -149,7 +149,7 @@ export async function fuzzySearchAlbums(options: FuzzySearchOptions): Promise<Fu
       )
       AND NOT (f.title ILIKE '%Bowl After Bowl%' AND f.title NOT ILIKE '%Bowl Covers%')
       AND f.id NOT IN (${Prisma.join(excludedIds)})
-      AND (f."originalUrl" IS NULL OR f."originalUrl" NOT IN (${Prisma.join(playlistUrls)}))
+      AND (f."originalUrl" IS NULL OR f."originalUrl" NOT IN (${Prisma.join([...playlistUrls, ...BLACKLISTED_FEED_URLS])}))
     ORDER BY similarity DESC, f."updatedAt" DESC NULLS LAST
     LIMIT ${limit}
     OFFSET ${offset}

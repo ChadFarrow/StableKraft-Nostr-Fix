@@ -4,7 +4,7 @@ import { ApiCache } from '@/lib/api-utils';
 import { parseSearchQuery, buildTsQuery, normalizeQuery, buildFieldFilters } from '@/lib/search-utils';
 import { fuzzySearchTracks, fuzzySearchAlbums, fuzzySearchArtists, calculateThreshold } from '@/lib/fuzzy-search';
 import { searchPlaylists, getPlaylistUrls, getAllPlaylistIds } from '@/lib/playlist/configs';
-import { getBlacklistedFeedIds } from '@/lib/feed-exclusions';
+import { getBlacklistedFeedIds, BLACKLISTED_FEED_URLS } from '@/lib/feed-exclusions';
 
 const prisma = new PrismaClient();
 
@@ -216,7 +216,7 @@ export async function GET(request: NextRequest) {
             AND: [
               { status: 'active' },
               { type: { not: 'publisher' } },
-              { originalUrl: { notIn: playlistUrls } },
+              { originalUrl: { notIn: [...playlistUrls, ...BLACKLISTED_FEED_URLS] } },
               { id: { notIn: [...playlistIds, ...blacklistedIds] } },
               {
                 OR: [
