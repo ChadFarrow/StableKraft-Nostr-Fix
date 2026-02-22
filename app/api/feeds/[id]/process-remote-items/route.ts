@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { parseRSSFeedWithSegments, calculateTrackOrder } from '@/lib/rss-parser-db';
 import { generateAlbumSlug, normalizeUrl } from '@/lib/url-utils';
+import { isBlacklistedFeedUrl } from '@/lib/feed-exclusions';
 
 interface RemoteItem {
   feedGuid?: string;
@@ -60,7 +61,10 @@ export async function POST(
       );
     }
 
-    const xml = await response.text();
+    const rawXml = await response.text();
+
+    // Strip <podcast:podroll> sections so we only process official remoteItem entries
+    const xml = rawXml.replace(/<podcast:podroll>[\s\S]*?<\/podcast:podroll>/gi, '');
 
     // Extract podcast:remoteItem tags
     const remoteItemRegex = /<podcast:remoteItem[^>]*>/g;
@@ -102,6 +106,12 @@ export async function POST(
 
     for (const remoteItem of remoteItems) {
       if (!remoteItem.feedUrl) {
+        results.skipped++;
+        continue;
+      }
+
+      if (isBlacklistedFeedUrl(remoteItem.feedUrl)) {
+        console.log(`🚫 Skipping blacklisted feed URL: ${remoteItem.feedUrl}`);
         results.skipped++;
         continue;
       }
