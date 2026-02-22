@@ -952,9 +952,7 @@ export function BoostButton({
               helipadMetadata.message = metaboostMessage;
             }
             if (boostboxUrls && boostboxUrls.length > 0) {
-              helipadMetadata.boost_link = boostboxUrls.length === 1
-                ? boostboxUrls[0]
-                : boostboxUrls.join(',');
+              helipadMetadata.boost_link = boostboxUrls[0];
             }
 
             const result = await sendKeysend(details.keysend.pubkey, platformFee, metaboostMessage, helipadMetadata);
