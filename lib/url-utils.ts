@@ -542,16 +542,23 @@ export const KNOWN_PUBLISHERS: { [slug: string]: { feedGuid: string; feedUrl: st
     name: 'Vertigo Kidd'
   },
 
-  // Kathryn - Fountain.fm publisher
+  // Kathryn - Self-hosted publisher (RSS Blue + Fountain.fm albums)
   'kathryn': {
-    feedGuid: '9efcded5-19a4-56cd-ba5e-8f521c35cb23',
-    feedUrl: 'https://feeds.fountain.fm/jokW9pKTREMn9bhoZSRU',
+    feedGuid: 'kathryn-publisher-stablekraft',
+    feedUrl: 'https://stablekraft.app/api/feeds/kathryn-pubfeed',
     name: 'Kathryn'
   },
-  '9efcded5': {
-    feedGuid: '9efcded5-19a4-56cd-ba5e-8f521c35cb23',
-    feedUrl: 'https://feeds.fountain.fm/jokW9pKTREMn9bhoZSRU',
-    name: 'Kathryn'
+
+  // CityBeach - Self-hosted publisher (sirtjthewrathful.com + doerfelverse.com albums)
+  'citybeach': {
+    feedGuid: 'citybeach-publisher-stablekraft',
+    feedUrl: 'https://stablekraft.app/api/feeds/citybeach-pubfeed',
+    name: 'CityBeach'
+  },
+  'city-beach': {
+    feedGuid: 'citybeach-publisher-stablekraft',
+    feedUrl: 'https://stablekraft.app/api/feeds/citybeach-pubfeed',
+    name: 'CityBeach'
   }
 };
 
