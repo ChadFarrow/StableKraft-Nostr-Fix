@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { Feed, Track } from '@prisma/client';
+import { getPlaylistUrls, getAllPlaylistIds } from '@/lib/playlist/configs';
 
 interface FeedWithTracks extends Feed {
   Track: Track[];
@@ -378,8 +379,16 @@ export async function GET(request: Request) {
       return Array.from(seen.values());
     })();
 
+    // Filter out playlist feeds (by ID and originalUrl)
+    const playlistUrls = getPlaylistUrls();
+    const playlistIds = getAllPlaylistIds();
+    const nonPlaylistAlbums = deduplicatedAlbums.filter(album =>
+      !playlistIds.includes(album.id) &&
+      (!album.feedUrl || !playlistUrls.includes(album.feedUrl))
+    );
+
     // Apply filtering
-    let filteredAlbums = deduplicatedAlbums;
+    let filteredAlbums = nonPlaylistAlbums;
     if (filter !== 'all') {
       switch (filter) {
         case 'albums':

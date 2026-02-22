@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { generateAlbumSlug, getPublisherInfo } from '@/lib/url-utils';
+import { getAllPlaylistIds, getPlaylistUrls, getPlaylistConfig, PLAYLIST_CONFIGS } from '@/lib/playlist/configs';
 
 const ITDV_PLAYLIST_URL = 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/ITDV-music-playlist.xml';
 const HGH_PLAYLIST_URL = 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/HGH-music-playlist.xml';
@@ -918,6 +919,23 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       const feed = bestMatchData.feed;
       console.log(`✅ Selected best match: "${feed.title}" with ${feed.Track.length} tracks (type: ${feed.type})`);
 
+      // Redirect playlist feeds to their playlist page
+      const playlistIds = getAllPlaylistIds();
+      const playlistUrls = getPlaylistUrls();
+      if (playlistIds.includes(feed.id) || (feed.originalUrl && playlistUrls.includes(feed.originalUrl))) {
+        const config = getPlaylistConfig(feed.id) ||
+          Object.values(PLAYLIST_CONFIGS).find(c => c.url === feed.originalUrl);
+        if (config) {
+          console.log(`🔀 Redirecting playlist feed to playlist page: "${feed.title}" → ${config.playlistUrl}`);
+          return NextResponse.json({
+            album: null,
+            redirect: config.playlistUrl,
+            feedType: 'playlist',
+            message: `This is a playlist feed. Redirecting to playlist page.`
+          });
+        }
+      }
+
       // Redirect publisher feeds to publisher page (type='publisher' with no tracks)
       // Note: test feeds can be albums, singles, or publishers - detect by content not type
       if (feed.type === 'publisher' && feed.Track.length === 0) {
@@ -1288,7 +1306,24 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         
         const feed = bestFlexibleMatch.feed;
         console.log(`✅ Selected best flexible match: "${feed.title}" with ${feed.Track.length} tracks`);
-        
+
+        // Redirect playlist feeds to their playlist page
+        const flexPlaylistIds = getAllPlaylistIds();
+        const flexPlaylistUrls = getPlaylistUrls();
+        if (flexPlaylistIds.includes(feed.id) || (feed.originalUrl && flexPlaylistUrls.includes(feed.originalUrl))) {
+          const config = getPlaylistConfig(feed.id) ||
+            Object.values(PLAYLIST_CONFIGS).find(c => c.url === feed.originalUrl);
+          if (config) {
+            console.log(`🔀 Redirecting playlist feed to playlist page: "${feed.title}" → ${config.playlistUrl}`);
+            return NextResponse.json({
+              album: null,
+              redirect: config.playlistUrl,
+              feedType: 'playlist',
+              message: `This is a playlist feed. Redirecting to playlist page.`
+            });
+          }
+        }
+
         // Helper function to parse v4vValue from JSON string to object
         const parseV4VValue = (v4vValue: any): any => {
           if (!v4vValue) return null;
