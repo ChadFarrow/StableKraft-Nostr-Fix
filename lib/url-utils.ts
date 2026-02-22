@@ -552,6 +552,18 @@ export const KNOWN_PUBLISHERS: { [slug: string]: { feedGuid: string; feedUrl: st
     feedGuid: '9efcded5-19a4-56cd-ba5e-8f521c35cb23',
     feedUrl: 'https://feeds.fountain.fm/jokW9pKTREMn9bhoZSRU',
     name: 'Kathryn'
+  },
+
+  // CityBeach - Self-hosted publisher feed
+  'citybeach': {
+    feedGuid: 'sirtjthewrathful-publisher',
+    feedUrl: 'https://www.sirtjthewrathful.com/publisher.xml',
+    name: 'CityBeach'
+  },
+  'city-beach': {
+    feedGuid: 'sirtjthewrathful-publisher',
+    feedUrl: 'https://www.sirtjthewrathful.com/publisher.xml',
+    name: 'CityBeach'
   }
 };
 
