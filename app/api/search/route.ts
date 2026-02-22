@@ -3,6 +3,7 @@ import { PrismaClient } from '@prisma/client';
 import { ApiCache } from '@/lib/api-utils';
 import { parseSearchQuery, buildTsQuery, normalizeQuery, buildFieldFilters } from '@/lib/search-utils';
 import { fuzzySearchTracks, fuzzySearchAlbums, fuzzySearchArtists, calculateThreshold } from '@/lib/fuzzy-search';
+import { searchPlaylists, getPlaylistUrls } from '@/lib/playlist/configs';
 
 const prisma = new PrismaClient();
 
@@ -49,7 +50,8 @@ export async function GET(request: NextRequest) {
         results: {
           tracks: [],
           albums: [],
-          artists: []
+          artists: [],
+          playlists: []
         }
       }, { status: 400 });
     }
@@ -82,7 +84,8 @@ export async function GET(request: NextRequest) {
     let results: any = {
       tracks: [],
       albums: [],
-      artists: []
+      artists: [],
+      playlists: []
     };
 
     // Search tracks
@@ -204,11 +207,13 @@ export async function GET(request: NextRequest) {
         }));
       } else {
         // Fallback to exact match search
+        const playlistUrls = getPlaylistUrls();
         const albums = await prisma.feed.findMany({
           where: {
             AND: [
               { status: 'active' },
               { type: { not: 'publisher' } },
+              { originalUrl: { notIn: playlistUrls } },
               {
                 OR: [
                   { title: { contains: query, mode: 'insensitive' } },
@@ -339,11 +344,23 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Search playlists (in-memory, fast)
+    if (type === 'all' || type === 'playlists') {
+      results.playlists = searchPlaylists(query).map(p => ({
+        id: p.id,
+        name: p.name,
+        shortName: p.shortName,
+        playlistUrl: p.playlistUrl,
+        description: p.description
+      }));
+    }
+
     // Calculate total results
     const totalResults =
       results.tracks.length +
       results.albums.length +
-      results.artists.length;
+      results.artists.length +
+      results.playlists.length;
 
     // Check query timeout
     const queryTime = Date.now() - startTime;
@@ -372,7 +389,7 @@ export async function GET(request: NextRequest) {
     searchCache.set(cacheKey, responseData, CACHE_TTL);
 
     if (process.env.NODE_ENV === 'development') {
-      console.log(`✅ Search results: ${results.tracks.length} tracks, ${results.albums.length} albums, ${results.artists.length} artists (${queryTime}ms)`);
+      console.log(`✅ Search results: ${results.tracks.length} tracks, ${results.albums.length} albums, ${results.artists.length} artists, ${results.playlists.length} playlists (${queryTime}ms)`);
     }
 
     return NextResponse.json(responseData, {
@@ -393,7 +410,8 @@ export async function GET(request: NextRequest) {
       results: {
         tracks: [],
         albums: [],
-        artists: []
+        artists: [],
+        playlists: []
       }
     }, { status: 500 });
   }

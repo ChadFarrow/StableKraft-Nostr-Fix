@@ -24,6 +24,12 @@ interface SearchResult {
     coverArt?: string;
     totalTracks: number;
   }>;
+  playlists: Array<{
+    id: string;
+    name: string;
+    shortName: string;
+    playlistUrl: string;
+  }>;
   artists: Array<{
     name: string;
     image?: string;
@@ -110,6 +116,7 @@ export default function SearchBar({
     const totalResults =
       (results.tracks?.length || 0) +
       (results.albums?.length || 0) +
+      (results.playlists?.length || 0) +
       (results.artists?.length || 0);
 
     switch (e.key) {
@@ -167,6 +174,15 @@ export default function SearchBar({
     }
     currentIndex += results.albums?.length || 0;
 
+    // Check playlists
+    if (results.playlists && index < currentIndex + results.playlists.length) {
+      const playlist = results.playlists[index - currentIndex];
+      router.push(playlist.playlistUrl);
+      setIsOpen(false);
+      return;
+    }
+    currentIndex += results.playlists?.length || 0;
+
     // Check artists
     if (results.artists && index < currentIndex + results.artists.length) {
       const artist = results.artists[index - currentIndex];
@@ -204,6 +220,7 @@ export default function SearchBar({
   const hasResults = results && (
     (results.tracks?.length || 0) > 0 ||
     (results.albums?.length || 0) > 0 ||
+    (results.playlists?.length || 0) > 0 ||
     (results.artists?.length || 0) > 0
   );
 
@@ -344,12 +361,42 @@ export default function SearchBar({
             </div>
           )}
 
+          {/* Playlists */}
+          {results.playlists && results.playlists.length > 0 && (
+            <div className="p-2 border-t border-gray-800">
+              <h3 className="text-xs font-semibold text-gray-400 uppercase px-2 py-1">Playlists</h3>
+              {results.playlists.map((playlist, index) => {
+                const globalIndex = (results.tracks?.length || 0) + (results.albums?.length || 0) + index;
+                return (
+                  <Link
+                    key={playlist.id}
+                    href={playlist.playlistUrl}
+                    onClick={() => setIsOpen(false)}
+                    className={`flex items-center gap-3 p-2 rounded hover:bg-gray-800/50 transition-colors ${
+                      selectedIndex === globalIndex ? 'bg-gray-800/50' : ''
+                    }`}
+                  >
+                    <div className="w-10 h-10 rounded overflow-hidden flex-shrink-0 bg-gray-800 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-stablekraft-teal" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-white truncate">{playlist.name}</p>
+                      <p className="text-xs text-gray-400 truncate">{playlist.shortName} Playlist</p>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+
           {/* Artists */}
           {results.artists && results.artists.length > 0 && (
             <div className="p-2 border-t border-gray-800">
               <h3 className="text-xs font-semibold text-gray-400 uppercase px-2 py-1">Publishers</h3>
               {results.artists.map((artist, index) => {
-                const globalIndex = (results.tracks?.length || 0) + (results.albums?.length || 0) + index;
+                const globalIndex = (results.tracks?.length || 0) + (results.albums?.length || 0) + (results.playlists?.length || 0) + index;
                 return (
                   <Link
                     key={artist.feedGuid}

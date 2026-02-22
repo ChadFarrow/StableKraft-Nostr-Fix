@@ -173,3 +173,22 @@ export function getPlaylistConfig(id: string): PlaylistConfig | undefined {
 export function getAllPlaylistIds(): string[] {
   return Object.keys(PLAYLIST_CONFIGS);
 }
+
+/**
+ * Get all playlist XML URLs (for excluding from DB queries)
+ */
+export function getPlaylistUrls(): string[] {
+  return Object.values(PLAYLIST_CONFIGS).map(c => c.url);
+}
+
+/**
+ * Fuzzy-match a query against playlist name, shortName, and id
+ */
+export function searchPlaylists(query: string): PlaylistConfig[] {
+  const q = query.toLowerCase();
+  return Object.values(PLAYLIST_CONFIGS).filter(c =>
+    c.name.toLowerCase().includes(q) ||
+    c.shortName.toLowerCase().includes(q) ||
+    c.id.toLowerCase().includes(q)
+  );
+}

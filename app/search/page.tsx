@@ -34,6 +34,13 @@ interface SearchResults {
     type: string;
     feedUrl: string;
   }>;
+  playlists: Array<{
+    id: string;
+    name: string;
+    shortName: string;
+    playlistUrl: string;
+    description: string;
+  }>;
   artists: Array<{
     name: string;
     image?: string;
@@ -50,7 +57,7 @@ function SearchContent() {
   const [results, setResults] = useState<SearchResults | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'all' | 'tracks' | 'albums' | 'publishers'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'tracks' | 'albums' | 'playlists' | 'publishers'>('all');
   const { playAlbum } = useAudio();
 
   useEffect(() => {
@@ -86,11 +93,12 @@ function SearchContent() {
   };
 
   const totalResults = results
-    ? (results.tracks?.length || 0) + (results.albums?.length || 0) + (results.artists?.length || 0)
+    ? (results.tracks?.length || 0) + (results.albums?.length || 0) + (results.playlists?.length || 0) + (results.artists?.length || 0)
     : 0;
 
   const filteredTracks = activeTab === 'all' || activeTab === 'tracks' ? results?.tracks || [] : [];
   const filteredAlbums = activeTab === 'all' || activeTab === 'albums' ? results?.albums || [] : [];
+  const filteredPlaylists = activeTab === 'all' || activeTab === 'playlists' ? results?.playlists || [] : [];
   const filteredArtists = activeTab === 'all' || activeTab === 'publishers' ? results?.artists || [] : [];
 
   return (
@@ -157,6 +165,7 @@ function SearchContent() {
                   { value: 'all', label: 'All', count: totalResults },
                   { value: 'tracks', label: 'Tracks', count: results.tracks?.length || 0 },
                   { value: 'albums', label: 'Albums', count: results.albums?.length || 0 },
+                  { value: 'playlists', label: 'Playlists', count: results.playlists?.length || 0 },
                   { value: 'publishers', label: 'Publishers', count: results.artists?.length || 0 }
                 ].map((tab) => (
                   <button
@@ -245,6 +254,32 @@ function SearchContent() {
                         </h3>
                         <p className="text-xs text-gray-400 truncate">{album.artist}</p>
                         <p className="text-xs text-gray-500 mt-1">{album.totalTracks} tracks</p>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Playlists Section */}
+              {filteredPlaylists.length > 0 && (
+                <div className="mb-8">
+                  <h2 className="text-xl font-bold mb-4 text-white">Playlists</h2>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                    {filteredPlaylists.map((playlist) => (
+                      <Link
+                        key={playlist.id}
+                        href={playlist.playlistUrl}
+                        className="group bg-white/5 backdrop-blur-sm rounded-xl p-4 hover:bg-white/10 transition-all duration-200 border border-white/10 hover:border-white/20"
+                      >
+                        <div className="aspect-square rounded-lg overflow-hidden mb-3 bg-gray-800 flex items-center justify-center">
+                          <svg className="w-12 h-12 text-stablekraft-teal group-hover:scale-105 transition-transform duration-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                          </svg>
+                        </div>
+                        <h3 className="font-semibold text-sm mb-1 text-white truncate group-hover:text-stablekraft-teal transition-colors">
+                          {playlist.name}
+                        </h3>
+                        <p className="text-xs text-gray-400 truncate">{playlist.shortName}</p>
                       </Link>
                     ))}
                   </div>
