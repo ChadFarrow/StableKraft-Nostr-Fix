@@ -10,6 +10,7 @@ export interface PaymentResult {
   error?: string;
   recipient?: string;
   amount?: number;
+  boostboxUrl?: string;
 }
 
 export interface ValueSplitPayment {
@@ -27,6 +28,7 @@ export interface MultiRecipientResult {
   primaryPreimage?: string; // First successful preimage
   isPartialSuccess?: boolean; // True if 50%+ succeeded but not 100%
   successRate?: number; // 0-1 ratio of successful payments
+  boostboxUrls?: string[]; // BoostBox URLs from LNURL payments
 }
 
 export class ValueSplitsService {
@@ -84,6 +86,7 @@ export class ValueSplitsService {
     const successfulPayments: ValueSplitPayment[] = [];
     const failedPayments: ValueSplitPayment[] = [];
     const errors: string[] = [];
+    const boostboxUrls: string[] = [];
 
     console.log(`⚡ Sending ${totalAmount} sats to ${splitAmounts.length} recipients`);
 
@@ -212,6 +215,9 @@ export class ValueSplitsService {
 
         if (result.success) {
           successfulPayments.push(payment);
+          if (result.boostboxUrl) {
+            boostboxUrls.push(result.boostboxUrl);
+          }
           // Notify success
           if (onProgress) {
             onProgress(`${recipient.name || 'Unknown'}|${recipient.address}`, 'success', undefined, amount);
@@ -276,12 +282,13 @@ export class ValueSplitsService {
       totalAmount,
       successfulPayments,
       failedPayments,
-      errors: isPartialSuccess ? 
-        [`Partial success: ${successfulPayments.length}/${splitAmounts.length} recipients received payment`] : 
+      errors: isPartialSuccess ?
+        [`Partial success: ${successfulPayments.length}/${splitAmounts.length} recipients received payment`] :
         errors,
       primaryPreimage,
       isPartialSuccess,
-      successRate
+      successRate,
+      boostboxUrls: boostboxUrls.length > 0 ? boostboxUrls : undefined
     };
   }
 
@@ -301,15 +308,17 @@ export class ValueSplitsService {
     try {
       // Store metadata in BoostBox for LNURL payments (graceful degradation)
       let comment = message;
+      let boostboxUrl: string | undefined;
       if (LIGHTNING_CONFIG.features.boostbox && helipadMetadata) {
-        const desc = await BoostBoxService.storeMetadata(
+        const boostboxResult = await BoostBoxService.storeMetadata(
           helipadMetadata,
           recipient.name,
           recipient.address,
           recipient.split ? Number(recipient.split) / 100 : 1
         );
-        if (desc) {
-          comment = desc;
+        if (boostboxResult) {
+          comment = boostboxResult.desc;
+          boostboxUrl = boostboxResult.url;
         }
       }
 
@@ -326,7 +335,8 @@ export class ValueSplitsService {
         preimage: result.preimage,
         error: result.error,
         recipient: recipient.address,
-        amount
+        amount,
+        boostboxUrl
       };
     } catch (error) {
       // Extract the actual Lightning error message

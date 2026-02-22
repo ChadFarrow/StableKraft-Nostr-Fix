@@ -285,6 +285,8 @@ export function BoostButton({
 
       // Store resolved musician pubkeys for Nostr tagging (passed directly, not via state)
       let musicianPubkeysForNostr: Array<{ address: string; pubkey: string }> = [];
+      // Collect BoostBox URLs from LNURL payments for metaboost boost_link
+      let collectedBoostboxUrls: string[] = [];
 
       if (activeValueSplits && activeValueSplits.length > 0) {
         // Use value splits for multiple recipients (highest priority)
@@ -293,6 +295,9 @@ export function BoostButton({
         if (valueSplitResult.resolvedPubkeys) {
           musicianPubkeysForNostr = valueSplitResult.resolvedPubkeys;
         }
+        if (valueSplitResult.boostboxUrls) {
+          collectedBoostboxUrls = valueSplitResult.boostboxUrls;
+        }
       } else if (lightningAddress && LNURLService.isLightningAddress(lightningAddress)) {
         // Pay to Lightning Address via LNURL-pay
 
@@ -300,13 +305,14 @@ export function BoostButton({
           // Store metadata in BoostBox for LNURL payments
           let comment = message;
           if (LIGHTNING_CONFIG.features.boostbox) {
-            const desc = await BoostBoxService.storeMetadata(
+            const boostboxResult = await BoostBoxService.storeMetadata(
               buildHelipadMetadata(amount, message),
               undefined,
               lightningAddress
             );
-            if (desc) {
-              comment = desc;
+            if (boostboxResult) {
+              comment = boostboxResult.desc;
+              collectedBoostboxUrls = [boostboxResult.url];
             }
           }
 
@@ -347,9 +353,9 @@ export function BoostButton({
           localStorage.setItem('boostSenderName', senderName);
         }
 
-        // Send 2 sat platform fee metaboost
+        // Send 2 sat platform fee metaboost (include BoostBox URLs as boost_link)
         try {
-          await sendPlatformFeeMetaboost();
+          await sendPlatformFeeMetaboost(collectedBoostboxUrls);
         } catch (feeError) {
           console.warn('Platform fee metaboost failed:', feeError);
           // Don't fail the main payment if the fee fails
@@ -788,7 +794,7 @@ export function BoostButton({
   const sendValueSplitPayments = async (
     totalAmount: number,
     message?: string
-  ): Promise<{ preimage?: string; error?: string; resolvedPubkeys?: Array<{ address: string; pubkey: string }> }> => {
+  ): Promise<{ preimage?: string; error?: string; resolvedPubkeys?: Array<{ address: string; pubkey: string }>; boostboxUrls?: string[] }> => {
     try {
       // Convert valueSplits to ValueRecipient format
       // Ensure split is numeric to prevent string concatenation bugs in calculations
@@ -893,15 +899,15 @@ export function BoostButton({
         return { error: result.errors.join(', '), resolvedPubkeys: resolvedNostrPubkeys };
       }
 
-      // Return the primary preimage and resolved Nostr pubkeys for tagging
-      return { preimage: result.primaryPreimage, resolvedPubkeys: resolvedNostrPubkeys };
+      // Return the primary preimage, resolved Nostr pubkeys for tagging, and BoostBox URLs
+      return { preimage: result.primaryPreimage, resolvedPubkeys: resolvedNostrPubkeys, boostboxUrls: result.boostboxUrls };
     } catch (error) {
       return { error: error instanceof Error ? error.message : 'Value split payment failed' };
     }
   };
 
   // Send 2 sat platform fee metaboost via keysend (preferred) or Lightning Address (fallback)
-  const sendPlatformFeeMetaboost = async (): Promise<void> => {
+  const sendPlatformFeeMetaboost = async (boostboxUrls?: string[]): Promise<void> => {
     const platformFee = LIGHTNING_CONFIG.platform.fee || 2;
     const platformLightningAddress = 'lushnessprecious644398@getalby.com';
 
@@ -944,6 +950,11 @@ export function BoostButton({
             }
             if (metaboostMessage) {
               helipadMetadata.message = metaboostMessage;
+            }
+            if (boostboxUrls && boostboxUrls.length > 0) {
+              helipadMetadata.boost_link = boostboxUrls.length === 1
+                ? boostboxUrls[0]
+                : boostboxUrls.join(',');
             }
 
             const result = await sendKeysend(details.keysend.pubkey, platformFee, metaboostMessage, helipadMetadata);

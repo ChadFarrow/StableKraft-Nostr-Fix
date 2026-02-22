@@ -89,7 +89,7 @@ export class BoostBoxService {
     recipientName?: string,
     recipientAddress?: string,
     split?: number
-  ): Promise<string | null> {
+  ): Promise<{ desc: string; url: string } | null> {
     try {
       const payload = mapHelipadToBoostBox(helipadMetadata, recipientName, recipientAddress, split);
 
@@ -109,7 +109,7 @@ export class BoostBoxService {
 
       if (data.desc) {
         console.log(`BoostBox stored: ${data.url}`);
-        return data.desc;
+        return { desc: data.desc, url: data.url };
       }
 
       return null;
