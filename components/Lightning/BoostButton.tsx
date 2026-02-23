@@ -238,6 +238,9 @@ export function BoostButton({
     if (publisherGuid) {
       metadata.publisher_guid = publisherGuid;
     }
+    if (isNostrAuthenticated && nostrUser?.nostrNpub) {
+      metadata.sender_npub = nostrUser.nostrNpub;
+    }
     if (msg) {
       metadata.message = msg;
     }

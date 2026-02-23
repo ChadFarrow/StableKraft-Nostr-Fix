@@ -314,7 +314,7 @@ export class ValueSplitsService {
           helipadMetadata,
           recipient.name,
           recipient.address,
-          recipient.split ? Number(recipient.split) / 100 : 1
+          recipient.split ? Number(recipient.split) : 1
         );
         if (boostboxResult) {
           comment = boostboxResult.desc;
