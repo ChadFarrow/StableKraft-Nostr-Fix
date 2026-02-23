@@ -159,6 +159,7 @@ export async function POST(request: NextRequest) {
           category: parsedFeed.category,
           podcastCategories: parsedFeed.podcastCategories || [],
           explicit: parsedFeed.explicit,
+          ...(parsedFeed.podcastGuid && { guid: parsedFeed.podcastGuid }),
           v4vRecipient: parsedFeed.v4vRecipient,
           v4vValue: parsedFeed.v4vValue,
           lastFetched: new Date(),

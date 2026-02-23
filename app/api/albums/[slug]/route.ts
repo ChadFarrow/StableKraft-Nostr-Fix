@@ -1224,12 +1224,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
                 { title: { equals: feed.artist, mode: 'insensitive' } }
               ]
             },
-            select: { id: true, originalUrl: true, title: true, artist: true, image: true }
+            select: { id: true, guid: true, originalUrl: true, title: true, artist: true, image: true }
           });
 
           if (publisherFeed) {
             return {
-              feedGuid: publisherFeed.id,
+              feedGuid: publisherFeed.guid || publisherFeed.id,
               feedUrl: publisherFeed.originalUrl,
               title: publisherFeed.artist || publisherFeed.title,
               artistImage: (isValidImageUrl(publisherFeed.image) ? publisherFeed.image : null)
@@ -1238,7 +1238,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
 
           // Fallback: return album as pseudo-publisher (for artist link to work)
           return {
-            feedGuid: feed.id,
+            feedGuid: feed.guid || feed.id,
             feedUrl: feed.originalUrl,
             title: feed.artist,
             artistImage: (isValidImageUrl(feed.image) ? feed.image : null)
@@ -1408,12 +1408,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
                   { title: { equals: feed.artist, mode: 'insensitive' } }
                 ]
               },
-              select: { id: true, originalUrl: true, title: true, artist: true, image: true }
+              select: { id: true, guid: true, originalUrl: true, title: true, artist: true, image: true }
             });
 
             if (publisherFeed) {
               return {
-                feedGuid: publisherFeed.id,
+                feedGuid: publisherFeed.guid || publisherFeed.id,
                 feedUrl: publisherFeed.originalUrl,
                 title: publisherFeed.artist || publisherFeed.title,
                 artistImage: (isValidImageUrl(publisherFeed.image) ? publisherFeed.image : null)
@@ -1422,7 +1422,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
 
             // Fallback: return album as pseudo-publisher
             return {
-              feedGuid: feed.id,
+              feedGuid: feed.guid || feed.id,
               feedUrl: feed.originalUrl,
               title: feed.artist,
               artistImage: (isValidImageUrl(feed.image) ? feed.image : null)

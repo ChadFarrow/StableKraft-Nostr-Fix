@@ -64,6 +64,7 @@ export async function POST(
           category: parsedFeed.category,
           podcastCategories: parsedFeed.podcastCategories || [],
           explicit: parsedFeed.explicit,
+          ...(parsedFeed.podcastGuid && { guid: parsedFeed.podcastGuid }),
           lastFetched: new Date(),
           status: 'active',
           lastError: null,
