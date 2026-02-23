@@ -57,8 +57,8 @@ export interface FuzzyArtistResult {
 export function calculateThreshold(query: string): number {
   const len = query.trim().length;
   if (len <= 3) return 0.3;
-  if (len <= 5) return 0.25;
-  return 0.2;
+  if (len <= 5) return 0.3;
+  return 0.3;
 }
 
 /**
