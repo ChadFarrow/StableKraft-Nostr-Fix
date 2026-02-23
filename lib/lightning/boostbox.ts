@@ -32,6 +32,11 @@ export interface BoostBoxPayload {
   publisher_title?: string;
   remote_feed_guid?: string;
   remote_item_guid?: string;
+  remote_publisher_guid?: string;
+  group?: string;
+  sender_id?: string;
+  sender_npub?: string;
+  boost_link?: string;
 }
 
 export interface BoostBoxResponse {
@@ -74,6 +79,11 @@ function mapHelipadToBoostBox(
     publisher_title: helipadMetadata.podcast,
     remote_feed_guid: helipadMetadata.remote_feed_guid,
     remote_item_guid: helipadMetadata.remote_item_guid,
+    remote_publisher_guid: helipadMetadata.publisher_guid,
+    group: helipadMetadata.uuid,
+    sender_id: helipadMetadata.sender_npub,
+    sender_npub: helipadMetadata.sender_npub,
+    boost_link: helipadMetadata.boost_link,
   };
 }
 
