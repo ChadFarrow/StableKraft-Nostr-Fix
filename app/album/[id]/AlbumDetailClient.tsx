@@ -990,7 +990,7 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
                     lightningAddress={getPrimaryRecipient(album)}
                     valueSplits={formatValueSplitsForBoost(album, album.artist)}
                     feedUrl={album.feedUrl}
-                    remoteFeedGuid={album.feedGuid || album.feedId}
+                    remoteFeedGuid={album.feedGuid}
                     albumName={album.title}
                     publisherGuid={album.publisher?.feedGuid}
                     publisherUrl={album.publisher?.feedGuid ? `https://stablekraft.app${generatePublisherUrl({ artist: album.artist, feedGuid: album.publisher.feedGuid })}` : undefined}
@@ -1266,7 +1266,7 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
                             valueSplits={formatValueSplitsForBoost(track, album.artist) || formatValueSplitsForBoost(album, album.artist)}
                             lightningAddress={getPrimaryRecipient(track) || getPrimaryRecipient(album)}
                             episodeGuid={track.v4vValue?.itemGuid || track.guid}
-                            remoteFeedGuid={track.v4vValue?.feedGuid || album.feedGuid || album.feedId}
+                            remoteFeedGuid={track.v4vValue?.feedGuid || album.feedGuid}
                             feedUrl={album.feedUrl}
                             albumName={album.title}
                             publisherGuid={album.publisher?.feedGuid}
