@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { parseRSSFeedWithSegments, calculateTrackOrder, detectTrackMediaType } from '@/lib/rss-parser-db';
 import { findPublisherFeed } from '@/lib/publisher-detector';
 import { generateAlbumSlug, isValidFeedUrl, normalizeUrl, normalizeArtistName } from '@/lib/url-utils';
+import { resolvePodcastIndexUrl } from '@/lib/podcast-index-api';
 
 /**
  * Extract remoteItem tags from publisher feed XML
@@ -339,7 +340,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const normalizedOriginalUrl = normalizeUrl(originalUrl);
+    // Resolve Podcast Index web page URLs to actual RSS feed URLs
+    let resolvedUrl = originalUrl;
+    const piResolution = await resolvePodcastIndexUrl(originalUrl);
+    if (piResolution) {
+      resolvedUrl = piResolution.feedUrl;
+      console.log(`🔄 Resolved Podcast Index URL → ${resolvedUrl}`);
+    }
+
+    const normalizedOriginalUrl = normalizeUrl(resolvedUrl);
 
     // Check if feed already exists by URL first (return early to avoid parsing)
     const existingFeed = await prisma.feed.findUnique({
@@ -360,7 +369,7 @@ export async function POST(request: NextRequest) {
 
     try {
       // Parse the RSS feed
-      const parsedFeed = await parseRSSFeedWithSegments(originalUrl);
+      const parsedFeed = await parseRSSFeedWithSegments(resolvedUrl);
 
       // Generate a URL-friendly feed ID from artist and title
       let feedId = generateFeedId(parsedFeed.artist, parsedFeed.title);
@@ -474,7 +483,7 @@ export async function POST(request: NextRequest) {
 
         try {
           // Re-fetch the XML to extract remoteItems (we already have parsedFeed but need raw XML)
-          const xmlResponse = await fetch(originalUrl, {
+          const xmlResponse = await fetch(resolvedUrl, {
             signal: AbortSignal.timeout(15000)
           });
 
@@ -687,11 +696,11 @@ export async function POST(request: NextRequest) {
       const feed = await prisma.feed.create({
         data: {
           id: `feed-error-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-          originalUrl,
-          cdnUrl: cdnUrl || originalUrl,
+          originalUrl: normalizedOriginalUrl,
+          cdnUrl: cdnUrl || normalizedOriginalUrl,
           type,
           priority,
-          title: originalUrl,
+          title: normalizedOriginalUrl,
           status: 'error',
           lastError: errorMessage,
           updatedAt: new Date()
