@@ -415,7 +415,7 @@ function AlbumCard({ album, isPlaying = false, onPlay, className = '', linkFilte
         onClose={() => setShowBoostModal(false)}
         feedUrl={(album as any).feedUrl || album.link}
         episodeGuid={(album as any).guid || album.id}
-        remoteFeedGuid={(album as any).feedGuid || (album as any).feedId}
+        remoteFeedGuid={(album as any).feedGuid}
         albumName={album.title}
         publisherGuid={(album as any).publisher?.feedGuid}
         publisherUrl={(album as any).publisher?.publisherUrl}

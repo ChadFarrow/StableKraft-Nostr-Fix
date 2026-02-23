@@ -647,7 +647,7 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
           onClose={() => setShowBoostModal(false)}
           feedUrl={currentPlayingAlbum.feedUrl || currentPlayingAlbum.link}
           episodeGuid={currentTrack.guid}
-          remoteFeedGuid={(currentTrack as any).feedGuid || currentPlayingAlbum.feedGuid || currentPlayingAlbum.guid}
+          remoteFeedGuid={(currentTrack as any).feedGuid || currentPlayingAlbum.feedGuid}
           albumName={(currentTrack as any).feedTitle || (currentTrack as any).albumTitle || currentPlayingAlbum.title}
           publisherGuid={(currentPlayingAlbum as any).publisher?.feedGuid}
           publisherUrl={(currentPlayingAlbum as any).publisher?.publisherUrl}
