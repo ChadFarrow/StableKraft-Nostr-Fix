@@ -9,7 +9,7 @@
  * Used for LNURL payments where keysend TLV records aren't available.
  * Keysend payments continue to use Helipad metadata directly.
  *
- * @see https://github.com/noblepayne/boostbox
+ * @see https://github.com/ChadFarrow/boostbox
  */
 
 export interface BoostBoxPayload {

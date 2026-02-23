@@ -66,6 +66,7 @@ Single input handles both add and reparse:
 
 ### Search
 - Uses PostgreSQL trigram `similarity()` for fuzzy matching
+- Flat 0.3 similarity threshold for all query lengths (`calculateThreshold` in `lib/fuzzy-search.ts`) — matches PostgreSQL's `pg_trgm` default. Do NOT lower this; values below 0.3 produce false positives (e.g., "John B Nevin" for "nate johnivan").
 - Artist search groups by `LOWER(artist)` to avoid case duplicates
 - Exact mode: `?fuzzy=false`
 
@@ -147,11 +148,11 @@ Uses `window.history.length` to detect prior navigation. Do NOT use `document.re
 Keysend capability is inferred from provider type (`hasKeysendMethod && type !== 'unknown'`). Do NOT probe by sending a real keysend payment — wallets like Alby extension surface this as a user-facing payment popup on every page load. When the Alby extension auto-connects via `window.webln` (bypassing Bitcoin Connect), `detectWalletProviderType()` in `lib/lightning/wallet-detection.ts` falls back to checking `window.webln` and returns `type: 'extension'` — without this, keysend detection fails for the Alby extension.
 
 ### BoostBox Integration (`lib/lightning/boostbox.ts`)
-LNURL payments use [BoostBox](https://boostbox.cloud) to store Podcasting 2.0 boost metadata. Before requesting an LNURL invoice, metadata is POSTed to BoostBox which returns a `desc` string (e.g., `rss::payment::boost https://boostbox.cloud/boost/01K9... message`). That `desc` becomes the LNURL invoice comment so recipients can fetch full payment context. Keysend payments are unaffected — they use Helipad TLV records directly.
+LNURL payments use [BoostBox](https://tardbox.com) to store Podcasting 2.0 boost metadata. Before requesting an LNURL invoice, metadata is POSTed to BoostBox which returns a `desc` string (e.g., `rss::payment::boost https://tardbox.com/boost/01K9... message`). That `desc` becomes the LNURL invoice comment so recipients can fetch full payment context. Keysend payments are unaffected — they use Helipad TLV records directly.
 
-- API spec: https://boostbox.cloud/openapi.json
-- Docs: https://boostbox.cloud/docs
-- Source: https://github.com/noblepayne/boostbox
+- API spec: https://tardbox.com/openapi.json
+- Docs: https://tardbox.com/docs
+- Source: https://github.com/ChadFarrow/boostbox
 - Server-side proxy: `app/api/lightning/boostbox/route.ts` (avoids CORS, API key via `BOOSTBOX_API_KEY` env var)
 - Feature flag: `LIGHTNING_CONFIG.features.boostbox` in `lib/lightning/config.ts`
 - If BoostBox is unreachable, payments proceed without metadata (graceful degradation)

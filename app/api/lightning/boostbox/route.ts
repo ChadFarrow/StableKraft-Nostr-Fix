@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const BOOSTBOX_URL = 'https://boostbox.cloud';
+const BOOSTBOX_URL = process.env.BOOSTBOX_URL || 'https://tardbox.com';
 const BOOSTBOX_API_KEY = process.env.BOOSTBOX_API_KEY || 'v4v4me';
 
 /**
