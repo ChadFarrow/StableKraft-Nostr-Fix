@@ -591,26 +591,9 @@ async function loadPublisherData(publisherId: string) {
 
       console.log(`✅ Found ${relatedFeeds.length} albums via remote item GUIDs/URLs`);
 
-      // Only apply fountain.fm filtering if the publisher feed is from fountain.fm
-      // This prevents filtering out Wavlake albums for Wavlake publishers
-      const isFountainPublisher = publisherFeed.originalUrl?.includes('feeds.fountain.fm');
-
-      if (isFountainPublisher) {
-        // Filter to only keep fountain.fm feeds as "official" (publisher feed is from fountain.fm)
-        // Other matches (RSS Blue, etc.) will be moved to artist-matched section
-        const fountainFeeds = relatedFeeds.filter(f =>
-          f.originalUrl?.includes('feeds.fountain.fm')
-        );
-        const nonFountainFeeds = relatedFeeds.filter(f =>
-          !f.originalUrl?.includes('feeds.fountain.fm')
-        );
-
-        if (nonFountainFeeds.length > 0) {
-          console.log(`📋 Filtered to ${fountainFeeds.length} fountain.fm feeds (${nonFountainFeeds.length} non-fountain feeds moved to artist section)`);
-        }
-
-        relatedFeeds = fountainFeeds;
-      }
+      // Note: No platform-based filtering here. If a GUID from any publisher feed
+      // (Fountain, Wavlake, self-hosted, etc.) matched an album in the DB, it's an
+      // official release. The per-feed section logic below handles platform grouping.
 
       // Explicit blocklist: exclude any feed that appears in podroll (defense in depth)
       if (podrollGuids.size > 0 || podrollUrls.size > 0) {

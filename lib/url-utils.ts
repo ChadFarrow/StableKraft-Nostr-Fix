@@ -540,6 +540,30 @@ export const KNOWN_PUBLISHERS: { [slug: string]: { feedGuid: string; feedUrl: st
     feedGuid: 'wavlake-publisher-eff27dd6',
     feedUrl: 'https://wavlake.com/feed/artist/eff27dd6-764c-497e-81fe-3a7e10eb7b3b',
     name: 'Vertigo Kidd'
+  },
+
+  // Kathryn - Fountain.fm publisher
+  'kathryn': {
+    feedGuid: '9efcded5-19a4-56cd-ba5e-8f521c35cb23',
+    feedUrl: 'https://feeds.fountain.fm/jokW9pKTREMn9bhoZSRU',
+    name: 'Kathryn'
+  },
+  '9efcded5': {
+    feedGuid: '9efcded5-19a4-56cd-ba5e-8f521c35cb23',
+    feedUrl: 'https://feeds.fountain.fm/jokW9pKTREMn9bhoZSRU',
+    name: 'Kathryn'
+  },
+
+  // CityBeach - Self-hosted publisher feed
+  'citybeach': {
+    feedGuid: 'sirtjthewrathful-publisher',
+    feedUrl: 'https://www.sirtjthewrathful.com/publisher.xml',
+    name: 'CityBeach'
+  },
+  'city-beach': {
+    feedGuid: 'sirtjthewrathful-publisher',
+    feedUrl: 'https://www.sirtjthewrathful.com/publisher.xml',
+    name: 'CityBeach'
   }
 };
 
