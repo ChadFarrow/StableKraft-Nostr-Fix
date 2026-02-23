@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { parseRSSFeedWithSegments, calculateTrackOrder, detectTrackMediaType } from '@/lib/rss-parser-db';
+import { resolvePodcastIndexUrl } from '@/lib/podcast-index-api';
 
 interface RemoteItemResult {
   added: number;
@@ -191,16 +192,29 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    
-    // Find the feed by URL
+
+    // Resolve Podcast Index web page URLs to actual RSS feed URLs
+    let resolvedUrl = originalUrl;
+    const piResolution = await resolvePodcastIndexUrl(originalUrl);
+    if (piResolution) {
+      resolvedUrl = piResolution.feedUrl;
+      console.log(`🔄 Resolved Podcast Index URL → ${resolvedUrl}`);
+    }
+
+    // Find the feed by URL (try resolved URL first, then original)
     let feed = await prisma.feed.findFirst({
-      where: { originalUrl }
+      where: { originalUrl: resolvedUrl }
     });
-    
+    if (!feed && resolvedUrl !== originalUrl) {
+      feed = await prisma.feed.findFirst({
+        where: { originalUrl }
+      });
+    }
+
     // Parse the RSS feed first (needed whether feed exists or not)
     let parsedFeed;
     try {
-      parsedFeed = await parseRSSFeedWithSegments(originalUrl);
+      parsedFeed = await parseRSSFeedWithSegments(resolvedUrl);
     } catch (parseError) {
       const errorMessage = parseError instanceof Error ? parseError.message : 'Unknown parsing error';
       return NextResponse.json({
@@ -220,7 +234,7 @@ export async function POST(request: NextRequest) {
         if (!feedType) {
           try {
             // Fetch raw XML to get podcast:medium
-            const xmlResponse = await fetch(originalUrl);
+            const xmlResponse = await fetch(resolvedUrl);
             if (xmlResponse.ok) {
               const xmlText = await xmlResponse.text();
               const mediumMatch = xmlText.match(/<podcast:medium>([^<]+)<\/podcast:medium>/);
@@ -247,8 +261,8 @@ export async function POST(request: NextRequest) {
         const newFeed = await prisma.feed.create({
           data: {
             id: feedId,
-            originalUrl,
-            cdnUrl: originalUrl,
+            originalUrl: resolvedUrl,
+            cdnUrl: resolvedUrl,
             type: feedType,
             priority: 'normal',
             title: parsedFeed.title,
@@ -319,7 +333,7 @@ export async function POST(request: NextRequest) {
         let remoteItemsResult: RemoteItemResult | null = null;
         if (newFeedWithCount && newFeedWithCount._count.Track === 0) {
           console.log(`📡 New feed has 0 tracks, checking for remoteItems...`);
-          remoteItemsResult = await processRemoteItems(originalUrl, newFeed.id);
+          remoteItemsResult = await processRemoteItems(resolvedUrl, newFeed.id);
 
           if (remoteItemsResult.albums.length > 0) {
             console.log(`✅ Processed ${remoteItemsResult.albums.length} albums from remoteItems`);
@@ -630,7 +644,7 @@ export async function POST(request: NextRequest) {
       let remoteItemsResult: RemoteItemResult | null = null;
       if (updatedFeed && updatedFeed._count.Track === 0) {
         console.log(`📡 Feed has 0 tracks, checking for remoteItems...`);
-        remoteItemsResult = await processRemoteItems(originalUrl, feed.id);
+        remoteItemsResult = await processRemoteItems(resolvedUrl, feed.id);
 
         if (remoteItemsResult.albums.length > 0) {
           console.log(`✅ Processed ${remoteItemsResult.albums.length} albums from remoteItems`);

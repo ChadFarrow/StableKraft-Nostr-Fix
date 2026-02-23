@@ -421,5 +421,46 @@ export function normalizeFeedResponse(data: any): PodcastIndexFeed | null {
   return data.feed || (data.feeds && data.feeds[0]) || null;
 }
 
+/**
+ * Detect if a URL is a Podcast Index web page URL and resolve it to the actual RSS feed URL.
+ * Handles formats like:
+ *   https://podcastindex.org/podcast/7405721
+ *   http://podcastindex.org/podcast/7405721
+ * Returns the RSS feed URL if resolved, or null if the URL is not a PI page URL.
+ */
+export async function resolvePodcastIndexUrl(url: string): Promise<{ feedUrl: string; title: string; author: string } | null> {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname !== 'podcastindex.org' && parsed.hostname !== 'www.podcastindex.org') {
+      return null;
+    }
+
+    const match = parsed.pathname.match(/^\/podcast\/(\d+)\/?$/);
+    if (!match) {
+      return null;
+    }
+
+    const feedId = parseInt(match[1], 10);
+    console.log(`🔍 Detected Podcast Index URL, looking up feed ID: ${feedId}`);
+
+    const feed = await podcastIndexAPI.getFeedById(feedId);
+    if (!feed) {
+      console.warn(`❌ No feed found in Podcast Index for ID: ${feedId}`);
+      return null;
+    }
+
+    const feedUrl = feed.url || feed.originalUrl;
+    if (!feedUrl) {
+      console.warn(`❌ Feed ${feedId} has no URL in Podcast Index`);
+      return null;
+    }
+
+    console.log(`✅ Resolved PI feed ${feedId} → ${feedUrl} ("${feed.title}" by ${feed.author})`);
+    return { feedUrl, title: feed.title, author: feed.author };
+  } catch {
+    return null;
+  }
+}
+
 // Re-export the PodcastIndexFeed type for use in other modules
 export type { PodcastIndexFeed };

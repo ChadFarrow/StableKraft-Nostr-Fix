@@ -721,7 +721,7 @@ export default function AdminPanel() {
                 </button>
               </div>
               <p className="mt-2 text-xs text-gray-400">
-                Paste any RSS feed URL. New feeds will be added and parsed. Existing feeds will be reparsed to update metadata, tracks, and payment splits.
+                Paste any RSS feed URL or Podcast Index link (e.g., podcastindex.org/podcast/12345). New feeds will be added and parsed. Existing feeds will be reparsed to update metadata, tracks, and payment splits.
               </p>
             </div>
           </form>
