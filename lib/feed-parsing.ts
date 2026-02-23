@@ -9,7 +9,7 @@ import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { ValueTagParser } from '@/lib/lightning/value-parser';
 import { isValidFeedUrl, normalizeUrl } from '@/lib/url-utils';
-import { calculateTrackOrder } from '@/lib/rss-parser-db';
+import { calculateTrackOrder, parsePodcastGuidFromXML } from '@/lib/rss-parser-db';
 
 const PODCAST_INDEX_API_KEY = process.env.PODCAST_INDEX_API_KEY;
 const PODCAST_INDEX_API_SECRET = process.env.PODCAST_INDEX_API_SECRET;
@@ -235,6 +235,12 @@ export async function importFeedToDatabase(feedData: any, episodes: ParsedEpisod
       console.log(`📊 Storing channel-level v4v data on feed ${feedId}: ${parsedV4V.channelValue.recipients.length} recipients`);
     }
 
+    // Extract podcast:guid from XML or Podcast Index API data
+    const podcastGuid = (xmlText ? parsePodcastGuidFromXML(xmlText) : null) || feedData.podcastGuid || null;
+    if (podcastGuid) {
+      console.log(`🔑 Found podcast:guid for feed ${feedId}: ${podcastGuid}`);
+    }
+
     // Use upsert to atomically create or update feed (prevents race conditions)
     const feed = await prisma.feed.upsert({
       where: { id: feedId },
@@ -254,7 +260,8 @@ export async function importFeedToDatabase(feedData: any, episodes: ParsedEpisod
         createdAt: new Date(),
         updatedAt: new Date(),
         ...(feedV4vData && { v4vValue: feedV4vData }),
-        ...(feedV4vRecipient && { v4vRecipient: feedV4vRecipient })
+        ...(feedV4vRecipient && { v4vRecipient: feedV4vRecipient }),
+        ...(podcastGuid && { guid: podcastGuid })
       },
       update: {
         // Update existing feed metadata
@@ -269,7 +276,8 @@ export async function importFeedToDatabase(feedData: any, episodes: ParsedEpisod
         lastFetched: new Date(),
         updatedAt: new Date(),
         ...(feedV4vData && { v4vValue: feedV4vData }),
-        ...(feedV4vRecipient && { v4vRecipient: feedV4vRecipient })
+        ...(feedV4vRecipient && { v4vRecipient: feedV4vRecipient }),
+        ...(podcastGuid && { guid: podcastGuid })
       }
     });
 
