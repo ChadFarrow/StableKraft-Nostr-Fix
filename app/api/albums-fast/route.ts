@@ -266,9 +266,9 @@ export async function GET(request: Request) {
       releaseDate: feed.oldestItemPubdate || feed.createdAt,
       dateAdded: feed.createdAt,
       feedUrl: feed.originalUrl, // For Helipad TLV
-      feedGuid: feed.id,
-      feedId: feed.id, // For Helipad TLV
-      remoteFeedGuid: feed.id, // For Helipad TLV
+      feedGuid: feed.guid || null, // Real podcast:guid from RSS (for BoostBox feed_guid)
+      feedId: feed.id, // Slug-based ID for URLs and Helipad TLV
+      remoteFeedGuid: feed.guid || null, // Real podcast:guid (for BoostBox remote_feed_guid)
       guid: feed.Track?.[0]?.guid || feed.id, // Episode GUID for Helipad TLV
       episodeGuid: feed.Track?.[0]?.guid || feed.id, // Alternative field name
       link: feed.originalUrl, // For feedUrl fallback
