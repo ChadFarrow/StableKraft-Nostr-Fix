@@ -2,7 +2,8 @@ import { prisma } from '@/lib/prisma';
 import { isValidFeedUrl, normalizeUrl } from '@/lib/url-utils';
 import { generatePodcastIndexHeaders, normalizeFeedResponse, getFeedByUrlPreferNewest } from '@/lib/podcast-index-api';
 import { parseFeedByGuid } from '@/lib/feed-parsing';
-import { extractPublisherFromXML, discoverAndStorePublisher } from '@/lib/publisher-discovery';
+import { discoverAndStorePublisher } from '@/lib/publisher-discovery';
+import { parsePublisherFeedFromXML } from '@/lib/rss-parser-db';
 import { findPublisherFeed } from '@/lib/publisher-detector';
 
 interface PodcastIndexResponse {
@@ -445,7 +446,7 @@ export async function discoverAndParsePublishers(albumFeedIds: string[]): Promis
       const xml = await response.text();
 
       // Check for publisher reference
-      const publisherRef = extractPublisherFromXML(xml);
+      const publisherRef = parsePublisherFeedFromXML(xml);
 
       if (publisherRef) {
         // Discover and store the publisher
