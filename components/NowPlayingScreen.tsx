@@ -12,6 +12,7 @@ import { colorCache } from '@/lib/color-cache';
 import { BoostButton } from '@/components/Lightning/BoostButton';
 import FavoriteButton from '@/components/favorites/FavoriteButton';
 import { generateAlbumUrl } from '@/lib/url-utils';
+import { formatValueSplitsForBoost, getPrimaryRecipient } from '@/lib/v4v-utils';
 import UserMenu from '@/components/UserMenu';
 
 interface NowPlayingScreenProps {
@@ -107,16 +108,11 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
   // Debug: Log V4V data availability
   useEffect(() => {
     if (currentTrack) {
-      const trackKeys = Object.keys(currentTrack);
       console.log('⚡ NowPlayingScreen V4V Debug:', {
         trackTitle: currentTrack.title,
-        hasV4vRecipient: !!currentTrack.v4vRecipient,
-        hasV4vValue: !!currentTrack.v4vValue,
-        v4vRecipient: currentTrack.v4vRecipient,
-        v4vValue: currentTrack.v4vValue,
-        trackKeyCount: trackKeys.length,
-        trackKeys: trackKeys,
-        fullTrackObject: currentTrack
+        hasTrackV4v: !!currentTrack.v4vRecipient || !!currentTrack.v4vValue,
+        hasAlbumV4v: !!currentPlayingAlbum?.v4vRecipient || !!currentPlayingAlbum?.v4vValue,
+        resolvedAddress: getPrimaryRecipient(currentTrack) || getPrimaryRecipient(currentPlayingAlbum),
       });
     }
   }, [currentTrack]);
@@ -641,13 +637,13 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
           feedId={currentPlayingAlbum.feedId || currentPlayingAlbum.id}
           trackTitle={currentTrack.title}
           artistName={currentPlayingAlbum.artist || 'Unknown Artist'}
-          lightningAddress={currentTrack.v4vRecipient}
-          valueSplits={currentTrack.v4vValue?.recipients || currentTrack.v4vValue?.destinations || []}
+          lightningAddress={getPrimaryRecipient(currentTrack) || getPrimaryRecipient(currentPlayingAlbum)}
+          valueSplits={formatValueSplitsForBoost(currentTrack, currentPlayingAlbum.artist) || formatValueSplitsForBoost(currentPlayingAlbum, currentPlayingAlbum.artist) || []}
           autoOpen={true}
           onClose={() => setShowBoostModal(false)}
           feedUrl={currentPlayingAlbum.feedUrl || currentPlayingAlbum.link}
-          episodeGuid={currentTrack.guid}
-          remoteFeedGuid={(currentTrack as any).feedGuid || currentPlayingAlbum.feedGuid}
+          episodeGuid={currentTrack.v4vValue?.itemGuid || currentTrack.guid}
+          remoteFeedGuid={currentTrack.v4vValue?.feedGuid || currentPlayingAlbum.feedGuid}
           albumName={(currentTrack as any).feedTitle || (currentTrack as any).albumTitle || currentPlayingAlbum.title}
           publisherGuid={(currentPlayingAlbum as any).publisher?.feedGuid}
           publisherUrl={(currentPlayingAlbum as any).publisher?.publisherUrl}
