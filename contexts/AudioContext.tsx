@@ -1461,18 +1461,30 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     const handleEnded = async () => {
       console.log('🎵 Track ended, attempting to play next track');
 
-      // Prevent double-advance: proactive timer may have already triggered playNextTrack
-      if (trackEndProcessedRef.current) {
-        console.log('📱 Track end already processed by proactive timer, skipping');
-        return;
-      }
-      trackEndProcessedRef.current = true;
-
       // Clear proactive advance timer (no longer needed)
       if (iosAdvanceTimerRef.current) {
         clearTimeout(iosAdvanceTimerRef.current);
         iosAdvanceTimerRef.current = null;
       }
+
+      // Auto-boost: always fire on track end, even if proactive timer already advanced
+      // This runs before the double-advance guard because auto-boost is per-ended-track,
+      // not per-advance. Read from ref to get latest settings (closure may be stale).
+      const { enabled: autoBoostOn, amount: autoBoostAmt } = autoBoostSettingsRef.current;
+      if (!radioMode && autoBoostOn && currentPlayingAlbum && currentTrackIndex >= 0) {
+        const track = currentPlayingAlbum.tracks[currentTrackIndex];
+        if (track && triggerAutoBoostRef.current) {
+          // Fire and forget - don't await, don't block next track
+          triggerAutoBoostRef.current(track, currentPlayingAlbum, autoBoostAmt || 50);
+        }
+      }
+
+      // Prevent double-advance: proactive timer may have already triggered playNextTrack
+      if (trackEndProcessedRef.current) {
+        console.log('📱 Track advance already handled by proactive timer, skipping playNextTrack');
+        return;
+      }
+      trackEndProcessedRef.current = true;
 
       // CRITICAL for iOS PWA: Set auto-transitioning flag so playAlbum uses seamless playback
       // This flag ensures seamless playback is used even if isPlaying state has changed
@@ -1482,17 +1494,6 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
       // before triggering next track. This prevents iOS from releasing the audio session.
       if ('mediaSession' in navigator && navigator.mediaSession) {
         navigator.mediaSession.playbackState = 'playing';
-      }
-
-      // Auto-boost: fire and forget - doesn't block next track (disabled in radio mode)
-      // Read from ref to get latest settings (closure may be stale)
-      const { enabled: autoBoostOn, amount: autoBoostAmt } = autoBoostSettingsRef.current;
-      if (!radioMode && autoBoostOn && currentPlayingAlbum && currentTrackIndex >= 0) {
-        const track = currentPlayingAlbum.tracks[currentTrackIndex];
-        if (track && triggerAutoBoostRef.current) {
-          // Fire and forget - don't await
-          triggerAutoBoostRef.current(track, currentPlayingAlbum, autoBoostAmt || 50);
-        }
       }
 
       try {
@@ -1615,6 +1616,17 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
                   // Guard against double-advance (handleEnded may have already fired)
                   if (!trackEndProcessedRef.current) {
                     trackEndProcessedRef.current = true;
+
+                    // Trigger auto-boost for the track that just ended
+                    // (handleEnded may not fire if we swap the source before it triggers)
+                    const { enabled: autoBoostOn, amount: autoBoostAmt } = autoBoostSettingsRef.current;
+                    if (autoBoostOn && currentPlayingAlbum && currentTrackIndex >= 0) {
+                      const endedTrack = currentPlayingAlbum.tracks[currentTrackIndex];
+                      if (endedTrack && triggerAutoBoostRef.current) {
+                        triggerAutoBoostRef.current(endedTrack, currentPlayingAlbum, autoBoostAmt || 50);
+                      }
+                    }
+
                     console.log('📱 Proactive advance timer fired, triggering next track');
                     if (playNextTrackRef.current) {
                       playNextTrackRef.current();
