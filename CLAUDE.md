@@ -153,6 +153,7 @@ LNURL payments use [BoostBox](https://tardbox.com) to store Podcasting 2.0 boost
 - API spec: https://tardbox.com/openapi.json
 - Docs: https://tardbox.com/docs
 - Source: https://github.com/ChadFarrow/boostbox
+- List all boosts: `GET /boosts` (auth required) — returns all stored boosts sorted newest-first
 - Server-side proxy: `app/api/lightning/boostbox/route.ts` (avoids CORS, API key via `BOOSTBOX_API_KEY` env var)
 - Feature flag: `LIGHTNING_CONFIG.features.boostbox` in `lib/lightning/config.ts`
 - If BoostBox is unreachable, payments proceed without metadata (graceful degradation)
