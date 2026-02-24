@@ -145,6 +145,13 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   const { isConnected: isWalletConnected, sendPayment, sendKeysend, supportsKeysend } = useBitcoinConnect();
   const autoBoostProcessingRef = useRef(false);
 
+  // Keep auto-boost settings in a ref so handleEnded always reads the latest values
+  // (handleEnded is registered in a useEffect whose deps don't include settings)
+  const autoBoostSettingsRef = useRef({ enabled: settings.autoBoostEnabled, amount: settings.autoBoostAmount });
+  useEffect(() => {
+    autoBoostSettingsRef.current = { enabled: settings.autoBoostEnabled, amount: settings.autoBoostAmount };
+  }, [settings.autoBoostEnabled, settings.autoBoostAmount]);
+
   // Helper function to publish NIP-38 status (debounced)
   const publishNip38StatusDebounced = useCallback((action: 'play') => {
     // Clear any pending timeout
@@ -224,16 +231,22 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
       return;
     }
 
-    // Check if track has V4V data
-    if (!checkHasV4V(track)) {
-      console.log('⚡ Auto-boost skipped: no V4V data for track');
+    // Check if track or album has V4V data (fall back to album-level V4V,
+    // matching BoostButton behavior — Wavlake feeds often set <podcast:value> at feed level only)
+    const trackHasV4V = checkHasV4V(track);
+    const albumHasV4V = checkHasV4V(album);
+    if (!trackHasV4V && !albumHasV4V) {
+      console.log('⚡ Auto-boost skipped: no V4V data for track or album');
       return;
     }
+
+    // Use track V4V data if available, otherwise fall back to album
+    const v4vSource = trackHasV4V ? track : album;
 
     autoBoostProcessingRef.current = true;
 
     try {
-      console.log(`⚡ Auto-boost starting: ${amount} sats for "${track.title}"`);
+      console.log(`⚡ Auto-boost starting: ${amount} sats for "${track.title}"${!trackHasV4V ? ' (using album-level V4V)' : ''}`);
 
       // Build Helipad metadata
       const helipadMetadata: any = {
@@ -272,7 +285,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
       let result: { preimage?: string; error?: string } | null = null;
 
       // Check if we have value splits (multiple recipients)
-      const v4vRecipients = getV4VRecipients(track);
+      // Try track-level recipients first, fall back to album-level
+      const v4vRecipients = getV4VRecipients(track).length > 0 ? getV4VRecipients(track) : getV4VRecipients(album);
       if (v4vRecipients.length > 0) {
         // Multi-recipient payment via value splits
         const recipients: ValueRecipient[] = v4vRecipients.map((r) => ({
@@ -302,8 +316,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
           result = { error: multiResult.errors.join(', ') };
         }
       } else {
-        // Single recipient keysend (fallback to v4vRecipient)
-        const primaryRecipient = getPrimaryRecipient(track);
+        // Single recipient keysend (fallback: track -> album)
+        const primaryRecipient = getPrimaryRecipient(track) || getPrimaryRecipient(album);
         if (primaryRecipient) {
           console.log(`⚡ Auto-boost: sending to single recipient ${primaryRecipient}`);
           result = await sendKeysend(primaryRecipient, amount, undefined, helipadMetadata);
@@ -326,7 +340,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
               senderName: settings.defaultBoostName || 'StableKraft.app user',
               preimage: result.preimage,
               type: 'auto', // Mark as auto-boost
-              recipient: getPrimaryRecipient(track) || 'value-splits'
+              recipient: getPrimaryRecipient(track) || getPrimaryRecipient(album) || 'value-splits'
             })
           });
         } catch (logError) {
@@ -1403,12 +1417,13 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
       }
 
       // Auto-boost: fire and forget - doesn't block next track (disabled in radio mode)
-      // Check settings and trigger boost for the just-finished track
-      if (!radioMode && settings.autoBoostEnabled && currentPlayingAlbum && currentTrackIndex >= 0) {
+      // Read from ref to get latest settings (closure may be stale)
+      const { enabled: autoBoostOn, amount: autoBoostAmt } = autoBoostSettingsRef.current;
+      if (!radioMode && autoBoostOn && currentPlayingAlbum && currentTrackIndex >= 0) {
         const track = currentPlayingAlbum.tracks[currentTrackIndex];
         if (track && triggerAutoBoostRef.current) {
           // Fire and forget - don't await
-          triggerAutoBoostRef.current(track, currentPlayingAlbum, settings.autoBoostAmount || 50);
+          triggerAutoBoostRef.current(track, currentPlayingAlbum, autoBoostAmt || 50);
         }
       }
 
