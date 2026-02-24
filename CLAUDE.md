@@ -39,7 +39,7 @@ Playlists use `<podcast:remoteItem>` with `feedGuid` + `itemGuid`. On `?refresh`
 3. Parse new feeds (imports tracks + V4V data)
 4. Discover/link publisher feeds
 
-**Publisher discovery** (`discoverAndParsePublishers` in `lib/feed-discovery.ts`): First checks album XML for `<podcast:remoteItem medium="publisher">` tags. If absent, falls back to Podcast Index API search by artist name (`findPublisherFeed` in `lib/publisher-detector.ts`). Deduplicates PI API calls per-artist within a run. Daily workflow Step 4 (`POST /api/playlist/parse-feeds`) also runs publisher discovery after parsing.
+**Publisher discovery** (`discoverAndParsePublishers` in `lib/feed-discovery.ts`): First checks album XML for publisher tags via `parsePublisherFeedFromXML` in `lib/rss-parser-db.ts` — handles both nested `<podcast:publisher><podcast:remoteItem/></podcast:publisher>` and flat `<podcast:remoteItem medium="publisher">` formats. If absent, falls back to Podcast Index API search by artist name (`findPublisherFeed` in `lib/publisher-detector.ts`). Deduplicates PI API calls per-artist within a run. Daily workflow Step 4 (`POST /api/playlist/parse-feeds`) also runs publisher discovery after parsing. The feed refresh route (`feeds/[id]/refresh`) and `discoverAllPublishers` in `lib/publisher-discovery.ts` also use `parsePublisherFeedFromXML`.
 
 **Publisher album import** (`POST /api/admin/publishers/import-albums`): Uses PI API search by artist name (`/search/byterm`) to find music feeds, then PI API episodes (`/episodes/byfeedid`) for track data. No direct Wavlake XML fetching — avoids 429 rate limiting. Deduplicates PI searches per-artist across multiple publisher feeds. Daily workflow Step 5b calls this automatically.
 

@@ -6,6 +6,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { parsePublisherFeedFromXML } from '@/lib/rss-parser-db';
 
 export interface PublisherReference {
   feedGuid: string;
@@ -230,35 +231,6 @@ export async function discoverAndStorePublisher(publisherRef: PublisherReference
 }
 
 /**
- * Extract publisher reference from album feed XML
- */
-export function extractPublisherFromXML(xml: string): PublisherReference | null {
-  // Look for <podcast:remoteItem medium="publisher">
-  const remoteItemRegex = /<podcast:remoteItem[^>]*medium=["']publisher["'][^>]*>/gi;
-  const matches = xml.match(remoteItemRegex);
-
-  if (!matches || matches.length === 0) {
-    return null;
-  }
-
-  // Parse the first publisher reference
-  const match = matches[0];
-
-  const feedGuidMatch = match.match(/feedGuid=["']([^"']+)["']/i);
-  const feedUrlMatch = match.match(/feedUrl=["']([^"']+)["']/i);
-
-  if (!feedUrlMatch) {
-    return null;
-  }
-
-  return {
-    feedGuid: feedGuidMatch?.[1] || '',
-    feedUrl: feedUrlMatch[1],
-    medium: 'publisher'
-  };
-}
-
-/**
  * Discover publishers from all album feeds in the database
  * This is a one-time migration function
  */
@@ -301,7 +273,7 @@ export async function discoverAllPublishers(): Promise<{
       }
 
       const xml = await response.text();
-      const publisherRef = extractPublisherFromXML(xml);
+      const publisherRef = parsePublisherFeedFromXML(xml);
 
       if (publisherRef) {
         const added = await discoverAndStorePublisher(publisherRef);

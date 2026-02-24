@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { parseRSSFeedWithSegments, detectTrackMediaType } from '@/lib/rss-parser-db';
-import { discoverAndStorePublisher, extractPublisherFromXML } from '@/lib/publisher-discovery';
+import { discoverAndStorePublisher } from '@/lib/publisher-discovery';
+import { parsePublisherFeedFromXML } from '@/lib/rss-parser-db';
 
 // POST /api/feeds/[id]/refresh - Refresh a specific feed (Railway fix)
 export async function POST(
@@ -54,7 +55,7 @@ export async function POST(
           });
           if (feedResponse.ok) {
             const xml = await feedResponse.text();
-            const publisherRef = extractPublisherFromXML(xml);
+            const publisherRef = parsePublisherFeedFromXML(xml);
             if (publisherRef) {
               await discoverAndStorePublisher(publisherRef);
             }
