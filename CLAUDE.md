@@ -90,7 +90,14 @@ Tracks over 2 hours filtered as non-music (silent, no warnings)
 iOS Safari kills WebSocket connections after ~30s when backgrounded. The client reconnects on `visibilitychange` with platform-aware staleness thresholds (iOS 15s, others 60s). Key files: `lib/nostr/nip46-client.ts`, `components/Nostr/hooks/useNip46Connection.ts`.
 
 ### iOS PWA Background Audio
-iOS suspends audio when the PWA is backgrounded. Mitigated in `contexts/AudioContext.tsx` with silent keepalive audio and visibility handlers (`visibilitychange`/`pageshow`). **Critical**: do not auto-resume if the user explicitly paused (e.g., via lock screen controls) — check both "was playing" and "user paused" state before resuming on foreground.
+iOS suspends JS and throttles network when the PWA is backgrounded. Track advancement uses a three-layer strategy in `contexts/AudioContext.tsx`:
+1. **Preload next track** — At 15s before track end, a hidden `Audio` element + `prefetchAudio()` fetch warm the browser cache so `load()` in `attemptSeamlessPlayback` is instant (no network delay).
+2. **Proactive advance timer** — At 5s before track end, a `setTimeout` fires ~200ms after expected end to trigger `playNextTrack` while iOS still has JS execution from the recently-active audio session.
+3. **Visibility change safety net** — On `visibilitychange`/`pageshow`, if the audio element has ended, `playNextTrack` fires immediately on foreground return.
+
+A `trackEndProcessedRef` flag prevents double-advance between the timer and the `ended` event handler. The flag resets in `handlePlay` when the next track starts.
+
+**Critical**: do not auto-resume if the user explicitly paused (e.g., via lock screen controls) — check both "was playing" and "user paused" state before resuming on foreground.
 
 ### Sorting
 **Server-side sort**: `/api/albums-fast` accepts a `sort` query param (`added-desc`, `added-asc`, `year-desc`, `year-asc`, `name-asc`, `name-desc`, `tracks-desc`, `tracks-asc`). Sort is applied *before* pagination so paginated results are in the correct order. The client (`app/page.tsx`) only sends `sort` for non-default sorts — omitting it gives the server's default format+alpha sort (Albums → EPs → Singles, then A-Z within each). **Do NOT send `sort=name-asc` as default** — it bypasses format grouping. The client re-fetches from page 1 when sort changes via a `useEffect` on `sortType`. localStorage cache is skipped for non-default sorts.
