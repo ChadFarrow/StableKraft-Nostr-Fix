@@ -1620,7 +1620,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
                     // Trigger auto-boost for the track that just ended
                     // (handleEnded may not fire if we swap the source before it triggers)
                     const { enabled: autoBoostOn, amount: autoBoostAmt } = autoBoostSettingsRef.current;
-                    if (autoBoostOn && currentPlayingAlbum && currentTrackIndex >= 0) {
+                    if (!radioMode && autoBoostOn && currentPlayingAlbum && currentTrackIndex >= 0) {
                       const endedTrack = currentPlayingAlbum.tracks[currentTrackIndex];
                       if (endedTrack && triggerAutoBoostRef.current) {
                         triggerAutoBoostRef.current(endedTrack, currentPlayingAlbum, autoBoostAmt || 50);
