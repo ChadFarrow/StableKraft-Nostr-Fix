@@ -93,6 +93,13 @@ export interface NIP46Response {
 }
 
 export class NIP46Client {
+  // Debug logging - only active when localStorage flag is set
+  // Enable with: localStorage.setItem('nip46_debug', 'true')
+  private static DEBUG = typeof window !== 'undefined' && localStorage.getItem('nip46_debug') === 'true';
+  private debugLog(...args: any[]) {
+    if (NIP46Client.DEBUG) this.debugLog(...args);
+  }
+
   // iOS Safari kills WebSocket connections after ~30 seconds when backgrounded
   // Use shorter threshold for iOS to detect stale connections faster
   private static readonly IOS_STALE_THRESHOLD_MS = 15000; // 15 seconds
@@ -100,7 +107,7 @@ export class NIP46Client {
 
   private connection: NIP46Connection | null = null;
   private ws: WebSocket | null = null;
-  private pendingRequests: Map<string, { method: string; resolve: (value: any) => void; reject: (error: Error) => void }> = new Map();
+  private pendingRequests: Map<string, { method: string; resolve: (value: any) => void; reject: (error: Error) => void; startTime?: number }> = new Map();
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
@@ -113,7 +120,10 @@ export class NIP46Client {
   private lastEventTime: number = 0; // Track when last event was received
   private eventsByRelay: Map<string, number> = new Map(); // Track events by relay URL for debugging
   private lastRequestTime: Map<string, number> = new Map(); // Track last request time per method for rate limiting
-  private readonly RATE_LIMIT_MS = 2000; // 2 seconds between requests of the same method (reduced for debugging)
+  // Adaptive rate limiting: tracks actual signer response times
+  private avgResponseTimeMs: number = 2000; // Start conservative
+  private readonly MIN_RATE_LIMIT_MS = 500;  // Floor for fast signers (e.g., Primal with Full trust)
+  private readonly MAX_RATE_LIMIT_MS = 2000; // Cap for slow signers
   private rateLimitedRelays: Map<string, { until: number; backoffMs: number }> = new Map(); // Track rate-limited relays with backoff
   private readonly RATE_LIMIT_BACKOFF_BASE_MS = 60000; // Start with 1 minute backoff
   private readonly RATE_LIMIT_BACKOFF_MAX_MS = 600000; // Max 10 minutes backoff
@@ -122,11 +132,13 @@ export class NIP46Client {
   private detectedOldPubkey: string | null = null; // Store the old pubkey we detected
   private connectionStartTime: number = 0; // Track when connection attempt started to filter old events
   private aggressiveModeLogged: boolean = false; // Track if we've already logged aggressive mode message
+  private pendingRequestCleanupInterval: NodeJS.Timeout | null = null; // Periodic cleanup for orphaned requests
+  private lastSuccessfulKeyPairIndex: number = -1; // Cache last-successful decryption keypair index
   // Known Amber pubkey from user's npub: npub12xwrqqxuee2k3452uuae7kp0g5yxgpapjrrrz2r0wx7v8pdqynqqc0ez5k
   private readonly knownAmberPubkey: string | null = (() => {
     try {
       const pubkey = npubToPublicKey('npub12xwrqqxuee2k3452uuae7kp0g5yxgpapjrrrz2r0wx7v8pdqynqqc0ez5k');
-      console.log(`[NIP46] Loaded known Amber pubkey: ${pubkey.slice(0, 16)}...`);
+      this.debugLog(`[NIP46] Loaded known Amber pubkey: ${pubkey.slice(0, 16)}...`);
       return pubkey;
     } catch (err) {
       console.warn(`[NIP46] Failed to load known Amber pubkey:`, err);
@@ -151,14 +163,14 @@ export class NIP46Client {
     this.pubkeyMismatchCount = 0;
     this.eventCounter = 0;
     this.connectionStartTime = Date.now();
-    console.log('🔄 NIP-46: Reset mismatch detection state for new connection attempt');
+    this.debugLog('🔄 NIP-46: Reset mismatch detection state for new connection attempt');
 
     // Detect URI scheme: bunker:// vs nostrconnect:// vs direct URL
     if (signerUrl.startsWith('bunker://')) {
-      console.log('🔌 NIP-46: Detected bunker:// URI, parsing for nsecbunker connection');
+      this.debugLog('🔌 NIP-46: Detected bunker:// URI, parsing for nsecbunker connection');
       return this.connectBunker(signerUrl);
     } else if (signerUrl.startsWith('nostrconnect://')) {
-      console.log('🔌 NIP-46: Detected nostrconnect:// URI, using relay-based connection');
+      this.debugLog('🔌 NIP-46: Detected nostrconnect:// URI, using relay-based connection');
       // Extract relay URL from nostrconnect:// URI if needed
       // For now, assume signerUrl is already the relay URL
       // Pass signerPubkey if provided (for restoring saved connections)
@@ -203,7 +215,7 @@ export class NIP46Client {
         if (relayUrl && relayUrl.startsWith('wss://')) {
           // Store it for future use
           (this.connection as any).relayUrl = relayUrl;
-          console.log('✅ NIP-46: Parsed and stored relay URL from bunker:// URI:', relayUrl);
+          this.debugLog('✅ NIP-46: Parsed and stored relay URL from bunker:// URI:', relayUrl);
           return relayUrl;
         }
         throw new Error('No valid relay URL found in bunker:// URI');
@@ -228,7 +240,7 @@ export class NIP46Client {
         if (relayUrl && relayUrl.startsWith('wss://')) {
           // Store it for future use
           (this.connection as any).relayUrl = relayUrl;
-          console.log('✅ NIP-46: Last resort - parsed and stored relay URL from bunker:// URI:', relayUrl);
+          this.debugLog('✅ NIP-46: Last resort - parsed and stored relay URL from bunker:// URI:', relayUrl);
           return relayUrl;
         }
       } catch (err) {
@@ -246,11 +258,11 @@ export class NIP46Client {
   private async connectBunker(bunkerUri: string): Promise<void> {
     // Clear rate limits for fresh connection attempt
     this.lastRequestTime.clear();
-    console.log('🔄 NIP-46: Cleared rate limits for fresh bunker connection');
+    this.debugLog('🔄 NIP-46: Cleared rate limits for fresh bunker connection');
 
     try {
       const bunkerInfo = parseBunkerUri(bunkerUri);
-      console.log('🔌 NIP-46: Parsed bunker:// URI:', {
+      this.debugLog('🔌 NIP-46: Parsed bunker:// URI:', {
         pubkey: bunkerInfo.pubkey.slice(0, 16) + '...',
         relayCount: bunkerInfo.relays.length,
         relays: bunkerInfo.relays,
@@ -273,8 +285,8 @@ export class NIP46Client {
       } as any;
 
       // Use relay-based connection (not direct WebSocket) for mobile signers like Aegis
-      console.log('🔌 NIP-46: Connecting via relay for mobile signer:', relayUrl);
-      console.log('🔌 NIP-46: Signer app pubkey:', bunkerInfo.pubkey.slice(0, 16) + '...');
+      this.debugLog('🔌 NIP-46: Connecting via relay for mobile signer:', relayUrl);
+      this.debugLog('🔌 NIP-46: Signer app pubkey:', bunkerInfo.pubkey.slice(0, 16) + '...');
 
       // First, set up the relay connection and subscription
       await this.startRelayConnection(relayUrl);
@@ -282,27 +294,26 @@ export class NIP46Client {
       // IMPORTANT: Wait for subscription to be fully active on the relay
       // This prevents a race condition where we send the connect request before
       // the relay is ready to forward responses to us
-      console.log('⏳ NIP-46: Waiting for subscription to be fully active...');
-      console.log('🔌 NIP-46: Bunker relay URL:', relayUrl);
-      await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay for bunker relay
-      console.log('✅ NIP-46: Subscription should now be active on', relayUrl);
+      this.debugLog('⏳ NIP-46: Waiting for subscription to be fully active...');
+      await new Promise(resolve => setTimeout(resolve, 1000)); // 1s delay for bunker relay (local bridge needs more setup)
+      this.debugLog('✅ NIP-46: Subscription should now be active on', relayUrl);
 
       // Log the app pubkey we're using so user can compare with Aegis
       const currentAppKeyPair = getOrCreateAppKeyPair();
-      console.log('🔑 NIP-46: Our app pubkey (should match Aegis "Application Pubkey"):', currentAppKeyPair.publicKey);
+      this.debugLog('🔑 NIP-46: Our app pubkey (should match Aegis "Application Pubkey"):', currentAppKeyPair.publicKey);
 
       // Verify relay connection is actually working
       const connectedRelays = this.relayClient?.getConnectedRelays?.() || [];
-      console.log('🔌 NIP-46: Connected relays before sending connect request:', connectedRelays);
-      console.log('🔌 NIP-46: Bunker relay URL:', relayUrl);
-      console.log('🔌 NIP-46: Is bunker relay connected?', connectedRelays.includes(relayUrl));
+      this.debugLog('🔌 NIP-46: Connected relays before sending connect request:', connectedRelays);
+      this.debugLog('🔌 NIP-46: Bunker relay URL:', relayUrl);
+      this.debugLog('🔌 NIP-46: Is bunker relay connected?', connectedRelays.includes(relayUrl));
 
       if (connectedRelays.length === 0) {
         console.error('❌ NIP-46: No relays connected! Attempting to reconnect...');
         await this.relayClient?.connectToRelays([relayUrl]);
         await new Promise(resolve => setTimeout(resolve, 1000));
         const reconnectedRelays = this.relayClient?.getConnectedRelays?.() || [];
-        console.log('🔌 NIP-46: Connected relays after reconnection attempt:', reconnectedRelays);
+        this.debugLog('🔌 NIP-46: Connected relays after reconnection attempt:', reconnectedRelays);
         if (reconnectedRelays.length === 0) {
           throw new Error(`Failed to connect to bunker relay: ${relayUrl}`);
         }
@@ -312,7 +323,7 @@ export class NIP46Client {
         await this.relayClient?.connectToRelays([relayUrl]);
         await new Promise(resolve => setTimeout(resolve, 1000));
         const updatedRelays = this.relayClient?.getConnectedRelays?.() || [];
-        console.log('🔌 NIP-46: Updated connected relays:', updatedRelays);
+        this.debugLog('🔌 NIP-46: Updated connected relays:', updatedRelays);
         if (!updatedRelays.includes(relayUrl)) {
           console.error('❌ NIP-46: Failed to connect to bunker relay:', relayUrl);
           throw new Error(`Failed to connect to bunker relay: ${relayUrl}. The relay might be offline or blocking connections.`);
@@ -321,11 +332,11 @@ export class NIP46Client {
 
       // Track events received after this point
       const eventsBeforeConnect = this.eventCounter;
-      console.log('📊 NIP-46: Events received before connect request:', eventsBeforeConnect);
+      this.debugLog('📊 NIP-46: Events received before connect request:', eventsBeforeConnect);
 
       // For bunker:// URIs, the CLIENT should initiate by sending a 'connect' request
       // This is different from nostrconnect:// where we wait for the signer to connect
-      console.log('📤 NIP-46: Sending connect request to signer (bunker:// flow)...');
+      this.debugLog('📤 NIP-46: Sending connect request to signer (bunker:// flow)...');
       try {
         // Get app pubkey for the connect request
         const appKeyPair = getOrCreateAppKeyPair();
@@ -341,7 +352,7 @@ export class NIP46Client {
           ? [appPubkey, bunkerInfo.secret, permissions]
           : [appPubkey, '', permissions]; // Empty string for secret if not provided
 
-        console.log('📤 NIP-46: Connect params:', {
+        this.debugLog('📤 NIP-46: Connect params:', {
           appPubkey: appPubkey.slice(0, 16) + '...',
           appPubkeyFull: appPubkey,
           hasSecret: !!bunkerInfo.secret,
@@ -351,15 +362,15 @@ export class NIP46Client {
           relayUrl: relayUrl,
           connectParamsArray: connectParams,
         });
-        console.log('🔑 NIP-46: IMPORTANT - The event will be:');
-        console.log('   - Tagged with p-tag:', bunkerInfo.pubkey);
-        console.log('   - Encrypted to pubkey:', bunkerInfo.pubkey);
-        console.log('   - Signed by OUR app pubkey:', appPubkey);
-        console.log('   - Aegis should respond to events tagged with OUR pubkey:', appPubkey);
-        console.log('   - CHECK: Does Aegis show this pubkey as "Application Pubkey"?');
+        this.debugLog('🔑 NIP-46: IMPORTANT - The event will be:');
+        this.debugLog('   - Tagged with p-tag:', bunkerInfo.pubkey);
+        this.debugLog('   - Encrypted to pubkey:', bunkerInfo.pubkey);
+        this.debugLog('   - Signed by OUR app pubkey:', appPubkey);
+        this.debugLog('   - Aegis should respond to events tagged with OUR pubkey:', appPubkey);
+        this.debugLog('   - CHECK: Does Aegis show this pubkey as "Application Pubkey"?');
 
         const response = await this.sendRequest('connect', connectParams);
-        console.log('✅ NIP-46: Connect request acknowledged by signer:', response);
+        this.debugLog('✅ NIP-46: Connect request acknowledged by signer:', response);
 
         // Mark as connected after successful connect
         if (this.connection) {
@@ -369,13 +380,13 @@ export class NIP46Client {
 
         // IMPORTANT: After connect succeeds, immediately fetch the user's pubkey
         // This is required because connect() just returns "ack", not the pubkey
-        console.log('📤 NIP-46: Now requesting user pubkey via get_public_key...');
+        this.debugLog('📤 NIP-46: Now requesting user pubkey via get_public_key...');
         try {
           const userPubkey = await this.sendRequest('get_public_key', []);
-          console.log('✅ NIP-46: Got user pubkey:', userPubkey?.slice(0, 16) + '...');
+          this.debugLog('✅ NIP-46: Got user pubkey:', userPubkey?.slice(0, 16) + '...');
           if (this.connection && userPubkey) {
             this.connection.pubkey = userPubkey;
-            console.log('✅ NIP-46: Stored user pubkey in connection');
+            this.debugLog('✅ NIP-46: Stored user pubkey in connection');
           }
         } catch (pubkeyError) {
           console.warn('⚠️ NIP-46: Failed to get pubkey after connect:', pubkeyError);
@@ -388,7 +399,7 @@ export class NIP46Client {
         const eventsAfterConnect = this.eventCounter;
         const eventsReceived = eventsAfterConnect - eventsBeforeConnect;
         const postConnectRelays = this.relayClient?.getConnectedRelays?.() || [];
-        console.log('📊 NIP-46: Post-connect diagnostics:', {
+        this.debugLog('📊 NIP-46: Post-connect diagnostics:', {
           eventsReceivedDuringConnect: eventsReceived,
           totalEventsNow: eventsAfterConnect,
           relaysStillConnected: postConnectRelays,
@@ -431,8 +442,8 @@ export class NIP46Client {
     };
     
     if (savedPubkey) {
-      console.log('✅ NIP-46: Restoring connection with saved user pubkey:', savedPubkey.slice(0, 16) + '...');
-      console.log('ℹ️ NIP-46: Connection will be verified after relay connects');
+      this.debugLog('✅ NIP-46: Restoring connection with saved user pubkey:', savedPubkey.slice(0, 16) + '...');
+      this.debugLog('ℹ️ NIP-46: Connection will be verified after relay connects');
     }
 
     // Extract relay URL from URI if it's a full nostrconnect:// URI
@@ -496,7 +507,7 @@ export class NIP46Client {
 
     // Clean up any existing relay subscription first
     if (this.relaySubscription) {
-      console.log('🧹 NIP-46: Cleaning up existing relay subscription');
+      this.debugLog('🧹 NIP-46: Cleaning up existing relay subscription');
       try {
         this.relaySubscription();
         this.relaySubscription = null;
@@ -507,7 +518,7 @@ export class NIP46Client {
 
     // Clean up existing relay client if any
     if (this.relayClient) {
-      console.log('🧹 NIP-46: Disconnecting existing relay client');
+      this.debugLog('🧹 NIP-46: Disconnecting existing relay client');
       try {
         await this.relayClient.disconnect();
       } catch (err) {
@@ -516,17 +527,17 @@ export class NIP46Client {
     }
 
     // Initialize relay client
-    console.log('🔌 NIP-46: Initializing relay client for:', relayUrl);
+    this.debugLog('🔌 NIP-46: Initializing relay client for:', relayUrl);
     this.relayClient = new NostrClient([relayUrl]);
     
-    console.log('🔌 NIP-46: Connecting to relay...');
+    this.debugLog('🔌 NIP-46: Connecting to relay...');
     try {
       await this.relayClient.connectToRelays([relayUrl]);
-      console.log('✅ NIP-46: Successfully connected to relay');
+      this.debugLog('✅ NIP-46: Successfully connected to relay');
       
       // Verify connection by checking if relay is actually connected
       const connectedRelays = this.relayClient.getConnectedRelays?.() || [];
-      console.log('🔍 NIP-46: Connected relays:', connectedRelays);
+      this.debugLog('🔍 NIP-46: Connected relays:', connectedRelays);
       if (connectedRelays.length === 0) {
         console.warn('⚠️ NIP-46: No relays connected after connectToRelays call');
       }
@@ -550,7 +561,7 @@ export class NIP46Client {
           publicKey: appPubkey,
           privateKey: appPrivateKey,
         };
-        console.log('✅ NIP-46: Using persistent app key pair for connection');
+        this.debugLog('✅ NIP-46: Using persistent app key pair for connection');
       } catch (keyPairError) {
         console.warn('⚠️ NIP-46: Failed to get persistent key pair, trying sessionStorage:', keyPairError);
         // Fall back to sessionStorage for backward compatibility
@@ -578,28 +589,39 @@ export class NIP46Client {
     // 
     // IMPORTANT: appPubkey is the app's pubkey (for NIP-46 communication)
     // User's pubkey (from Amber) will be received later in the connection event
-    console.log('📡 NIP-46: Setting up subscription filters:', {
+    this.debugLog('📡 NIP-46: Setting up subscription filters:', {
       appPubkey: appPubkey.slice(0, 16) + '...',
       appPubkeyFull: appPubkey,
       relayUrl: relayUrl,
       note: 'App pubkey is for NIP-46 communication. User\'s Nostr account pubkey will be received from Amber later.',
     });
-    console.log('🎯 NIP-46: We will listen for events tagged with OUR pubkey:', appPubkey);
-    console.log('   - If Aegis responds to a DIFFERENT pubkey, we will NOT receive it!');
+    this.debugLog('🎯 NIP-46: We will listen for events tagged with OUR pubkey:', appPubkey);
+    this.debugLog('   - If Aegis responds to a DIFFERENT pubkey, we will NOT receive it!');
     
+    // Build subscription filters based on what we know about the signer
+    const knownSignerPubkey = (this.connection as any)?.signerPubkey;
     const filters: Filter[] = [
       {
         kinds: [24133], // NIP-46 request/response events
         '#p': [appPubkey], // Events tagged with our app public key (recipient)
       },
-      // Also subscribe to all kind 24133 events to catch any connection attempts
-      // We'll filter them in handleRelayEvent - this is important for detecting Amber's connection
-      {
-        kinds: [24133],
-      },
     ];
 
-    console.log('🔍 NIP-46: Subscribing to relay events:', {
+    if (knownSignerPubkey) {
+      // We know the signer pubkey — add a tight filter for events from them
+      filters.push({
+        kinds: [24133],
+        authors: [knownSignerPubkey],
+      });
+    } else {
+      // During initial connection (waiting for QR scan), use broad filter
+      // to catch connection events from unknown signers
+      filters.push({
+        kinds: [24133],
+      });
+    }
+
+    this.debugLog('🔍 NIP-46: Subscribing to relay events:', {
       relayUrl,
       appPubkey: appPubkey.slice(0, 16) + '...',
       filters,
@@ -611,7 +633,7 @@ export class NIP46Client {
     });
     
     // Log that we're waiting for connection
-    console.log('⏳ NIP-46: Waiting for connection event from signer...');
+    this.debugLog('⏳ NIP-46: Waiting for connection event from signer...');
 
     // Check if this is a bunker:// connection (has signerPubkey)
     // Bunker connections (like Aegis) use a local relay bridge that ONLY works with the specified relay
@@ -627,7 +649,7 @@ export class NIP46Client {
       // For bunker connections, ONLY subscribe to the primary relay
       // Local relay bridges (Aegis, etc) only work with their specific relay
       subscribeRelays = [relayUrl];
-      console.log(`✅ NIP-46: Bunker connection - subscribing ONLY to primary relay:`, {
+      this.debugLog(`✅ NIP-46: Bunker connection - subscribing ONLY to primary relay:`, {
         primary: relayUrl,
         note: 'Bunker signers (Aegis) use local relay bridges. Backup relays would not work.',
       });
@@ -636,7 +658,7 @@ export class NIP46Client {
       // This increases the chance of receiving events if relay connectivity is inconsistent
       subscribeRelays = [relayUrl, ...backupRelays]; // Primary first, then backups
 
-      console.log(`✅ NIP-46: Subscribing to MULTIPLE RELAYS for better connectivity:`, {
+      this.debugLog(`✅ NIP-46: Subscribing to MULTIPLE RELAYS for better connectivity:`, {
         primary: relayUrl,
         backups: backupRelays,
         total: subscribeRelays.length,
@@ -646,11 +668,11 @@ export class NIP46Client {
     
     // CRITICAL: Verify primary relay is connected before subscribing
     // If this relay fails, connection will not work because Amber/Aegis publishes to this relay
-    console.log(`🔌 NIP-46: Connecting to relays:`, subscribeRelays);
+    this.debugLog(`🔌 NIP-46: Connecting to relays:`, subscribeRelays);
     try {
       await this.relayClient.connectToRelays(subscribeRelays);
       const connectedRelays = this.relayClient.getConnectedRelays();
-      console.log('✅ NIP-46: Connected to relay(s):', connectedRelays);
+      this.debugLog('✅ NIP-46: Connected to relay(s):', connectedRelays);
 
       // Verify the primary relay is actually connected
       if (!connectedRelays.includes(relayUrl)) {
@@ -660,11 +682,11 @@ export class NIP46Client {
         throw new Error(errorMsg);
       }
 
-      console.log(`✅ NIP-46: Primary relay ${relayUrl} is connected and ready`);
+      this.debugLog(`✅ NIP-46: Primary relay ${relayUrl} is connected and ready`);
       if (backupRelays.length > 0) {
         const connectedBackups = backupRelays.filter(url => connectedRelays.includes(url));
         if (connectedBackups.length > 0) {
-          console.log(`✅ NIP-46: Also connected to ${connectedBackups.length} backup relay(s):`, connectedBackups);
+          this.debugLog(`✅ NIP-46: Also connected to ${connectedBackups.length} backup relay(s):`, connectedBackups);
         } else {
           console.warn(`⚠️ NIP-46: No backup relays connected, but primary relay is ready`);
         }
@@ -679,12 +701,12 @@ export class NIP46Client {
     
     // Track subscription start time for debugging
     const subscriptionStartTime = Date.now();
-    console.log('📡 NIP-46: Creating subscription at', new Date(subscriptionStartTime).toISOString());
+    this.debugLog('📡 NIP-46: Creating subscription at', new Date(subscriptionStartTime).toISOString());
     
     // CRITICAL: Ensure relay is configured for reading before subscribing
     // The relay must be connected with read: true for subscriptions to work
     // RelayManager.subscribe() filters by read relays, so we need to verify the relay is configured correctly
-    console.log('🔍 NIP-46: Verifying relay configuration for subscription...', {
+    this.debugLog('🔍 NIP-46: Verifying relay configuration for subscription...', {
       relayUrl,
       subscribeRelays,
       hasRelayClient: !!this.relayClient,
@@ -692,12 +714,11 @@ export class NIP46Client {
       note: 'Relay must be configured with read: true for subscriptions to work',
     });
     
-    // IMPORTANT: Wait longer for relay to fully establish connection
-    // WebSocket connections need time to fully open and be ready for subscriptions
-    // Increased from 500ms to 2 seconds to ensure relay is fully ready
-    console.log('⏳ NIP-46: Waiting for relay(s) to be fully ready before subscribing...');
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    console.log('✅ NIP-46: Relay(s) should be ready now, creating subscription...');
+    // Wait for relay to be fully ready before subscribing
+    // Relay is already verified connected by connectToRelays() above, so 500ms is sufficient
+    const subscriptionDelay = isBunkerConnection ? 1000 : 500;
+    this.debugLog(`⏳ NIP-46: Waiting ${subscriptionDelay}ms for relay(s) to be fully ready...`);
+    await new Promise(resolve => setTimeout(resolve, subscriptionDelay));
     
     
     this.relaySubscription = this.relayClient.subscribe({
@@ -707,7 +728,7 @@ export class NIP46Client {
         try {
           // LOG EVERY EVENT RECEIVED (for debugging Aegis connection)
           const eventPTags = event.tags.filter(t => t[0] === 'p').map(t => t[1]);
-          console.log('📨 NIP-46: RAW EVENT RECEIVED:', {
+          this.debugLog('📨 NIP-46: RAW EVENT RECEIVED:', {
             eventId: event.id.slice(0, 16) + '...',
             kind: event.kind,
             from: event.pubkey.slice(0, 16) + '...',
@@ -748,7 +769,7 @@ export class NIP46Client {
           // Log for bunker relay debugging
           const bunkerRelayUrl = (this.connection as any)?.relayUrl;
           if (bunkerRelayUrl && bunkerRelayUrl.includes('localrelay')) {
-            console.log('🎯 NIP-46: Event received (bunker relay in use):', {
+            this.debugLog('🎯 NIP-46: Event received (bunker relay in use):', {
               eventId: event.id.slice(0, 16) + '...',
               totalEventsNow: this.eventCounter,
               bunkerRelay: bunkerRelayUrl,
@@ -785,7 +806,7 @@ export class NIP46Client {
             // Event is from an unknown signer - silently ignore it
             // Only log occasionally to avoid spam
             if (this.eventCounter % 10 === 0) {
-              console.log(`🚫 NIP-46: Ignoring event from unknown signer ${event.pubkey.slice(0, 16)}... (expected ${knownSignerPubkey.slice(0, 16)}...)`);
+              this.debugLog(`🚫 NIP-46: Ignoring event from unknown signer ${event.pubkey.slice(0, 16)}... (expected ${knownSignerPubkey.slice(0, 16)}...)`);
             }
             return;
           }
@@ -793,7 +814,7 @@ export class NIP46Client {
           // For bunker:// connections, store the actual signer app pubkey from the first response we can decrypt
           if (isBunkerConnection && !actualSignerAppPubkey && hasPendingRequests && !isFromUs) {
             // This might be the signer's response - try to decrypt and if successful, store their pubkey
-            console.log(`🔍 NIP-46: Bunker connection - checking if event from ${event.pubkey.slice(0, 16)}... is from our signer`);
+            this.debugLog(`🔍 NIP-46: Bunker connection - checking if event from ${event.pubkey.slice(0, 16)}... is from our signer`);
           }
 
           // Also check all 'p' tags to see what pubkeys are tagged
@@ -863,14 +884,14 @@ export class NIP46Client {
           
           // Process events from known signer (either hardcoded Amber or connected signer)
           if (isFromKnownAmber || isFromConnectedSigner) {
-            console.log(`✅ NIP-46: Processing event from known signer: ${event.pubkey.slice(0, 16)}...`);
-            this.handleRelayEvent(event, connectionInfo);
+            this.debugLog(`✅ NIP-46: Processing event from known signer: ${event.pubkey.slice(0, 16)}...`);
+            this.handleRelayEvent(event, connectionInfo, decryptionSucceeded ? decryptedContent : undefined);
             return;
           }
 
           // Process connection events
           if (decryptionSucceeded && looksLikeConnectionEvent) {
-            this.handleRelayEvent(event, connectionInfo);
+            this.handleRelayEvent(event, connectionInfo, decryptedContent);
             return;
           }
           
@@ -896,26 +917,26 @@ export class NIP46Client {
         
         if (isForUs && !isFromUs) {
           // Event is tagged for us - definitely process it
-          console.log('✅ NIP-46: Event passed filter, processing...');
-          this.handleRelayEvent(event, connectionInfo);
+          this.debugLog('✅ NIP-46: Event passed filter, processing...');
+          this.handleRelayEvent(event, connectionInfo, decryptionSucceeded ? decryptedContent : undefined);
         } else if (isFromUs) {
-          console.log('ℹ️ NIP-46: Ignoring event from us (our own request)');
+          this.debugLog('ℹ️ NIP-46: Ignoring event from us (our own request)');
         } else if (!isForUs && !isFromUs) {
           // Event not tagged for us - when waiting for connection, be more permissive
           // Process events with encrypted content that might be connection events
           // This is critical for detecting Amber's connection when events aren't properly tagged
           const isWaitingForConnection = !hasActiveConnection && !hasPendingRequests;
-          
+
           if (isWaitingForConnection) {
             // When waiting for connection, process events with encrypted content
             // They might be connection events from Amber that aren't tagged properly
             if (decryptionSucceeded && looksLikeConnectionEvent) {
-              console.log('🔍 NIP-46: Processing untagged event while waiting for connection (looks like connection event)');
-              this.handleRelayEvent(event, connectionInfo);
+              this.debugLog('🔍 NIP-46: Processing untagged event while waiting for connection (looks like connection event)');
+              this.handleRelayEvent(event, connectionInfo, decryptedContent);
               return;
             } else if (hasEncryptedContent && !decryptionSucceeded) {
               // Try to decrypt - might be a connection event
-              console.log('🔍 NIP-46: Attempting to process untagged encrypted event while waiting for connection');
+              this.debugLog('🔍 NIP-46: Attempting to process untagged encrypted event while waiting for connection');
               this.handleRelayEvent(event, connectionInfo);
               return;
             }
@@ -1038,7 +1059,7 @@ export class NIP46Client {
           }
 
           if (this.pubkeyMismatchCount < 3) {
-            console.log('ℹ️ NIP-46: Event received but not tagged for us. Event details:', {
+            this.debugLog('ℹ️ NIP-46: Event received but not tagged for us. Event details:', {
               eventId: event.id.slice(0, 16) + '...',
               eventPubkey: event.pubkey.slice(0, 16) + '...',
               allPTags: allPTags.map(p => p.slice(0, 16) + '...'),
@@ -1073,7 +1094,7 @@ export class NIP46Client {
                     // Still failed, try plain JSON
                     try {
                       content = JSON.parse(event.content);
-                      console.log('📋 NIP-46: Parsed untagged event as plain JSON');
+                      this.debugLog('📋 NIP-46: Parsed untagged event as plain JSON');
                     } catch (jsonErr) {
                       throw decryptErr; // Re-throw original error
                     }
@@ -1082,7 +1103,7 @@ export class NIP46Client {
                   // Try plain JSON
                   try {
                     content = JSON.parse(event.content);
-                    console.log('📋 NIP-46: Parsed untagged event as plain JSON');
+                    this.debugLog('📋 NIP-46: Parsed untagged event as plain JSON');
                   } catch (jsonErr) {
                     throw decryptErr; // Re-throw original error
                   }
@@ -1115,7 +1136,7 @@ export class NIP46Client {
               const mightBeSignEventResponse = looksLikeSignature && hasPendingSignEvent;
               
               if (mightBeConnection || isResponseToPending || mightBeGetPublicKeyResponse || mightBeSignEventResponse) {
-                console.log('⚠️ NIP-46: Event looks like a connection/response event but not tagged for us. Processing anyway...', {
+                this.debugLog('⚠️ NIP-46: Event looks like a connection/response event but not tagged for us. Processing anyway...', {
                   mightBeConnection,
                   isResponseToPending,
                   mightBeGetPublicKeyResponse,
@@ -1127,17 +1148,17 @@ export class NIP46Client {
                   looksLikeGetPublicKeyResponse,
                   looksLikeSignature,
                 });
-                this.handleRelayEvent(event, connectionInfo);
+                this.handleRelayEvent(event, connectionInfo, content);
               } else if (hasPendingGetPublicKey && content.result) {
                 // AGGRESSIVE: If we have pending get_public_key and this has ANY result, try processing it
-                this.handleRelayEvent(event, connectionInfo);
+                this.handleRelayEvent(event, connectionInfo, content);
               } else if (hasPendingSignEvent && content.result && looksLikeSignature) {
                 // AGGRESSIVE: If we have pending sign_event and this looks like a signature, try processing it
-                this.handleRelayEvent(event, connectionInfo);
+                this.handleRelayEvent(event, connectionInfo, content);
               } else {
                 const hasPendingSignEvent = Array.from(this.pendingRequests.values()).some(p => p.method === 'sign_event');
                 if (hasPendingSignEvent) {
-                  console.log('⚠️ NIP-46: Event is not for us and not a connection/response event, but we have pending sign_event. Event details:', {
+                  this.debugLog('⚠️ NIP-46: Event is not for us and not a connection/response event, but we have pending sign_event. Event details:', {
                     eventId: event.id.slice(0, 16) + '...',
                     eventPubkey: event.pubkey.slice(0, 16) + '...',
                     kind: event.kind,
@@ -1146,7 +1167,7 @@ export class NIP46Client {
                     note: 'This event was ignored, but we are waiting for a sign_event response. If Amber sent a response, it might be in a different format.',
                   });
                 } else {
-                  console.log('ℹ️ NIP-46: Event is not for us and not a connection/response event, ignoring');
+                  this.debugLog('ℹ️ NIP-46: Event is not for us and not a connection/response event, ignoring');
                 }
               }
             } catch (e) {
@@ -1163,7 +1184,7 @@ export class NIP46Client {
                 }
               }
               
-              console.log('ℹ️ NIP-46: Event content is not parseable, ignoring:', e instanceof Error ? e.message : String(e));
+              this.debugLog('ℹ️ NIP-46: Event content is not parseable, ignoring:', e instanceof Error ? e.message : String(e));
             }
           }
         } catch (eventError) {
@@ -1174,8 +1195,8 @@ export class NIP46Client {
         }
       },
       onEose: () => {
-        console.log('✅ NIP-46: Subscription EOSE (End of Stored Events)');
-        console.log('📊 NIP-46: Subscription statistics:', {
+        this.debugLog('✅ NIP-46: Subscription EOSE (End of Stored Events)');
+        this.debugLog('📊 NIP-46: Subscription statistics:', {
           pendingRequests: this.pendingRequests.size,
           pendingRequestIds: Array.from(this.pendingRequests.keys()),
           hasConnection: !!this.connection,
@@ -1195,20 +1216,17 @@ export class NIP46Client {
       },
     });
 
-    console.log('✅ NIP-46: Subscription created successfully. Listening for connection on relay:', relayUrl);
-    console.log('📋 NIP-46: Subscription details:', {
-      relayUrl,
-      filtersCount: filters.length,
-      appPubkey: appPubkey.slice(0, 16) + '...',
-      hasSubscription: !!this.relaySubscription,
-    });
+    this.debugLog('✅ NIP-46: Subscription created successfully. Listening for connection on relay:', relayUrl);
+
+    // Start periodic cleanup for orphaned pending requests
+    this.startPendingRequestCleanup();
 
     // For bunker:// URIs (Aegis, nsecbunker), the connect request is sent in connectBunker()
     // For nostrconnect:// URIs, wait for the signer to initiate the connection
     if ((this.connection as any).signerPubkey && !this.connection.pubkey) {
-      console.log('🔑 NIP-46: Bunker connection - subscription ready, connect request will be sent by connectBunker()');
+      this.debugLog('🔑 NIP-46: Bunker connection - subscription ready, connect request will be sent by connectBunker()');
     } else if (!this.connection.pubkey) {
-      console.log('⏳ NIP-46: Waiting for signer to initiate connection (nostrconnect:// flow)...');
+      this.debugLog('⏳ NIP-46: Waiting for signer to initiate connection (nostrconnect:// flow)...');
     }
   }
 
@@ -1251,7 +1269,7 @@ export class NIP46Client {
       // For connect requests without signer pubkey, use plain JSON (not encrypted)
       // This allows Amber to read the connection token/secret and respond
       encryptedContent = requestJson;
-      console.log('🔓 NIP-46: Using PLAIN TEXT for connect request (no signer pubkey available):', {
+      this.debugLog('🔓 NIP-46: Using PLAIN TEXT for connect request (no signer pubkey available):', {
         method,
         requestId,
         contentLength: encryptedContent.length,
@@ -1278,7 +1296,7 @@ export class NIP46Client {
         // Encrypt using the conversation key
         encryptedContent = nip44.encrypt(requestJson, conversationKey);
         
-        console.log('🔐 NIP-46: Encrypted request content with NIP-44:', {
+        this.debugLog('🔐 NIP-46: Encrypted request content with NIP-44:', {
           method,
           requestId,
           originalLength: requestJson.length,
@@ -1308,7 +1326,7 @@ export class NIP46Client {
     // Note: For get_public_key without signer pubkey, we intentionally don't add a p tag
     // so that Amber can find it by listening to all kind 24133 events
 
-    console.log('🏗️ NIP-46: Creating event with:', {
+    this.debugLog('🏗️ NIP-46: Creating event with:', {
       method,
       requestId,
       hasPTag: !!signerPubkey,
@@ -1333,7 +1351,7 @@ export class NIP46Client {
   /**
    * Handle events received from the relay
    */
-  private handleRelayEvent(event: Event, connectionInfo: any): void {
+  private handleRelayEvent(event: Event, connectionInfo: any, preDecrypted?: any): void {
     try {
       // EARLY EXIT: If we've already detected a pubkey mismatch, stop processing to prevent error loops
       if (this.mismatchDetected) {
@@ -1373,33 +1391,38 @@ export class NIP46Client {
       // Process relay event
 
       // Parse NIP-46 event content
-      // According to NIP-46 spec, content is NIP-44 encrypted JSON-RPC message
-      // We need to decrypt it first using the app's private key and signer's public key
+      // Use pre-decrypted content if available (avoids double decryption)
       let content;
       let decryptedContent: string | null = null;
-      
+
+      if (preDecrypted) {
+        content = preDecrypted;
+        decryptedContent = JSON.stringify(preDecrypted);
+      }
+
+      if (!content) {
       try {
         // First, try to decrypt as NIP-44 encrypted content
         // The content is encrypted from signer's pubkey to our app's pubkey
         const signerPubkey = event.pubkey; // The signer's public key (who sent this event)
         const appPrivateKey = connectionInfo.privateKey; // Our app's private key
-        
-        console.log('🔐 NIP-46: Attempting to decrypt NIP-44 content:', {
+
+        this.debugLog('🔐 NIP-46: Attempting to decrypt NIP-44 content:', {
           signerPubkey: signerPubkey.slice(0, 16) + '...',
           hasAppPrivateKey: !!appPrivateKey,
           contentLength: event.content.length,
           contentPreview: event.content.substring(0, 50) + '...',
         });
-        
+
         try {
           // Decrypt using NIP-44 v2 API
           // Convert private key from hex string to Uint8Array
           const appPrivateKeyBytes = hexToBytes(appPrivateKey);
-          
+
           // Get conversation key using NIP-44 v2 API
           // The content is encrypted from signer's pubkey to our app's pubkey
           const conversationKey = nip44.getConversationKey(appPrivateKeyBytes, signerPubkey);
-          
+
           // Decrypt using the conversation key
           decryptedContent = nip44.decrypt(event.content, conversationKey);
           
@@ -1439,27 +1462,54 @@ export class NIP46Client {
               // Try to decrypt with historical keypairs
               const keyPairHistory = getAppKeyPairHistory();
 
-              // Try each historical keypair
-              for (const oldKeyPair of keyPairHistory) {
-                if (pTagPubkey === oldKeyPair.publicKey) {
+              // Try last-successful keypair first (cached index) to avoid linear search
+              if (this.lastSuccessfulKeyPairIndex >= 0 && this.lastSuccessfulKeyPairIndex < keyPairHistory.length) {
+                const cached = keyPairHistory[this.lastSuccessfulKeyPairIndex];
+                if (pTagPubkey === cached.publicKey) {
                   try {
-                    const oldAppPrivateKeyBytes = hexToBytes(oldKeyPair.privateKey);
-                    const conversationKey = nip44.getConversationKey(oldAppPrivateKeyBytes, signerPubkey);
+                    const cachedKeyBytes = hexToBytes(cached.privateKey);
+                    const conversationKey = nip44.getConversationKey(cachedKeyBytes, signerPubkey);
                     decryptedContent = nip44.decrypt(event.content, conversationKey);
                     content = JSON.parse(decryptedContent);
-
-                    // Update localStorage to use this old keypair so future events work
-                    localStorage.setItem('nostr_nip46_app_keypair', JSON.stringify(oldKeyPair));
-
-                    // Update connectionInfo reference
+                    // Update localStorage and connectionInfo
+                    localStorage.setItem('nostr_nip46_app_keypair', JSON.stringify(cached));
                     if (connectionInfo) {
-                      connectionInfo.privateKey = oldKeyPair.privateKey;
-                      connectionInfo.publicKey = oldKeyPair.publicKey;
+                      connectionInfo.privateKey = cached.privateKey;
+                      connectionInfo.publicKey = cached.publicKey;
                     }
+                  } catch {
+                    // Cached keypair failed, fall through to linear search
+                  }
+                }
+              }
 
-                    break; // Successfully decrypted, stop trying
-                  } catch (oldKeyErr) {
-                    // Continue to next keypair
+              // Linear search through remaining keypairs if cache miss
+              if (!decryptedContent) {
+                for (let i = 0; i < keyPairHistory.length; i++) {
+                  const oldKeyPair = keyPairHistory[i];
+                  if (pTagPubkey === oldKeyPair.publicKey) {
+                    try {
+                      const oldAppPrivateKeyBytes = hexToBytes(oldKeyPair.privateKey);
+                      const conversationKey = nip44.getConversationKey(oldAppPrivateKeyBytes, signerPubkey);
+                      decryptedContent = nip44.decrypt(event.content, conversationKey);
+                      content = JSON.parse(decryptedContent);
+
+                      // Cache this index for next time
+                      this.lastSuccessfulKeyPairIndex = i;
+
+                      // Update localStorage to use this old keypair so future events work
+                      localStorage.setItem('nostr_nip46_app_keypair', JSON.stringify(oldKeyPair));
+
+                      // Update connectionInfo reference
+                      if (connectionInfo) {
+                        connectionInfo.privateKey = oldKeyPair.privateKey;
+                        connectionInfo.publicKey = oldKeyPair.publicKey;
+                      }
+
+                      break; // Successfully decrypted, stop trying
+                    } catch (oldKeyErr) {
+                      // Continue to next keypair
+                    }
                   }
                 }
               }
@@ -1488,7 +1538,7 @@ export class NIP46Client {
                   import('./nip46-storage').then(({ clearNIP46ConnectionForUser }) => {
                     try {
                       clearNIP46ConnectionForUser(this.connection!.pubkey!);
-                      console.log(`[NIP46-SIGNER-CACHE] ✅ Cleared saved connection - user will need to reconnect`);
+                      this.debugLog(`[NIP46-SIGNER-CACHE] ✅ Cleared saved connection - user will need to reconnect`);
                       // Disconnect this client so it can be re-established fresh
                       if (this.connection) {
                         this.connection.connected = false;
@@ -1519,7 +1569,7 @@ export class NIP46Client {
           if (!decryptedContent) {
             try {
               content = JSON.parse(event.content);
-              console.log('📋 NIP-46: Parsed content as plain JSON (not encrypted):', {
+              this.debugLog('📋 NIP-46: Parsed content as plain JSON (not encrypted):', {
                 hasId: 'id' in content,
                 hasResult: 'result' in content,
                 hasError: 'error' in content,
@@ -1550,7 +1600,7 @@ export class NIP46Client {
                   import('./nip46-storage').then(({ clearNIP46ConnectionForUser }) => {
                     try {
                       clearNIP46ConnectionForUser(this.connection!.pubkey!);
-                      console.log(`[NIP46-SIGNER-CACHE] ✅ Cleared saved connection - user will need to reconnect`);
+                      this.debugLog(`[NIP46-SIGNER-CACHE] ✅ Cleared saved connection - user will need to reconnect`);
                       // Disconnect this client so it can be re-established fresh
                       if (this.connection) {
                         this.connection.connected = false;
@@ -1585,14 +1635,14 @@ export class NIP46Client {
       } catch (parseError) {
         // Check if it's a plain text signature (64 char hex)
         if (event.content.length === 64 && /^[a-f0-9]{64}$/i.test(event.content)) {
-          console.log('✅ NIP-46: Event content appears to be a signature, creating response object');
+          this.debugLog('✅ NIP-46: Event content appears to be a signature, creating response object');
           content = { 
             id: event.id, // Use event ID as request ID
             result: event.content 
           };
         } else if (event.content === 'network-check') {
           // Ignore network-check messages
-          console.log('ℹ️ NIP-46: Ignoring network-check message');
+          this.debugLog('ℹ️ NIP-46: Ignoring network-check message');
           return;
         } else {
           console.error('❌ NIP-46: Failed to parse event content (neither NIP-44 encrypted nor plain JSON):', {
@@ -1607,11 +1657,12 @@ export class NIP46Client {
           return;
         }
       }
+      } // end if (!content) - pre-decrypted content was available
 
       // IMPORTANT: Skip events that are requests (have 'method' field) - these are our own requests
       // We only want to process responses (have 'result' or 'error' field)
       if (content.method && !content.result && !content.error) {
-        console.log('ℹ️ NIP-46: Ignoring request event (this is our own request, not a response):', {
+        this.debugLog('ℹ️ NIP-46: Ignoring request event (this is our own request, not a response):', {
           method: content.method,
           id: content.id,
         });
@@ -1712,7 +1763,7 @@ export class NIP46Client {
                 // Verify the pubkey by converting to npub for user verification
                 try {
                   const npub = publicKeyToNpub(extractedPubkey);
-                  console.log(`[NIP46-GETPUBKEY] User\'s pubkey converts to npub: ${npub}`);
+                  this.debugLog(`[NIP46-GETPUBKEY] User\'s pubkey converts to npub: ${npub}`);
                 } catch (e) {
                   console.error(`[NIP46-GETPUBKEY] Failed to convert pubkey to npub:`, e);
                 }
@@ -1728,9 +1779,9 @@ export class NIP46Client {
       }
       
       if (isAmberCompatible) {
-        console.log(`[NIP46-SIGNER] Event #${this.eventCounter} is Amber-compatible response`);
-        console.log('🔵 [NIP46Client] Amber-compatible response (no method field), inferring type from context');
-        console.log('🔵 [NIP46Client] Handling Amber-compatible response', {
+        this.debugLog(`[NIP46-SIGNER] Event #${this.eventCounter} is Amber-compatible response`);
+        this.debugLog('🔵 [NIP46Client] Amber-compatible response (no method field), inferring type from context');
+        this.debugLog('🔵 [NIP46Client] Handling Amber-compatible response', {
           hasResult: !!content.result,
           resultType: typeof content.result,
           resultLength: typeof content.result === 'string' ? content.result.length : 'N/A',
@@ -1746,15 +1797,15 @@ export class NIP46Client {
         if (content.result) {
           // Check if this is a connect response (result matches the secret)
           if (this.connection?.token && content.result === this.connection.token) {
-            console.log(`[NIP46-CONNECT] Event #${this.eventCounter} is CONNECT response - secret matches!`);
-            console.log('🔵 [NIP46Client] Inferred connect response from secret match');
+            this.debugLog(`[NIP46-CONNECT] Event #${this.eventCounter} is CONNECT response - secret matches!`);
+            this.debugLog('🔵 [NIP46Client] Inferred connect response from secret match');
             // This is a connect response - the result is the secret, which confirms connection
             // We still need to get the public key, so we'll handle this in the connection event section
             // For now, mark that we've received the connect confirmation
           } 
           // Check if this is a get_public_key response (result is a 64-char hex string OR a JSON string containing the pubkey)
           else if (looksLikeGetPublicKeyResponse) {
-            console.log('🔵 [NIP46Client] Inferred get_public_key response from string pubkey (Amber compatibility)');
+            this.debugLog('🔵 [NIP46Client] Inferred get_public_key response from string pubkey (Amber compatibility)');
             // This is a get_public_key response - the result is the pubkey
             // Try to resolve any pending get_public_key requests immediately
             const pendingGetPublicKeyRequest = Array.from(this.pendingRequests.entries()).find(([reqId, pending]) => {
@@ -1764,8 +1815,8 @@ export class NIP46Client {
             if (pendingGetPublicKeyRequest && extractedPubkey) {
               const [reqId, pending] = pendingGetPublicKeyRequest;
               
-              console.log(`[NIP46-GETPUBKEY] Resolving get_public_key with pubkey: ${extractedPubkey.slice(0, 16)}...`);
-              console.log('🔵 [NIP46Client] Found pending get_public_key request, resolving immediately:', {
+              this.debugLog(`[NIP46-GETPUBKEY] Resolving get_public_key with pubkey: ${extractedPubkey.slice(0, 16)}...`);
+              this.debugLog('🔵 [NIP46Client] Found pending get_public_key request, resolving immediately:', {
                 requestId: reqId,
                 responseId: content.id || 'no-id',
                 pubkey: extractedPubkey.slice(0, 16) + '...',
@@ -1789,7 +1840,7 @@ export class NIP46Client {
 
       // Check if this is a response to a pending request
       if (content.id) {
-        console.log('🔍 NIP-46: Checking if response matches pending request:', {
+        this.debugLog('🔍 NIP-46: Checking if response matches pending request:', {
           responseId: content.id,
           pendingRequestIds: Array.from(this.pendingRequests.keys()),
           pendingRequestMethods: Array.from(this.pendingRequests.values()).map(p => p.method),
@@ -1799,7 +1850,7 @@ export class NIP46Client {
         if (this.pendingRequests.has(content.id)) {
           // Log all pending request IDs for debugging
           const pendingRequestIds = Array.from(this.pendingRequests.keys());
-          console.log('🔍 NIP-46: Checking for matching pending request:', {
+          this.debugLog('🔍 NIP-46: Checking for matching pending request:', {
             responseId: content.id,
             pendingRequestIds,
             hasMatchingRequest: this.pendingRequests.has(content.id),
@@ -1810,15 +1861,25 @@ export class NIP46Client {
           if (pending) {
             this.pendingRequests.delete(content.id);
 
+            // Adaptive rate limiting: update average response time
+            const requestStartTime = (pending as any).startTime;
+            if (requestStartTime) {
+              const actualResponseTime = Date.now() - requestStartTime;
+              this.avgResponseTimeMs = Math.max(
+                this.MIN_RATE_LIMIT_MS,
+                Math.min(this.MAX_RATE_LIMIT_MS, (this.avgResponseTimeMs + actualResponseTime) / 2)
+              );
+            }
+
             // For bunker:// connections, store the actual signer app pubkey from successful responses
             // This allows us to filter out noise from other signers after we know who we're talking to
             const isBunkerConn = this.connection?.signerUrl?.startsWith('bunker://');
             if (isBunkerConn && this.connection && !(this.connection as any).actualSignerAppPubkey) {
               (this.connection as any).actualSignerAppPubkey = event.pubkey;
-              console.log(`🔑 NIP-46: Stored actual signer app pubkey for bunker connection: ${event.pubkey.slice(0, 16)}...`);
+              this.debugLog(`🔑 NIP-46: Stored actual signer app pubkey for bunker connection: ${event.pubkey.slice(0, 16)}...`);
             }
 
-            console.log('✅ NIP-46: Found matching pending request, processing response:', {
+            this.debugLog('✅ NIP-46: Found matching pending request, processing response:', {
               requestId: content.id,
               requestMethod: pending.method,
               responseMethod: content.method,
@@ -1830,7 +1891,7 @@ export class NIP46Client {
             
             // Special logging for sign_event responses
             if (pending.method === 'sign_event') {
-              console.log('🎉 [NIP46-SIGN] SIGN_EVENT RESPONSE RECEIVED!', {
+              this.debugLog('🎉 [NIP46-SIGN] SIGN_EVENT RESPONSE RECEIVED!', {
                 requestId: content.id,
                 hasResult: !!content.result,
                 resultType: typeof content.result,
@@ -1847,7 +1908,7 @@ export class NIP46Client {
               // "already connected" is actually success for connect requests
               // Amber returns this when the connection is already approved
               if (pending.method === 'connect' && errorStr.includes('already connected')) {
-                console.log('✅ NIP-46: "already connected" response - treating as success for connect request');
+                this.debugLog('✅ NIP-46: "already connected" response - treating as success for connect request');
                 if ((pending as any).statusInterval) {
                   clearInterval((pending as any).statusInterval);
                 }
@@ -1860,7 +1921,7 @@ export class NIP46Client {
                 pending.reject(new Error(`NIP-46 error: ${content.error.message || content.error} (code: ${content.error.code || 'unknown'})`));
               }
             } else {
-              console.log('✅ NIP-46: Resolving pending request:', {
+              this.debugLog('✅ NIP-46: Resolving pending request:', {
                 id: content.id,
                 resultType: typeof content.result,
                 resultIsString: typeof content.result === 'string',
@@ -1887,7 +1948,7 @@ export class NIP46Client {
                   try {
                     const parsedContent = JSON.parse(event.content);
                     if (parsedContent.result !== undefined) {
-                      console.log('✅ NIP-46: Found result in parsed event.content:', parsedContent.result);
+                      this.debugLog('✅ NIP-46: Found result in parsed event.content:', parsedContent.result);
                       if ((pending as any).statusInterval) {
                         clearInterval((pending as any).statusInterval);
                       }
@@ -1897,7 +1958,7 @@ export class NIP46Client {
                   } catch (e) {
                     // Not JSON, might be plain text
                     if (event.content.length === 64 && /^[a-f0-9]{64}$/i.test(event.content)) {
-                      console.log('✅ NIP-46: Event content appears to be a signature:', event.content.slice(0, 16) + '...');
+                      this.debugLog('✅ NIP-46: Event content appears to be a signature:', event.content.slice(0, 16) + '...');
                       if ((pending as any).statusInterval) {
                         clearInterval((pending as any).statusInterval);
                       }
@@ -1913,7 +1974,7 @@ export class NIP46Client {
               } else {
                 // For connect requests with "ack" result, resolve immediately so authenticate() can proceed
                 if (pending.method === 'connect' && content.result === 'ack') {
-                  console.log('✅ NIP-46: Connect request received "ack" - resolving to proceed with get_public_key');
+                  this.debugLog('✅ NIP-46: Connect request received "ack" - resolving to proceed with get_public_key');
                   if ((pending as any).statusInterval) {
                     clearInterval((pending as any).statusInterval);
                   }
@@ -1951,7 +2012,7 @@ export class NIP46Client {
             return;
           }
         } else {
-          console.log('⚠️ NIP-46: Response ID does not match any pending request:', {
+          this.debugLog('⚠️ NIP-46: Response ID does not match any pending request:', {
             responseId: content.id,
             responseIdType: typeof content.id,
             responseIdLength: typeof content.id === 'string' ? content.id.length : 'N/A',
@@ -1976,7 +2037,7 @@ export class NIP46Client {
             
             if (pendingGetPublicKeyRequest) {
               const [reqId, pending] = pendingGetPublicKeyRequest;
-              console.log('🔵 [NIP46Client] Amber fallback: Resolving get_public_key request despite ID mismatch:', {
+              this.debugLog('🔵 [NIP46Client] Amber fallback: Resolving get_public_key request despite ID mismatch:', {
                 responseId: content.id || 'no-id',
                 requestId: reqId,
                 pubkey: content.result.slice(0, 16) + '...',
@@ -2019,7 +2080,7 @@ export class NIP46Client {
                 if (parsed && typeof parsed === 'object' && 'sig' in parsed && typeof parsed.sig === 'string') {
                   looksLikeSignatureResponse = true;
                   signatureValue = content.result; // Pass the full JSON string, signEvent will parse it
-                  console.log('🔵 [NIP46Client] Amber fallback: Detected sign_event response as JSON string with full event');
+                  this.debugLog('🔵 [NIP46Client] Amber fallback: Detected sign_event response as JSON string with full event');
                 }
               } catch (e) {
                 // Not valid JSON, ignore
@@ -2035,7 +2096,7 @@ export class NIP46Client {
             
             if (pendingSignEventRequest) {
               const [reqId, pending] = pendingSignEventRequest;
-              console.log('🔵 [NIP46Client] Amber fallback: Resolving sign_event request (ID may not match):', {
+              this.debugLog('🔵 [NIP46Client] Amber fallback: Resolving sign_event request (ID may not match):', {
                 responseId: content.id || 'no-id',
                 requestId: reqId,
                 resultLength: content.result?.length || 0,
@@ -2103,7 +2164,7 @@ export class NIP46Client {
         (content.result && typeof content.result === 'string' && content.result.length === 64 && /^[a-f0-9]{64}$/i.test(content.result)) ||
         (event.content && event.content.length === 64 && /^[a-f0-9]{64}$/i.test(event.content));
 
-      console.log('🔍 NIP-46: Checking if event is connection event:', {
+      this.debugLog('🔍 NIP-46: Checking if event is connection event:', {
         isConnectionEvent,
         isConnectResponse,
         isGetPublicKeyResponse,
@@ -2126,8 +2187,8 @@ export class NIP46Client {
       const hasPendingGetPublicKey = Array.from(this.pendingRequests.values()).some(req => req.method === 'get_public_key');
 
       if (isConnectResponse && !hasUserPubkey && !alreadyProcessedConnect && !hasPendingGetPublicKey) {
-        console.log(`[NIP46-CONNECT] Event #${this.eventCounter} - CONNECT response detected! Requesting public key...`);
-        console.log('🔵 [NIP46Client] Connect response received, requesting public key from', event.pubkey.slice(0, 16) + '...');
+        this.debugLog(`[NIP46-CONNECT] Event #${this.eventCounter} - CONNECT response detected! Requesting public key...`);
+        this.debugLog('🔵 [NIP46Client] Connect response received, requesting public key from', event.pubkey.slice(0, 16) + '...');
 
         // CRITICAL: Store the SIGNER's pubkey from the connect response event so we can filter subsequent events
         // This is the signer app's pubkey (Primal, Amber, etc.) - NOT the user's Nostr account pubkey
@@ -2137,14 +2198,14 @@ export class NIP46Client {
           (this.connection as any).signerPubkey = event.pubkey;
           this.connection.connected = true; // Mark as connected
           console.error(`[NIP46-CONNECT] Stored signer's pubkey for event filtering: ${event.pubkey.slice(0, 16)}...`);
-          console.log(`🔑 NIP-46: Will only process events from this signer pubkey: ${event.pubkey}`);
+          this.debugLog(`🔑 NIP-46: Will only process events from this signer pubkey: ${event.pubkey}`);
         }
 
         // Request public key and wait for it to complete
         // CRITICAL: We need to resolve any pending connect requests with the actual pubkey, not "ack"
         this.sendRequest('get_public_key', []).then((pubkey: string) => {
           console.error(`[NIP46-SUCCESS] Got public key from Amber: ${pubkey.slice(0, 16)}...`);
-          console.log('🔵 [NIP46Client] Successfully authenticated with Amber pubkey:', pubkey);
+          this.debugLog('🔵 [NIP46Client] Successfully authenticated with Amber pubkey:', pubkey);
           
           // CRITICAL: Make sure we're using the user's pubkey, not Amber's pubkey
           // The pubkey should be the user's pubkey from the get_public_key response
@@ -2177,9 +2238,9 @@ export class NIP46Client {
               // Check if we already have a connection for this user pubkey (same account, different connection)
               const existingConnection = loadNIP46Connection(pubkey);
               if (existingConnection && existingConnection.token !== this.connection.token) {
-                console.log(`🔄 NIP-46: New connection created for existing user account (pubkey: ${pubkey.slice(0, 16)}...)`);
-                console.log(`📋 NIP-46: This is the same Nostr account, just a new connection token. Old token: ${existingConnection.token.slice(0, 20)}..., New token: ${this.connection.token.slice(0, 20)}...`);
-                console.log(`✅ NIP-46: Recognizing as same account - user pubkey matches: ${pubkey.slice(0, 16)}...`);
+                this.debugLog(`🔄 NIP-46: New connection created for existing user account (pubkey: ${pubkey.slice(0, 16)}...)`);
+                this.debugLog(`📋 NIP-46: This is the same Nostr account, just a new connection token. Old token: ${existingConnection.token.slice(0, 20)}..., New token: ${this.connection.token.slice(0, 20)}...`);
+                this.debugLog(`✅ NIP-46: Recognizing as same account - user pubkey matches: ${pubkey.slice(0, 16)}...`);
               }
               
               saveNIP46Connection({
@@ -2190,7 +2251,7 @@ export class NIP46Client {
                 connectedAt: Date.now(),
                 relayUrl: (this.connection as any).relayUrl, // Save relay URL for bunker:// connections
               });
-              console.log('💾 NIP-46: Saved connection to localStorage:', {
+              this.debugLog('💾 NIP-46: Saved connection to localStorage:', {
                 userPubkey: pubkey.slice(0, 16) + '...',
                 relayUrl: this.connection.signerUrl,
                 note: 'Connection tied to user\'s Nostr account (pubkey), not connection token. Multiple connections with same pubkey = same account.',
@@ -2207,7 +2268,7 @@ export class NIP46Client {
             ([reqId, req]) => req.method === 'connect'
           );
           for (const [reqId, req] of pendingConnectRequests) {
-            console.log('🔵 [NIP46Client] Resolving pending connect request with user pubkey (Nostr account):', pubkey.slice(0, 16) + '...');
+            this.debugLog('🔵 [NIP46Client] Resolving pending connect request with user pubkey (Nostr account):', pubkey.slice(0, 16) + '...');
             this.pendingRequests.delete(reqId);
             if ((req as any).timeout) {
               clearTimeout((req as any).timeout);
@@ -2221,8 +2282,8 @@ export class NIP46Client {
           // Trigger connection callback to complete authentication with server
           // The pubkey here is the user's Nostr account pubkey (from Amber)
           if (this.onConnectionCallback) {
-            console.log('🔵 [NIP46Client] Completing authentication with server for user pubkey (Nostr account):', pubkey.slice(0, 16) + '...');
-            console.log('📋 NIP-46: This is the user\'s Nostr account pubkey from Amber. Multiple connections with same pubkey = same account.');
+            this.debugLog('🔵 [NIP46Client] Completing authentication with server for user pubkey (Nostr account):', pubkey.slice(0, 16) + '...');
+            this.debugLog('📋 NIP-46: This is the user\'s Nostr account pubkey from Amber. Multiple connections with same pubkey = same account.');
             const callback = this.onConnectionCallback;
             this.onConnectionCallback = null; // Clear to prevent duplicate calls
             setTimeout(() => {
@@ -2249,7 +2310,7 @@ export class NIP46Client {
         return; // Don't process as regular connection event yet
       } else if (isConnectResponse && hasPendingGetPublicKey) {
         // authenticate() already sent get_public_key, skip duplicate request from event handler
-        console.log('ℹ️ NIP-46: Skipping duplicate get_public_key request (authenticate() already sent one)');
+        this.debugLog('ℹ️ NIP-46: Skipping duplicate get_public_key request (authenticate() already sent one)');
       }
       
       // Handle Amber get_public_key response - complete connection
@@ -2258,7 +2319,7 @@ export class NIP46Client {
       const wasProcessedAsPendingRequest = content.id && this.pendingRequests.has(content.id);
       if (isGetPublicKeyResponse && content.result && !this.connection?.pubkey && !wasProcessedAsPendingRequest) {
         const pubkey = content.result;
-        console.log('🔵 [NIP46Client] Successfully authenticated with Amber pubkey:', pubkey);
+        this.debugLog('🔵 [NIP46Client] Successfully authenticated with Amber pubkey:', pubkey);
         
         // Store pubkey in connection
         if (this.connection) {
@@ -2276,8 +2337,8 @@ export class NIP46Client {
             // Check if we already have a connection for this user pubkey (same account, different connection)
             const existingConnection = loadNIP46Connection(pubkey);
             if (existingConnection && existingConnection.token !== this.connection.token) {
-              console.log(`🔄 NIP-46: New connection created for existing user account (pubkey: ${pubkey.slice(0, 16)}...)`);
-              console.log(`📋 NIP-46: This is the same Nostr account, just a new connection token. Old token: ${existingConnection.token.slice(0, 20)}..., New token: ${this.connection.token.slice(0, 20)}...`);
+              this.debugLog(`🔄 NIP-46: New connection created for existing user account (pubkey: ${pubkey.slice(0, 16)}...)`);
+              this.debugLog(`📋 NIP-46: This is the same Nostr account, just a new connection token. Old token: ${existingConnection.token.slice(0, 20)}..., New token: ${this.connection.token.slice(0, 20)}...`);
             }
             
             saveNIP46Connection({
@@ -2288,7 +2349,7 @@ export class NIP46Client {
               connectedAt: Date.now(),
               relayUrl: (this.connection as any).relayUrl, // Save relay URL for bunker:// connections
             });
-            console.log('💾 NIP-46: Saved connection to localStorage:', {
+            this.debugLog('💾 NIP-46: Saved connection to localStorage:', {
               userPubkey: pubkey.slice(0, 16) + '...',
               relayUrl: this.connection.signerUrl,
               note: 'Connection tied to user\'s Nostr account (pubkey), not connection token. Multiple connections with same pubkey = same account.',
@@ -2301,8 +2362,8 @@ export class NIP46Client {
         // Trigger connection callback to complete authentication with server
         // The pubkey here is the user's Nostr account pubkey (from Amber)
         if (this.onConnectionCallback) {
-          console.log('🔵 [NIP46Client] Completing authentication with server for user pubkey (Nostr account):', pubkey.slice(0, 16) + '...');
-          console.log('📋 NIP-46: This is the user\'s Nostr account pubkey from Amber. Multiple connections with same pubkey = same account.');
+          this.debugLog('🔵 [NIP46Client] Completing authentication with server for user pubkey (Nostr account):', pubkey.slice(0, 16) + '...');
+          this.debugLog('📋 NIP-46: This is the user\'s Nostr account pubkey from Amber. Multiple connections with same pubkey = same account.');
           const callback = this.onConnectionCallback;
           this.onConnectionCallback = null; // Clear to prevent duplicate calls
           setTimeout(() => {
@@ -2325,8 +2386,8 @@ export class NIP46Client {
           signerPubkey = event.content;
         }
 
-        console.log('✅ NIP-46: Connected via relay, signer pubkey (user\'s Nostr account):', signerPubkey);
-        console.log('📋 NIP-46: Connection details:', {
+        this.debugLog('✅ NIP-46: Connected via relay, signer pubkey (user\'s Nostr account):', signerPubkey);
+        this.debugLog('📋 NIP-46: Connection details:', {
           userPubkey: signerPubkey.slice(0, 16) + '...',
           relayUrl: this.connection?.signerUrl,
           note: 'This is the user\'s Nostr account pubkey from Amber. Multiple connections with same pubkey = same account.',
@@ -2338,7 +2399,7 @@ export class NIP46Client {
           this.connection.connected = true;
           this.connection.connectedAt = Date.now();
           this.connection.pubkey = signerPubkey; // User's pubkey from Amber
-          console.log('💾 NIP-46: Stored user pubkey in connection object:', {
+          this.debugLog('💾 NIP-46: Stored user pubkey in connection object:', {
             hasConnection: !!this.connection,
             hasPubkey: !!this.connection.pubkey,
             userPubkey: this.connection.pubkey.slice(0, 16) + '...',
@@ -2356,9 +2417,9 @@ export class NIP46Client {
             // Check if we already have a connection for this user pubkey (same account, different connection)
             const existingConnection = loadNIP46Connection(signerPubkey);
             if (existingConnection && existingConnection.token !== this.connection.token) {
-              console.log(`🔄 NIP-46: New connection created for existing user account (pubkey: ${signerPubkey.slice(0, 16)}...)`);
-              console.log(`📋 NIP-46: This is the same Nostr account, just a new connection token. Old token: ${existingConnection.token.slice(0, 20)}..., New token: ${this.connection.token.slice(0, 20)}...`);
-              console.log(`✅ NIP-46: Recognizing as same account - user pubkey matches: ${signerPubkey.slice(0, 16)}...`);
+              this.debugLog(`🔄 NIP-46: New connection created for existing user account (pubkey: ${signerPubkey.slice(0, 16)}...)`);
+              this.debugLog(`📋 NIP-46: This is the same Nostr account, just a new connection token. Old token: ${existingConnection.token.slice(0, 20)}..., New token: ${this.connection.token.slice(0, 20)}...`);
+              this.debugLog(`✅ NIP-46: Recognizing as same account - user pubkey matches: ${signerPubkey.slice(0, 16)}...`);
             }
             
             saveNIP46Connection({
@@ -2369,7 +2430,7 @@ export class NIP46Client {
               connectedAt: Date.now(),
               relayUrl: (this.connection as any).relayUrl, // Save relay URL for bunker:// connections
             });
-            console.log('💾 NIP-46: Saved connection to localStorage:', {
+            this.debugLog('💾 NIP-46: Saved connection to localStorage:', {
               userPubkey: signerPubkey.slice(0, 16) + '...',
               relayUrl: this.connection.signerUrl,
               note: 'Connection tied to user\'s Nostr account (pubkey), not connection token. Multiple connections with same pubkey = same account.',
@@ -2383,8 +2444,8 @@ export class NIP46Client {
         // Only call once - clear the callback after use to prevent duplicate calls
         // The signerPubkey here is the user's Nostr account pubkey (from Amber)
         if (this.onConnectionCallback && signerPubkey) {
-          console.log('📞 NIP-46: Calling connection callback with user pubkey (Nostr account):', signerPubkey.slice(0, 16) + '...');
-          console.log('📞 NIP-46: Connection state before callback:', {
+          this.debugLog('📞 NIP-46: Calling connection callback with user pubkey (Nostr account):', signerPubkey.slice(0, 16) + '...');
+          this.debugLog('📞 NIP-46: Connection state before callback:', {
             hasConnection: !!this.connection,
             hasPubkey: !!this.connection?.pubkey,
             userPubkey: signerPubkey.slice(0, 16) + '...',
@@ -2401,7 +2462,7 @@ export class NIP46Client {
           // Use setTimeout to ensure pubkey is fully stored before callback
           setTimeout(() => {
             if (this.connection?.pubkey) {
-              console.log('✅ NIP-46: Pubkey confirmed in connection, invoking callback');
+              this.debugLog('✅ NIP-46: Pubkey confirmed in connection, invoking callback');
               callback(signerPubkey);
             } else {
               console.error('❌ NIP-46: Pubkey not available when calling callback. Connection state:', {
@@ -2411,10 +2472,10 @@ export class NIP46Client {
             }
           }, 100); // Increased delay to ensure pubkey is stored
         } else if (this.connection?.connected && this.connection?.pubkey) {
-          console.log('ℹ️ NIP-46: Connection already established, skipping callback (already connected)');
+          this.debugLog('ℹ️ NIP-46: Connection already established, skipping callback (already connected)');
         }
       } else {
-        console.log('ℹ️ NIP-46: Event received but not a connection event:', content);
+        this.debugLog('ℹ️ NIP-46: Event received but not a connection event:', content);
       }
     } catch (error) {
       console.error('❌ NIP-46: Failed to handle relay event:', error);
@@ -2462,7 +2523,7 @@ export class NIP46Client {
       return false;
     }
 
-    console.log('🔄 NIP-46: Proactive reconnection check (visibility change):', {
+    this.debugLog('🔄 NIP-46: Proactive reconnection check (visibility change):', {
       isIOS,
       staleThreshold: `${staleThreshold / 1000}s`,
       timeSinceLastEvent: timeSinceLastEvent === Infinity ? 'never' : `${Math.floor(timeSinceLastEvent / 1000)}s`,
@@ -2471,9 +2532,20 @@ export class NIP46Client {
     try {
       const relayUrl = this.getRelayUrl();
       if (relayUrl && relayUrl.startsWith('wss://')) {
+        // Check if relay WebSocket is still in OPEN state before full reconnection
+        const connectedRelays = this.relayClient?.getConnectedRelays?.() || [];
+        if (connectedRelays.includes(relayUrl)) {
+          // Relay still connected — just refresh lastEventTime, no teardown needed
+          this.lastEventTime = Date.now();
+          this.debugLog('✅ NIP-46: Relay still connected, refreshed lastEventTime (no reconnection needed)');
+          return false;
+        }
+
+        // Relay disconnected — full reconnect required
+        this.debugLog('🔄 NIP-46: Relay disconnected, performing full reconnection');
         await this.startRelayConnection(relayUrl);
         this.lastEventTime = Date.now();
-        console.log('✅ NIP-46: Proactive reconnection successful');
+        this.debugLog('✅ NIP-46: Proactive reconnection successful');
         return true;
       }
     } catch (err) {
@@ -2501,7 +2573,7 @@ export class NIP46Client {
         const ws = new WebSocket(relayUrl);
 
         ws.onopen = () => {
-          console.log('✅ NIP-46: WebSocket connected');
+          this.debugLog('✅ NIP-46: WebSocket connected');
           this.ws = ws;
           this.reconnectAttempts = 0;
           this.startHeartbeat();
@@ -2509,7 +2581,7 @@ export class NIP46Client {
           // For nsecbunker, pubkey is already known from URI
           // Mark as connected and trigger callback immediately
           if (isNsecbunker && this.connection?.pubkey) {
-            console.log('🔌 NIP-46: nsecbunker connection - pubkey already known from URI:', this.connection.pubkey.slice(0, 16) + '...');
+            this.debugLog('🔌 NIP-46: nsecbunker connection - pubkey already known from URI:', this.connection.pubkey.slice(0, 16) + '...');
             this.connection.connected = true;
             this.connection.connectedAt = Date.now();
             
@@ -2524,7 +2596,7 @@ export class NIP46Client {
                   connected: this.connection.connected || true,
                   connectedAt: Date.now(),
                 });
-                console.log('💾 NIP-46: Saved nsecbunker connection to localStorage');
+                this.debugLog('💾 NIP-46: Saved nsecbunker connection to localStorage');
               } catch (err) {
                 console.error('❌ NIP-46: Failed to save connection:', err);
               }
@@ -2532,7 +2604,7 @@ export class NIP46Client {
             
             // Trigger connection callback if set
             if (this.onConnectionCallback && this.connection.pubkey) {
-              console.log('📞 NIP-46: Calling nsecbunker connection callback with pubkey:', this.connection.pubkey.slice(0, 16) + '...');
+              this.debugLog('📞 NIP-46: Calling nsecbunker connection callback with pubkey:', this.connection.pubkey.slice(0, 16) + '...');
               const callback = this.onConnectionCallback;
               this.onConnectionCallback = null; // Clear to prevent duplicate calls
               setTimeout(() => {
@@ -2554,7 +2626,7 @@ export class NIP46Client {
         };
 
         ws.onclose = () => {
-          console.log('⚠️ NIP-46: WebSocket closed');
+          this.debugLog('⚠️ NIP-46: WebSocket closed');
           this.ws = null;
           if (this.connection) {
             this.connection.connected = false;
@@ -2564,7 +2636,7 @@ export class NIP46Client {
           // Attempt to reconnect if connection was established
           if (this.connection?.connected && this.reconnectAttempts < this.maxReconnectAttempts) {
             this.reconnectAttempts++;
-            console.log(`🔄 NIP-46: Attempting reconnect ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
+            this.debugLog(`🔄 NIP-46: Attempting reconnect ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
             setTimeout(() => {
               this.establishConnection().catch(console.error);
             }, this.reconnectDelay * this.reconnectAttempts);
@@ -2590,7 +2662,7 @@ export class NIP46Client {
           this.connection.connectedAt = Date.now();
           this.connection.pubkey = response.result;
         }
-        console.log('✅ NIP-46: Authenticated, pubkey:', response.result);
+        this.debugLog('✅ NIP-46: Authenticated, pubkey:', response.result);
         return;
       }
 
@@ -2642,7 +2714,7 @@ export class NIP46Client {
               console.error(`❌ NIP-46: Failed to reconnect to bunker relay ${bunkerRelayUrl}`);
               throw new Error(`Bunker relay disconnected and reconnection failed. Please try reconnecting with your signer.`);
             }
-            console.log(`✅ NIP-46: Reconnected to bunker relay ${bunkerRelayUrl} with fresh subscription`);
+            this.debugLog(`✅ NIP-46: Reconnected to bunker relay ${bunkerRelayUrl} with fresh subscription`);
 
             // Update lastEventTime to prevent immediate stale detection
             this.lastEventTime = Date.now();
@@ -2661,7 +2733,7 @@ export class NIP46Client {
           await new Promise(resolve => setTimeout(resolve, 100));
           const retryRelays = this.relayClient.getConnectedRelays?.() || [];
           if (retryRelays.length > 0) {
-            console.log('✅ NIP-46: Relay connected, proceeding with request');
+            this.debugLog('✅ NIP-46: Relay connected, proceeding with request');
             break;
           }
         }
@@ -2694,7 +2766,7 @@ export class NIP46Client {
     };
 
     return new Promise((resolve, reject) => {
-      this.pendingRequests.set(id, { method, resolve, reject });
+      this.pendingRequests.set(id, { method, resolve, reject, startTime: Date.now() });
 
       // Timeout after 30 seconds
       const timeout = setTimeout(() => {
@@ -2781,7 +2853,7 @@ export class NIP46Client {
       if (relayManager) {
         let relayUrl = this.getRelayUrl();
         // Debug: Log what we're checking
-        console.log('🔍 NIP-46: Checking relay connection status:', {
+        this.debugLog('🔍 NIP-46: Checking relay connection status:', {
           relayUrl: relayUrl,
           signerUrl: this.connection.signerUrl,
           hasRelayUrlField: !!(this.connection as any).relayUrl,
@@ -2795,7 +2867,7 @@ export class NIP46Client {
           const storedRelayUrl = (this.connection as any).relayUrl;
           if (storedRelayUrl && storedRelayUrl.startsWith('wss://')) {
             relayUrl = storedRelayUrl;
-            console.log('✅ NIP-46: Fixed relayUrl from connection object:', relayUrl);
+            this.debugLog('✅ NIP-46: Fixed relayUrl from connection object:', relayUrl);
           } else {
             // Parse from signerUrl
             try {
@@ -2803,7 +2875,7 @@ export class NIP46Client {
               relayUrl = bunkerInfo.relays[0];
               // Store it for future use
               (this.connection as any).relayUrl = relayUrl;
-              console.log('✅ NIP-46: Fixed relayUrl by parsing bunker:// URI:', relayUrl);
+              this.debugLog('✅ NIP-46: Fixed relayUrl by parsing bunker:// URI:', relayUrl);
             } catch (parseErr) {
               throw new Error(`Failed to extract relay URL from bunker:// URI: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
             }
@@ -2827,7 +2899,7 @@ export class NIP46Client {
         const isConnectionStale = timeSinceLastEvent > staleThreshold;
 
         if (!isRelayConnected || isConnectionStale) {
-          console.log('⚠️ NIP-46: Relay needs reconnection:', {
+          this.debugLog('⚠️ NIP-46: Relay needs reconnection:', {
             relayUrl: relayUrl,
             isRelayConnected,
             isConnectionStale,
@@ -2858,7 +2930,7 @@ export class NIP46Client {
       params,
     };
 
-    console.log('📤 NIP-46: Creating relay request:', {
+    this.debugLog('📤 NIP-46: Creating relay request:', {
       method,
       requestId: id,
       requestIdType: typeof id,
@@ -2872,18 +2944,16 @@ export class NIP46Client {
       note: 'This ID will be used to match the response. Make sure response.id matches exactly.',
     });
 
-    // Rate limiting: Check if we've sent a request of this method recently
+    // Adaptive rate limiting: uses tracked signer response times
     // SKIP rate limiting for 'connect' method - it's critical for initial connection
     const lastTime = this.lastRequestTime.get(method);
     const now = Date.now();
-    if (method !== 'connect' && lastTime && (now - lastTime) < this.RATE_LIMIT_MS) {
-      const waitTime = this.RATE_LIMIT_MS - (now - lastTime);
-      const errorMsg = `Rate limit: Please wait ${Math.ceil(waitTime / 1000)} seconds before sending another ${method} request. This prevents overwhelming Amber.`;
-      console.warn(`⚠️ NIP-46: Rate limit - ${method} request too soon (${Math.ceil((now - lastTime) / 1000)}s ago). ${errorMsg}`);
+    const currentRateLimit = Math.max(this.MIN_RATE_LIMIT_MS, Math.min(this.MAX_RATE_LIMIT_MS, this.avgResponseTimeMs));
+    if (method !== 'connect' && lastTime && (now - lastTime) < currentRateLimit) {
+      const waitTime = currentRateLimit - (now - lastTime);
+      const errorMsg = `Rate limit: Please wait ${Math.ceil(waitTime / 1000)} seconds before sending another ${method} request.`;
+      console.warn(`⚠️ NIP-46: Rate limit - ${method} request too soon. Adaptive limit: ${currentRateLimit}ms`);
       throw new Error(errorMsg);
-    }
-    if (method === 'connect') {
-      console.log('ℹ️ NIP-46: Skipping rate limit for connect method');
     }
     
     // Update last request time
@@ -2902,7 +2972,7 @@ export class NIP46Client {
       };
       this.pendingRequests.set(id, pendingRequest);
 
-      console.log('⏳ NIP-46: Waiting for response to request:', {
+      this.debugLog('⏳ NIP-46: Waiting for response to request:', {
         requestId: id,
         method,
         totalPendingRequests: this.pendingRequests.size,
@@ -2914,7 +2984,7 @@ export class NIP46Client {
       const statusInterval = setInterval(() => {
         const elapsed = Date.now() - startTime;
         if (elapsed > 10000 && elapsed % 30000 < 1000) { // Log every 30 seconds after 10 seconds
-          console.log('⏳ NIP-46: Still waiting for response...', {
+          this.debugLog('⏳ NIP-46: Still waiting for response...', {
             requestId: id,
             method,
             elapsedSeconds: Math.floor(elapsed / 1000),
@@ -3038,10 +3108,10 @@ export class NIP46Client {
       // 2. Use app pubkey for encryption (signer can't decrypt, but might still respond)
       // 3. Amber should find the request by listening to all kind 24133 events
       if ((method === 'connect' || method === 'get_public_key') && !signerPubkey) {
-        console.log(`ℹ️ NIP-46: Calling ${method} without signer pubkey (this is expected for initial connection)`);
-        console.log('   - Request will be published without p tag (or with app pubkey as placeholder)');
-        console.log('   - Signer should find it by listening to all kind 24133 events');
-        console.log('   - Encryption uses app pubkey as placeholder (signer may not decrypt, but should still respond)');
+        this.debugLog(`ℹ️ NIP-46: Calling ${method} without signer pubkey (this is expected for initial connection)`);
+        this.debugLog('   - Request will be published without p tag (or with app pubkey as placeholder)');
+        this.debugLog('   - Signer should find it by listening to all kind 24133 events');
+        this.debugLog('   - Encryption uses app pubkey as placeholder (signer may not decrypt, but should still respond)');
       }
       
       // Per NIP-46 spec and nostrify implementation:
@@ -3050,7 +3120,7 @@ export class NIP46Client {
       // - For bunker:// connections, signerPubkey comes from the URI itself
       const pubkeyForRequest = signerPubkey;  // Tag with signer pubkey if we have it
 
-      console.log('📋 NIP-46: Request details:', {
+      this.debugLog('📋 NIP-46: Request details:', {
         method,
         hasSignerPubkey: !!signerPubkey,
         usingPubkeyForRequest: pubkeyForRequest ? 'signer' : 'none (no p tag)',
@@ -3070,7 +3140,7 @@ export class NIP46Client {
       const encryptionPubkey = signerPubkey || appPubkey;
       const requestEvent = this.createNIP46RequestEvent(method, params, id, appPubkey, pubkeyForRequest, connectionInfo.privateKey, encryptionPubkey);
       
-      console.log('📤 NIP-46: Publishing request event:', {
+      this.debugLog('📤 NIP-46: Publishing request event:', {
         eventId: requestEvent.id.slice(0, 16) + '...',
         eventPubkey: requestEvent.pubkey.slice(0, 16) + '...',
         requestId: id,
@@ -3146,13 +3216,13 @@ export class NIP46Client {
             const storedRelayUrl = (this.connection as any).relayUrl;
             if (storedRelayUrl && storedRelayUrl.startsWith('wss://')) {
               primaryRelay = storedRelayUrl;
-              console.log('✅ NIP-46: Fixed primaryRelay from connection object:', primaryRelay);
+              this.debugLog('✅ NIP-46: Fixed primaryRelay from connection object:', primaryRelay);
             } else {
               // Parse from signerUrl as last resort
               try {
                 const bunkerInfo = parseBunkerUri(this.connection.signerUrl);
                 primaryRelay = bunkerInfo.relays[0];
-                console.log('✅ NIP-46: Fixed primaryRelay by parsing bunker:// URI:', primaryRelay);
+                this.debugLog('✅ NIP-46: Fixed primaryRelay by parsing bunker:// URI:', primaryRelay);
               } catch (parseErr) {
                 throw new Error(`Failed to extract relay URL from bunker:// URI: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`);
               }
@@ -3188,9 +3258,9 @@ export class NIP46Client {
             // Bunker signers (Aegis, etc) only listen to their specific relay, not backup relays
             publishRelays = [primaryRelay];
             if (isBunkerConnection) {
-              console.log('📤 NIP-46: Bunker connection - publishing ONLY to primary relay (signer only listens here):', primaryRelay);
+              this.debugLog('📤 NIP-46: Bunker connection - publishing ONLY to primary relay (signer only listens here):', primaryRelay);
             } else {
-              console.log('📤 NIP-46: Connect request - publishing ONLY to primary relay to avoid rate limits:', primaryRelay);
+              this.debugLog('📤 NIP-46: Connect request - publishing ONLY to primary relay to avoid rate limits:', primaryRelay);
             }
           } else {
             // Other requests (nostrconnect://): primary + backups for redundancy
@@ -3200,7 +3270,7 @@ export class NIP46Client {
           // Remove duplicates
           publishRelays = Array.from(new Set(publishRelays));
           
-          console.log(`📤 NIP-46: Publishing request to relays (primary: ${primaryRelay}):`, {
+          this.debugLog(`📤 NIP-46: Publishing request to relays (primary: ${primaryRelay}):`, {
             primaryRelay,
             totalRelays: publishRelays.length,
             relays: publishRelays,
@@ -3217,13 +3287,13 @@ export class NIP46Client {
             if (now >= rateLimitInfo.until) {
               // Backoff expired, remove from rate-limited list
               this.rateLimitedRelays.delete(relay);
-              console.log(`✅ NIP-46: Rate limit backoff expired for ${relay}, re-enabling`);
+              this.debugLog(`✅ NIP-46: Rate limit backoff expired for ${relay}, re-enabling`);
               return true;
             }
             
             // Still rate-limited, skip this relay
             const remainingMs = rateLimitInfo.until - now;
-            console.log(`⏸️ NIP-46: Skipping rate-limited relay ${relay} (backoff expires in ${Math.ceil(remainingMs / 1000)}s)`);
+            this.debugLog(`⏸️ NIP-46: Skipping rate-limited relay ${relay} (backoff expires in ${Math.ceil(remainingMs / 1000)}s)`);
             return false;
           });
           
@@ -3239,7 +3309,7 @@ export class NIP46Client {
           });
           
           // Log which relay is primary
-          console.log(`📤 NIP-46: Primary relay (from QR code): ${primaryRelay}`);
+          this.debugLog(`📤 NIP-46: Primary relay (from QR code): ${primaryRelay}`);
           if (publishRelays[0] !== primaryRelay) {
             console.warn(`⚠️ NIP-46: Primary relay is not first in publish list! Primary: ${primaryRelay}, First: ${publishRelays[0]}`);
           }
@@ -3269,7 +3339,7 @@ export class NIP46Client {
               if (relay.startsWith('bunker://')) {
                 console.warn(`⚠️ NIP-46: Found bunker:// URI in publishRelays, fixing: ${relay}`);
                 const fixedRelay = this.getRelayUrl();
-                console.log(`✅ NIP-46: Fixed relay URL: ${relay} -> ${fixedRelay}`);
+                this.debugLog(`✅ NIP-46: Fixed relay URL: ${relay} -> ${fixedRelay}`);
                 return fixedRelay;
               }
               if (!relay.startsWith('wss://') && !relay.startsWith('ws://')) {
@@ -3281,10 +3351,10 @@ export class NIP46Client {
             });
             // Remove duplicates after fixing
             publishRelays = Array.from(new Set(publishRelays));
-            console.log('✅ NIP-46: Fixed publishRelays:', publishRelays);
+            this.debugLog('✅ NIP-46: Fixed publishRelays:', publishRelays);
           }
           
-          console.log('📡 NIP-46: Publishing to relays:', {
+          this.debugLog('📡 NIP-46: Publishing to relays:', {
             primaryRelay: primaryRelay,
             totalRelays: publishRelays.length,
             relays: publishRelays,
@@ -3326,12 +3396,12 @@ export class NIP46Client {
           });
           
           if (successfulRelays.length > 0) {
-            console.log('✅ NIP-46: Event successfully published to relays:', successfulRelays);
+            this.debugLog('✅ NIP-46: Event successfully published to relays:', successfulRelays);
             // Clear rate limit backoff for successfully published relays (they're working again)
             successfulRelays.forEach(relay => {
               if (this.rateLimitedRelays.has(relay)) {
                 this.rateLimitedRelays.delete(relay);
-                console.log(`✅ NIP-46: Cleared rate limit backoff for ${relay} (publish succeeded)`);
+                this.debugLog(`✅ NIP-46: Cleared rate limit backoff for ${relay} (publish succeeded)`);
               }
             });
           }
@@ -3345,7 +3415,7 @@ export class NIP46Client {
           }
           
 
-          console.log('✅ NIP-46: Request event published:', {
+          this.debugLog('✅ NIP-46: Request event published:', {
             requestId: id,
             method,
             attempt,
@@ -3372,32 +3442,32 @@ export class NIP46Client {
           
           // For sign_event requests, provide additional guidance
           if (method === 'sign_event') {
-            console.log('📱 NIP-46: Sign event request published to multiple relays. Important notes:');
-            console.log('   1. Event published to relays:', publishRelays);
-            console.log('   2. Successfully published to:', successfulRelays.length, 'relays');
-            console.log('   3. Failed to publish to:', failedRelays.length, 'relays');
-            console.log('   4. Event ID:', requestEvent.id);
-            console.log('   5. Event pubkey (your app):', requestEvent.pubkey);
-            console.log('   6. Event tags:', JSON.stringify(requestEvent.tags, null, 2));
-            console.log('   7. Request ID (for matching response):', id);
-            console.log('   8. ⚠️ CRITICAL: Signer must be subscribed to events with:');
-            console.log('      - kind: 24133');
-            console.log('      - #p tag matching signer\'s pubkey:', signerPubkey ? signerPubkey : 'N/A');
-            console.log('   9. Check signer app on your phone RIGHT NOW:');
-            console.log('      - Open signer app (Amber/Aegis/etc)');
-            console.log('      - Check for notifications');
-            console.log('      - Look for approval prompts');
-            console.log('      - Check "Recent Requests" or activity log');
-            console.log('   10. If signer doesn\'t show anything:');
-            console.log('      - Signer might not be connected to any of these relays:', successfulRelays.join(', '));
-            console.log('      - Signer might not be subscribed to events tagged with its pubkey');
-            console.log('      - Check signer\'s relay connection status');
-            console.log('   11. We\'re waiting for a response event with request ID:', id);
-            console.log('   12. Response should come within 120 seconds if signer received and processed the request');
+            this.debugLog('📱 NIP-46: Sign event request published to multiple relays. Important notes:');
+            this.debugLog('   1. Event published to relays:', publishRelays);
+            this.debugLog('   2. Successfully published to:', successfulRelays.length, 'relays');
+            this.debugLog('   3. Failed to publish to:', failedRelays.length, 'relays');
+            this.debugLog('   4. Event ID:', requestEvent.id);
+            this.debugLog('   5. Event pubkey (your app):', requestEvent.pubkey);
+            this.debugLog('   6. Event tags:', JSON.stringify(requestEvent.tags, null, 2));
+            this.debugLog('   7. Request ID (for matching response):', id);
+            this.debugLog('   8. ⚠️ CRITICAL: Signer must be subscribed to events with:');
+            this.debugLog('      - kind: 24133');
+            this.debugLog('      - #p tag matching signer\'s pubkey:', signerPubkey ? signerPubkey : 'N/A');
+            this.debugLog('   9. Check signer app on your phone RIGHT NOW:');
+            this.debugLog('      - Open signer app (Amber/Aegis/etc)');
+            this.debugLog('      - Check for notifications');
+            this.debugLog('      - Look for approval prompts');
+            this.debugLog('      - Check "Recent Requests" or activity log');
+            this.debugLog('   10. If signer doesn\'t show anything:');
+            this.debugLog('      - Signer might not be connected to any of these relays:', successfulRelays.join(', '));
+            this.debugLog('      - Signer might not be subscribed to events tagged with its pubkey');
+            this.debugLog('      - Check signer\'s relay connection status');
+            this.debugLog('   11. We\'re waiting for a response event with request ID:', id);
+            this.debugLog('   12. Response should come within 120 seconds if signer received and processed the request');
           }
           
           // Log a reminder about what we're waiting for
-          console.log('⏳ NIP-46: Now waiting for response event with matching request ID:', {
+          this.debugLog('⏳ NIP-46: Now waiting for response event with matching request ID:', {
             requestId: id,
             method,
             expectedResponseFormat: 'Event with kind 24133, content containing { id: "' + id + '", result: "..." }',
@@ -3420,7 +3490,7 @@ export class NIP46Client {
             
             if (isConnectionError && attempt < 2 && this.connection) {
               // Retry once after reconnecting
-              console.log(`🔄 NIP-46: Connection error detected, retrying (attempt ${attempt + 1}/2)...`);
+              this.debugLog(`🔄 NIP-46: Connection error detected, retrying (attempt ${attempt + 1}/2)...`);
               try {
                 await this.startRelayConnection(this.getRelayUrl());
                 await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for reconnection
@@ -3452,7 +3522,7 @@ export class NIP46Client {
           
           if (isConnectionError && attempt < 2 && this.connection) {
             // Retry once after reconnecting
-            console.log(`🔄 NIP-46: Connection error caught, retrying (attempt ${attempt + 1}/2)...`);
+            this.debugLog(`🔄 NIP-46: Connection error caught, retrying (attempt ${attempt + 1}/2)...`);
             try {
               await this.startRelayConnection(this.getRelayUrl());
               await new Promise(resolve => setTimeout(resolve, 2000)); // Wait for reconnection
@@ -3506,8 +3576,8 @@ export class NIP46Client {
     // We'll verify the pubkey when we actually need to use it (e.g., when signing)
     // This avoids timeouts when restoring connections
     if (this.connection.pubkey) {
-      console.log('✅ NIP-46: Found saved user pubkey, ensuring relay is ready (will verify on first use)');
-      console.log('✅ NIP-46: Using saved user pubkey (not app pubkey):', this.connection.pubkey.slice(0, 16) + '...');
+      this.debugLog('✅ NIP-46: Found saved user pubkey, ensuring relay is ready (will verify on first use)');
+      this.debugLog('✅ NIP-46: Using saved user pubkey (not app pubkey):', this.connection.pubkey.slice(0, 16) + '...');
       
       // For relay-based connections, ensure the relay client is initialized and connected
       const relayUrl = this.getRelayUrl();
@@ -3515,19 +3585,19 @@ export class NIP46Client {
         // If relay client doesn't exist yet, wait for it to be initialized
         // This can happen if authenticate() is called before startRelayConnection() completes
         if (!this.relayClient) {
-          console.log('⏳ NIP-46: Relay client not initialized yet, waiting for connection setup...');
+          this.debugLog('⏳ NIP-46: Relay client not initialized yet, waiting for connection setup...');
           // Wait up to 5 seconds for relay client to be initialized
           for (let i = 0; i < 50; i++) {
             await new Promise(resolve => setTimeout(resolve, 100));
             if (this.relayClient) {
-              console.log('✅ NIP-46: Relay client initialized');
+              this.debugLog('✅ NIP-46: Relay client initialized');
               break;
             }
           }
           
           // If still not initialized, try to initialize it now
           if (!this.relayClient) {
-            console.log('⚠️ NIP-46: Relay client still not initialized, initializing now...');
+            this.debugLog('⚠️ NIP-46: Relay client still not initialized, initializing now...');
             await this.startRelayConnection(relayUrl);
           }
         }
@@ -3536,13 +3606,13 @@ export class NIP46Client {
         if (this.relayClient) {
           const connectedRelays = this.relayClient.getConnectedRelays?.() || [];
           if (connectedRelays.length === 0) {
-            console.log('⏳ NIP-46: Relay not connected yet, waiting briefly...');
+            this.debugLog('⏳ NIP-46: Relay not connected yet, waiting briefly...');
             // Wait up to 3 seconds for relay to connect
             for (let i = 0; i < 30; i++) {
               await new Promise(resolve => setTimeout(resolve, 100));
               const retryRelays = this.relayClient.getConnectedRelays?.() || [];
               if (retryRelays.length > 0) {
-                console.log('✅ NIP-46: Relay connected');
+                this.debugLog('✅ NIP-46: Relay connected');
                 break;
               }
             }
@@ -3572,9 +3642,9 @@ export class NIP46Client {
     const isClientInitiated = !this.ws && this.relayClient && !isBunkerConnection;
 
     if (isClientInitiated) {
-      console.log('⏳ NIP-46: Client-initiated connection (nostrconnect://) - waiting for signer to send connect response...');
-      console.log('ℹ️ NIP-46: Client does NOT send connect requests per NIP-46 spec');
-      console.log('ℹ️ NIP-46: Please ensure the signer has scanned the QR code and is connected');
+      this.debugLog('⏳ NIP-46: Client-initiated connection (nostrconnect://) - waiting for signer to send connect response...');
+      this.debugLog('ℹ️ NIP-46: Client does NOT send connect requests per NIP-46 spec');
+      this.debugLog('ℹ️ NIP-46: Please ensure the signer has scanned the QR code and is connected');
 
       // Wait for connection to be established by Amber/Aegis
       // The handleRelayEvent method will process the signer's connect response and set pubkey
@@ -3588,12 +3658,12 @@ export class NIP46Client {
         // Log progress every 15 seconds
         const elapsed = Date.now() - startTime;
         if (elapsed > 0 && elapsed % 15000 < 500) {
-          console.log(`⏳ NIP-46: Still waiting for signer response... (${Math.floor(elapsed / 1000)}s elapsed)`);
+          this.debugLog(`⏳ NIP-46: Still waiting for signer response... (${Math.floor(elapsed / 1000)}s elapsed)`);
         }
 
         // Check if connection was established
         if (this.connection.pubkey) {
-          console.log('✅ NIP-46: Connection established by signer, pubkey:', this.connection.pubkey.slice(0, 16) + '...');
+          this.debugLog('✅ NIP-46: Connection established by signer, pubkey:', this.connection.pubkey.slice(0, 16) + '...');
           return this.connection.pubkey;
         }
       }
@@ -3613,7 +3683,7 @@ export class NIP46Client {
     // 1. Send a 'connect' request with [appPubkey, secret] as params
     // 2. Signer responds with 'ack' if secret matches
     // 3. Then call 'get_public_key' to get user's npub
-    console.log('🔑 NIP-46: Bunker connection - sending connect request to signer...', {
+    this.debugLog('🔑 NIP-46: Bunker connection - sending connect request to signer...', {
       hasToken: !!this.connection.token,
       relayUrl: this.getRelayUrl(),
       signerPubkey: (this.connection as any).signerPubkey?.slice(0, 16) + '...',
@@ -3632,17 +3702,17 @@ export class NIP46Client {
         connectParams.push(this.connection.token);
       }
 
-      console.log('📤 NIP-46: Sending connect request with params:', {
+      this.debugLog('📤 NIP-46: Sending connect request with params:', {
         appPubkey: appPubkey.slice(0, 16) + '...',
         hasSecret: !!this.connection.token,
       });
 
       const connectResult = await this.sendRequest('connect', connectParams);
-      console.log('✅ NIP-46: Connect request acknowledged:', connectResult);
+      this.debugLog('✅ NIP-46: Connect request acknowledged:', connectResult);
 
       // Step 2: Get the user's public key
       const pubkey = await this.sendRequest('get_public_key', []);
-      console.log('✅ NIP-46: Received user public key:', pubkey?.slice(0, 16) + '...');
+      this.debugLog('✅ NIP-46: Received user public key:', pubkey?.slice(0, 16) + '...');
 
       if (this.connection && pubkey) {
         this.connection.pubkey = pubkey;
@@ -3683,7 +3753,7 @@ export class NIP46Client {
 
     // For relay-based connections, request the user's public key via relay
     if (!this.ws && this.relayClient) {
-      console.log('🔑 NIP-46: Requesting user public key from signer via relay...');
+      this.debugLog('🔑 NIP-46: Requesting user public key from signer via relay...');
       
       // For bunker:// connections, NEVER try connect as fallback
       // The connection is already established by the signer
@@ -3693,7 +3763,7 @@ export class NIP46Client {
       try {
         // Request the public key via relay (this is the user's Nostr pubkey, not the signer app pubkey)
         const pubkey = await this.sendRequest('get_public_key', []);
-        console.log('✅ NIP-46: Received user public key:', pubkey?.slice(0, 16) + '...');
+        this.debugLog('✅ NIP-46: Received user public key:', pubkey?.slice(0, 16) + '...');
 
         // Store it in the connection
         if (this.connection && pubkey) {
@@ -3738,19 +3808,19 @@ export class NIP46Client {
    * Sign an event using the remote signer
    */
   async signEvent(event: Event): Promise<Event> {
-    console.log('🔵 [NIP46-SIGN] signEvent called - starting signature request');
+    this.debugLog('🔵 [NIP46-SIGN] signEvent called - starting signature request');
     
     if (!this.connection?.connected) {
-      console.log('⚠️ [NIP46-SIGN] Connection not marked as connected, calling authenticate()');
+      this.debugLog('⚠️ [NIP46-SIGN] Connection not marked as connected, calling authenticate()');
       await this.authenticate();
     }
 
     // Get pubkey if not already available
     if (!this.connection?.pubkey) {
-      console.log('⚠️ [NIP46-SIGN] Pubkey not available, calling getPublicKey()');
+      this.debugLog('⚠️ [NIP46-SIGN] Pubkey not available, calling getPublicKey()');
       await this.getPublicKey();
     } else {
-      console.log('✅ [NIP46-SIGN] Pubkey already available, skipping getPublicKey()');
+      this.debugLog('✅ [NIP46-SIGN] Pubkey already available, skipping getPublicKey()');
     }
 
     // Validate we have the pubkey
@@ -3759,7 +3829,7 @@ export class NIP46Client {
     }
 
     const signerPubkey = this.connection.pubkey;
-    console.log('✅ [NIP46-SIGN] Proceeding with signEvent - pubkey confirmed:', signerPubkey.slice(0, 16) + '...');
+    this.debugLog('✅ [NIP46-SIGN] Proceeding with signEvent - pubkey confirmed:', signerPubkey.slice(0, 16) + '...');
     
     // CRITICAL: Verify we're using the user's pubkey, not Amber's pubkey
     console.error(`[NIP46-SIGN] Using pubkey for signing: ${signerPubkey.slice(0, 16)}...`);
@@ -3802,7 +3872,7 @@ export class NIP46Client {
       throw new Error(`Invalid event created_at: ${eventForSigner.created_at}. Must be a positive Unix timestamp.`);
     }
 
-    console.log('✍️ NIP-46: Requesting signature for event:', {
+    this.debugLog('✍️ NIP-46: Requesting signature for event:', {
       kind: eventForSigner.kind,
       tags: eventForSigner.tags,
       tagsCount: eventForSigner.tags.length,
@@ -3819,26 +3889,26 @@ export class NIP46Client {
       note: 'This is the event structure being sent to Amber for signing. Compare with working app examples.',
     });
 
-    console.log('📱 NIP-46: Sending sign_event request to signer. Check your phone for:');
-    console.log('   1. Notification from signer app');
-    console.log('   2. Approval prompt in signer (if set to manual)');
-    console.log('   3. Event is being published to multiple relays (see logs above)');
-    console.log('   4. ⚠️ If signer crashes, the event format might be incompatible - try a different event kind');
-    console.log('   5. If you don\'t see a prompt, check:');
-    console.log('      - Signer is connected to at least one of the relays we published to');
-    console.log('      - Signer notification permissions are enabled');
-    console.log('      - Signer is not auto-approving (check settings)');
-    console.log('   6. The working app prompts every time - if ours doesn\'t, events may not be reaching signer');
+    this.debugLog('📱 NIP-46: Sending sign_event request to signer. Check your phone for:');
+    this.debugLog('   1. Notification from signer app');
+    this.debugLog('   2. Approval prompt in signer (if set to manual)');
+    this.debugLog('   3. Event is being published to multiple relays (see logs above)');
+    this.debugLog('   4. ⚠️ If signer crashes, the event format might be incompatible - try a different event kind');
+    this.debugLog('   5. If you don\'t see a prompt, check:');
+    this.debugLog('      - Signer is connected to at least one of the relays we published to');
+    this.debugLog('      - Signer notification permissions are enabled');
+    this.debugLog('      - Signer is not auto-approving (check settings)');
+    this.debugLog('   6. The working app prompts every time - if ours doesn\'t, events may not be reaching signer');
 
     // Log the exact JSON being sent to help debug
     const eventJson = JSON.stringify(eventForSigner);
-    console.log('📋 NIP-46: Exact event JSON being sent to signer:', eventJson);
-    console.log('📋 NIP-46: This will be sent as sign_event([eventJson]) to signer via NIP-46');
+    this.debugLog('📋 NIP-46: Exact event JSON being sent to signer:', eventJson);
+    this.debugLog('📋 NIP-46: This will be sent as sign_event([eventJson]) to signer via NIP-46');
 
     // Log connection details for bunker debugging
     const bunkerRelayUrl = (this.connection as any)?.relayUrl;
     const isBunkerConnection = !!(this.connection as any)?.signerPubkey;
-    console.log('🔌 NIP-46: Sign request connection details:', {
+    this.debugLog('🔌 NIP-46: Sign request connection details:', {
       isBunkerConnection,
       bunkerRelayUrl,
       signerUrl: this.connection?.signerUrl?.slice(0, 50) + '...',
@@ -3849,7 +3919,7 @@ export class NIP46Client {
 
     const signatureResponse = await this.sendRequest('sign_event', [eventJson]);
 
-    console.log('🔍 NIP-46: Raw signature response:', {
+    this.debugLog('🔍 NIP-46: Raw signature response:', {
       type: typeof signatureResponse,
       isString: typeof signatureResponse === 'string',
       isObject: typeof signatureResponse === 'object',
@@ -3875,7 +3945,7 @@ export class NIP46Client {
       const trimmed = signatureResponse.trim();
       const isLongJsonString = trimmed.startsWith('{') && trimmed.length > 100;
       
-      console.log('🔍 NIP-46: Checking if response is JSON event string:', {
+      this.debugLog('🔍 NIP-46: Checking if response is JSON event string:', {
         length: trimmed.length,
         startsWithBrace: trimmed.startsWith('{'),
         firstChars: trimmed.slice(0, 50),
@@ -3888,8 +3958,8 @@ export class NIP46Client {
           const parsed = JSON.parse(trimmed);
           // Check if it looks like a full event (has id, sig, pubkey, kind, etc.)
           if (parsed && typeof parsed === 'object' && 'sig' in parsed && 'id' in parsed && 'kind' in parsed) {
-            console.log('✅ NIP-46: Signer returned a full signed event JSON string');
-            console.log('✅ NIP-46: Parsed full event structure:', {
+            this.debugLog('✅ NIP-46: Signer returned a full signed event JSON string');
+            this.debugLog('✅ NIP-46: Parsed full event structure:', {
               hasId: !!parsed.id,
               hasSig: !!parsed.sig,
               hasKind: !!parsed.kind,
@@ -3901,17 +3971,17 @@ export class NIP46Client {
             });
             fullSignedEvent = parsed;
             signature = parsed.sig;
-            console.log('✅ NIP-46: Extracted signature from full event:', {
+            this.debugLog('✅ NIP-46: Extracted signature from full event:', {
               eventId: parsed.id?.slice(0, 16) + '...',
               signatureLength: signature?.length,
               signaturePreview: signature?.slice(0, 16) + '...',
             });
           } else {
-            console.log('⚠️ NIP-46: String looks like JSON but not a full event, treating as signature');
+            this.debugLog('⚠️ NIP-46: String looks like JSON but not a full event, treating as signature');
             signature = signatureResponse;
           }
         } catch (e) {
-          console.log('⚠️ NIP-46: Failed to parse as JSON, treating as signature string:', e instanceof Error ? e.message : String(e));
+          this.debugLog('⚠️ NIP-46: Failed to parse as JSON, treating as signature string:', e instanceof Error ? e.message : String(e));
           // Not valid JSON, treat as signature string
           signature = signatureResponse;
         }
@@ -3954,7 +4024,7 @@ export class NIP46Client {
 
     // If we got a full signed event from signer, validate and use it directly
     if (fullSignedEvent && fullSignedEvent.id && fullSignedEvent.sig && fullSignedEvent.kind) {
-      console.log('✅ NIP-46: Using full signed event from signer (early return):', {
+      this.debugLog('✅ NIP-46: Using full signed event from signer (early return):', {
         id: fullSignedEvent.id.slice(0, 16) + '...',
         kind: fullSignedEvent.kind,
         hasSig: !!fullSignedEvent.sig,
@@ -3965,7 +4035,7 @@ export class NIP46Client {
 
       // Validate the event structure
       if (fullSignedEvent.sig && typeof fullSignedEvent.sig === 'string' && fullSignedEvent.sig.length >= 64 && /^[a-f0-9]+$/i.test(fullSignedEvent.sig)) {
-        console.log('✅ NIP-46: Full event signature is valid, returning complete event from signer');
+        this.debugLog('✅ NIP-46: Full event signature is valid, returning complete event from signer');
         return fullSignedEvent as Event;
       } else {
         console.warn('⚠️ NIP-46: Full event from signer has invalid signature, falling back to reconstruction:', {
@@ -3975,7 +4045,7 @@ export class NIP46Client {
         });
       }
     } else {
-      console.log('ℹ️ NIP-46: No full signed event detected, will reconstruct from signature:', {
+      this.debugLog('ℹ️ NIP-46: No full signed event detected, will reconstruct from signature:', {
         hasFullSignedEvent: !!fullSignedEvent,
         hasId: !!fullSignedEvent?.id,
         hasSig: !!fullSignedEvent?.sig,
@@ -3991,7 +4061,7 @@ export class NIP46Client {
       throw new Error(`Invalid signature received from signer: signature too short (${signature.length} chars, expected 64+)`);
     }
 
-    console.log('✅ NIP-46: Received and validated signature:', {
+    this.debugLog('✅ NIP-46: Received and validated signature:', {
       length: signature.length,
       preview: signature.slice(0, 16) + '...',
     });
@@ -4007,7 +4077,7 @@ export class NIP46Client {
       sig: signature,
     };
 
-    console.log('✅ NIP-46: Constructed signed event - Final event structure:', {
+    this.debugLog('✅ NIP-46: Constructed signed event - Final event structure:', {
       id: signedEvent.id,
       kind: signedEvent.kind,
       pubkey: signedEvent.pubkey,
@@ -4057,10 +4127,45 @@ export class NIP46Client {
   }
 
   /**
+   * Start periodic cleanup for orphaned pending requests
+   * Removes requests older than 120 seconds that were never resolved
+   */
+  private startPendingRequestCleanup(): void {
+    // Don't start multiple cleanup intervals
+    if (this.pendingRequestCleanupInterval) return;
+
+    this.pendingRequestCleanupInterval = setInterval(() => {
+      const now = Date.now();
+      for (const [id, pending] of this.pendingRequests.entries()) {
+        const startTime = (pending as any).startTime || 0;
+        if (startTime > 0 && now - startTime > 120000) {
+          this.pendingRequests.delete(id);
+          // Clear any associated timers
+          if ((pending as any).statusInterval) clearInterval((pending as any).statusInterval);
+          if ((pending as any).timeout) clearTimeout((pending as any).timeout);
+          pending.reject(new Error('Request expired (cleanup)'));
+          this.debugLog(`🧹 NIP-46: Cleaned up orphaned ${pending.method} request ${id}`);
+        }
+      }
+    }, 60000);
+  }
+
+  /**
+   * Stop pending request cleanup
+   */
+  private stopPendingRequestCleanup(): void {
+    if (this.pendingRequestCleanupInterval) {
+      clearInterval(this.pendingRequestCleanupInterval);
+      this.pendingRequestCleanupInterval = null;
+    }
+  }
+
+  /**
    * Disconnect from signer
    */
   async disconnect(): Promise<void> {
     this.stopHeartbeat();
+    this.stopPendingRequestCleanup();
 
     if (this.ws) {
       this.ws.close();
@@ -4109,7 +4214,7 @@ export class NIP46Client {
           const relayUrl = this.getRelayUrl();
           const isRelayConnected = relayManager.isConnected(relayUrl);
           if (!isRelayConnected) {
-            console.log('⚠️ NIP-46: Relay connection lost (iOS background?), marking as disconnected');
+            this.debugLog('⚠️ NIP-46: Relay connection lost (iOS background?), marking as disconnected');
             // Don't update the flag here - let the reconnection logic handle it
             return false;
           }

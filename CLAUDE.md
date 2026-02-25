@@ -14,7 +14,7 @@ git push origin main # Deploy to production (Railway auto-deploys from git)
 - Run `npm run build` before committing
 - No `src/` directory — all source lives in `app/`, `lib/`, `components/`, `contexts/`
 - No `deploy-*/` artifacts in the repo — add to `.gitignore` if generated
-- No JSON-file databases — all data is in PostgreSQL via Prisma (the old `data/archived-json-database/` was removed)
+- No JSON-file databases — all data is in PostgreSQL via Prisma
 
 ## Tech Stack
 - Next.js 15 (App Router), React 18, TypeScript, PostgreSQL/Prisma
@@ -33,150 +33,108 @@ Runs at 4 AM EST: clears cache -> reparses feeds -> refreshes playlists -> parse
 ## Key Behaviors
 
 ### Playlist Resolution
-Playlists use `<podcast:remoteItem>` with `feedGuid` + `itemGuid`. On `?refresh`:
-1. Find feeds without tracks, parse immediately
-2. Discover missing feeds via Podcast Index API
-3. Parse new feeds (imports tracks + V4V data)
-4. Discover/link publisher feeds
+Playlists use `<podcast:remoteItem>` with `feedGuid` + `itemGuid`. On `?refresh`: find feeds without tracks → discover missing via PI API → parse new feeds → discover/link publisher feeds. Resolution rate ~80-90%.
 
-**Publisher discovery** (`discoverAndParsePublishers` in `lib/feed-discovery.ts`): First checks album XML for publisher tags via `parsePublisherFeedFromXML` in `lib/rss-parser-db.ts` — handles both nested `<podcast:publisher><podcast:remoteItem/></podcast:publisher>` and flat `<podcast:remoteItem medium="publisher">` formats. If absent, falls back to Podcast Index API search by artist name (`findPublisherFeed` in `lib/publisher-detector.ts`). Deduplicates PI API calls per-artist within a run. Daily workflow Step 4 (`POST /api/playlist/parse-feeds`) also runs publisher discovery after parsing. The feed refresh route (`feeds/[id]/refresh`) and `discoverAllPublishers` in `lib/publisher-discovery.ts` also use `parsePublisherFeedFromXML`.
+**Publisher discovery** (`lib/feed-discovery.ts`): checks album XML for publisher tags (`parsePublisherFeedFromXML`), falls back to PI API search by artist name. Deduplicates PI API calls per-artist.
 
-**Publisher album import** (`POST /api/admin/publishers/import-albums`): Uses PI API search by artist name (`/search/byterm`) to find music feeds, then PI API episodes (`/episodes/byfeedid`) for track data. No direct Wavlake XML fetching — avoids 429 rate limiting. Deduplicates PI searches per-artist across multiple publisher feeds. Daily workflow Step 5b calls this automatically.
+**Publisher album import** (`POST /api/admin/publishers/import-albums`): uses PI API `/search/byterm` + `/episodes/byfeedid`. No direct Wavlake XML fetching (avoids 429s). Deduplicates per-artist.
 
-**Duplicate ID gotcha**: Podcast Index uses numeric IDs (`6876105`) while our DB uses GUIDs (`b2048129-...`). When `importFeedToDatabase` finds a URL already exists under a different ID, it redirects to the existing feed and imports tracks into it (see `lib/feed-parsing.ts`).
+**Feed deduplication pattern**: multi-check dedup (normalized URL, raw URL, feedGuid as ID, feedGuid as GUID column, feedGuid-in-URL substring, then secondary `podcastGuid` check). New feeds get slug-based IDs via `generateAlbumSlug`. When modifying feed import code, follow this pattern — weak dedup causes duplicate entries.
 
-**Feed deduplication pattern**: Both `import-albums/route.ts` and `process-remote-items/route.ts` use the same multi-check dedup: normalized URL, raw URL, feedGuid as ID, feedGuid as GUID column, feedGuid-in-URL substring. After parsing, a secondary check catches feeds by `podcastGuid` from the XML. New feeds get slug-based IDs (`artist-title` via `generateAlbumSlug`) and are linked to their publisher via `publisherId`. When modifying feed import code, follow this pattern — weak dedup (e.g., `findUnique` on raw URL only) causes duplicate entries.
+**Type filter gotcha**: Wavlake feeds often get `type: 'podcast'`. All DB queries for album/music content must include `'podcast'` in the type filter: `type: { in: ['album', 'music', 'podcast'] }`.
 
-**Type filter gotcha**: Wavlake feeds imported via Podcast Index API often get `type: 'podcast'` (when PI returns `feedData.type !== 1`). All DB queries for album/music content must include `'podcast'` in the type filter: `type: { in: ['album', 'music', 'podcast'] }`. This applies to publisher page queries, publisher discovery/linking, and import-albums artist linking.
-
-**Resolution rate**: Expect 80-90%. Gaps come from dead feeds (removed from Podcast Index), duplicate GUIDs across platforms (Wavlake vs original publisher), and duplicate URLs under different feedGuid values.
-
-**Podroll exclusion**: `process-remote-items/route.ts` strips `<podcast:podroll>` sections from publisher feed XML before extracting `<podcast:remoteItem>` tags (same regex as `publisher-discovery.ts` and `link-albums`). Without this, podroll-referenced feeds (related feeds, not official releases) get imported as albums.
+**Podroll exclusion**: `process-remote-items/route.ts` strips `<podcast:podroll>` sections before extracting `<podcast:remoteItem>` tags. Without this, podroll-referenced feeds get imported as albums.
 
 ### Feed Blacklist (`lib/feed-exclusions.ts`)
-Central exclusion config for feeds that should never be imported or displayed. Contains `BLACKLISTED_FEED_IDS` (test feeds, unwanted albums) and `BLACKLISTED_FEED_URLS`. Helper functions: `isBlacklistedFeedId()`, `isBlacklistedFeedUrl()`, `getBlacklistedFeedIds()`. Currently used by `process-remote-items/route.ts`; available for future consolidation of scattered exclusions in search, albums-fast, fuzzy-search, etc.
+Central exclusion config: `BLACKLISTED_FEED_IDS`, `BLACKLISTED_FEED_URLS`. Helpers: `isBlacklistedFeedId()`, `isBlacklistedFeedUrl()`.
 
 ### Admin Feed Management (`/admin`)
-Single input handles both add and reparse:
-- New feeds -> added and parsed automatically
-- Existing feeds -> reparsed to update content
-- Auto-detects type from URL (`-pubfeed` = publisher)
-
-**Fixing duplicate feeds**: Reparsing won't consolidate duplicates — delete all copies first, then re-add. Use `DELETE /api/feeds?id=<feedId>` for each duplicate, then paste the feed URL in the admin input. The delete-by-URL endpoint (`POST /api/admin/feeds/delete-by-url`) supports preview mode. The per-ID endpoint (`DELETE /api/admin/feeds/[id]`) is currently disabled (503).
+Single input handles both add and reparse. Auto-detects type from URL (`-pubfeed` = publisher). **Fixing duplicates**: delete all copies first (`DELETE /api/feeds?id=<feedId>`), then re-add.
 
 ### Search
-- Uses PostgreSQL trigram `similarity()` for fuzzy matching
-- Flat 0.3 similarity threshold for all query lengths (`calculateThreshold` in `lib/fuzzy-search.ts`) — matches PostgreSQL's `pg_trgm` default. Do NOT lower this; values below 0.3 produce false positives (e.g., "John B Nevin" for "nate johnivan").
-- Artist search groups by `LOWER(artist)` to avoid case duplicates
-- Exact mode: `?fuzzy=false`
+- PostgreSQL trigram `similarity()`, flat 0.3 threshold. Do NOT lower below 0.3 — causes false positives.
+- Artist search groups by `LOWER(artist)`. Exact mode: `?fuzzy=false`
 
 ### Publisher Pages (`app/publisher/[id]/page.tsx`)
-Matched by: title slug, artist slug, or URL path (e.g., `/setto/` matches "setto")
-- `<podcast:podroll>` sections filtered out (not albums)
-- `-pubfeed.xml` URLs skipped
-
-**Multi-feed support**: Artists can have multiple publisher feeds (e.g., separate Wavlake and Fountain.fm feeds). `loadPublisherData` finds all publisher feeds for the artist (using name variants for `And→&`, `Plus→+`) and fetches XML from each to collect remote items. Image is extracted from the primary feed only.
-
-**Per-platform sections**: When a publisher has albums from multiple platforms, the "Official Releases" section is split into per-platform sections (e.g., "Prosperous Soul (Wavlake)", "Prosperous Soul (RSS Blue)", "Prosperous Soul (Fountain.fm)"). Albums are assigned to sections by: (1) `publisherId` from DB, then (2) GUID match to source feed XML, then (3) URL match, then (4) fallback to primary feed. If a single publisher feed's albums span multiple platforms (e.g., Wavlake publisher with RSS Blue albums linked via `publisherId`), the section is split by `getPlatformName()` which detects platform from album `originalUrl` hostname. Single-feed, single-platform publishers show the original "Official Releases" header with no platform suffix. Client renders sections via `feedSections` prop in `PublisherDetailClient.tsx`.
-
-**No platform-based filtering**: GUID-matched albums from any publisher feed (Fountain, Wavlake, self-hosted, etc.) are shown as official releases regardless of platform. The per-feed section logic handles platform grouping in the UI. Do NOT re-add platform filters (e.g., filtering non-Fountain albums for Fountain publishers) — this was an old workaround removed because it hid legitimate cross-platform albums.
-
-**Album resolution order**: (1) Remote item GUIDs/URLs from all publisher feed XMLs → (2) `publisherId`-linked albums in DB (filtered by podroll blocklist) → (3) Artist name matching for remaining albums. GUID matching checks `Feed.id`, `Feed.guid` column (critical for Wavlake), and URL patterns.
+Matched by: title slug, artist slug, or URL path. Multi-feed support with per-platform sections. Album resolution: (1) GUIDs/URLs from publisher feed XMLs → (2) `publisherId`-linked albums → (3) artist name matching. Do NOT re-add platform filters — hides legitimate cross-platform albums.
 
 ### Duration Filtering
 Tracks over 2 hours filtered as non-music (silent, no warnings)
 
-### NIP-46 Remote Signer (Amber)
-iOS Safari kills WebSocket connections after ~30s when backgrounded. The client reconnects on `visibilitychange` with platform-aware staleness thresholds (iOS 15s, others 60s). Key files: `lib/nostr/nip46-client.ts`, `components/Nostr/hooks/useNip46Connection.ts`.
+### NIP-46 Remote Signer (Amber / Primal)
+Key files: `lib/nostr/nip46-client.ts`, `components/Nostr/hooks/useNip46Connection.ts`. iOS Safari kills WebSocket connections after ~30s backgrounded; reconnects on `visibilitychange` (iOS 15s threshold, others 60s). **Primal is the best iOS signer** — auto-signs with Full trust, responds <1s.
+
+Performance optimizations in `nip46-client.ts`:
+- **Debug logging** gated behind `localStorage.setItem('nip46_debug', 'true')` — zero `console.log` in production, `console.error`/`console.warn` preserved
+- **Adaptive rate limiting** (500ms–2000ms) based on actual signer response times instead of fixed 2s
+- **Pre-decrypted content** passed to `handleRelayEvent` to avoid double NIP-44 decryption
+- **Smart subscription filters** with `authors: [signerPubkey]` when known, broad filter only during QR scan
+- **Subscription delays** reduced to 500ms (non-bunker) / 1s (bunker), was 2s
+- **Lightweight reconnection** checks `getConnectedRelays()` before full teardown
+- **Orphaned request cleanup** every 60s removes requests older than 120s
+- **Keypair cache** (`lastSuccessfulKeyPairIndex`) avoids linear search through historical keypairs
 
 ### iOS PWA Background Audio
-iOS suspends JS and throttles network when the PWA is backgrounded. Track advancement uses a three-layer strategy in `contexts/AudioContext.tsx`:
-1. **Preload next track** — At 15s before track end, a hidden `Audio` element + `prefetchAudio()` fetch warm the browser cache so `load()` in `attemptSeamlessPlayback` is instant (no network delay).
-2. **Proactive advance timer** — At 5s before track end, a `setTimeout` fires ~200ms after expected end to trigger `playNextTrack` while iOS still has JS execution from the recently-active audio session.
-3. **Visibility change safety net** — On `visibilitychange`/`pageshow`, if the audio element has ended, `playNextTrack` fires immediately on foreground return.
+Three-layer strategy in `contexts/AudioContext.tsx`:
+1. **Preload** at 15s before end — hidden `Audio` element + `prefetchAudio()` warm cache
+2. **Proactive timer** at 5s before end — `setTimeout` fires ~200ms after expected end
+3. **Visibility change safety net** — `playNextTrack` on foreground if audio ended
 
-A `trackEndProcessedRef` flag prevents double-advance between the timer and the `ended` event handler. The flag resets in `handlePlay` when the next track starts.
-
-**Critical**: do not auto-resume if the user explicitly paused (e.g., via lock screen controls) — check both "was playing" and "user paused" state before resuming on foreground.
+`trackEndProcessedRef` prevents double-advance. **Critical**: do not auto-resume if user explicitly paused — check both "was playing" and "user paused" state.
 
 ### Sorting
-**Server-side sort**: `/api/albums-fast` accepts a `sort` query param (`added-desc`, `added-asc`, `year-desc`, `year-asc`, `name-asc`, `name-desc`, `tracks-desc`, `tracks-asc`). Sort is applied *before* pagination so paginated results are in the correct order. The client (`app/page.tsx`) only sends `sort` for non-default sorts — omitting it gives the server's default format+alpha sort (Albums → EPs → Singles, then A-Z within each). **Do NOT send `sort=name-asc` as default** — it bypasses format grouping. The client re-fetches from page 1 when sort changes via a `useEffect` on `sortType`. localStorage cache is skipped for non-default sorts.
+`/api/albums-fast` accepts `sort` param (`added-desc`, `added-asc`, `year-desc`, `year-asc`, `name-asc`, `name-desc`, `tracks-desc`, `tracks-asc`). Sort applied before pagination. **Do NOT send `sort=name-asc` as default** — it bypasses format grouping (Albums → EPs → Singles).
 
-Date fields (not obvious from UI):
-- `Feed.oldestItemPubdate` — Album release date (from tracks). Auto-set during feed parsing (`importFeedToDatabase`) and album import (`import-albums/route.ts`). Manual backfill: `POST /api/admin/backfill-oldest-pubdate`
-- `Feed.createdAt` — When added to site
-- Publishers use oldest album's `createdAt` as their `dateAdded`
+Date fields: `Feed.oldestItemPubdate` = album release date, `Feed.createdAt` = when added to site. Backfill: `POST /api/admin/backfill-oldest-pubdate`.
 
 ### Adding New Playlists
 Files to modify (8 total):
-1. `lib/playlist/configs.ts` - Add config entry with id, url, name, shortName, etc.
-2. `app/api/playlist/[id]/route.ts` - Create main API route using `createPlaylistHandler`
-3. `app/api/playlist/[id]-fast/route.ts` - Create fast API route for placeholder data
-4. `lib/playlist-track-counts.ts` - Add to both `FALLBACK_COUNTS` and `PLAYLIST_URLS`
-5. `app/api/playlists-fast/route.ts` - Add playlist summary to the array
-6. `app/page.tsx` - Add to fallback `Promise.allSettled` array (~line 760)
-7. `app/playlist/[id]/page.tsx` - Create dedicated playlist page
-8. `app/favorites/page.tsx` - Add to `playlistTitles` array, `playlistImageFallbacks` map, and `playlistSlugOverrides` if the config ID doesn't match the URL slug
+1. `lib/playlist/configs.ts` - Config entry
+2. `app/api/playlist/[id]/route.ts` - Main API route
+3. `app/api/playlist/[id]-fast/route.ts` - Fast API route
+4. `lib/playlist-track-counts.ts` - `FALLBACK_COUNTS` and `PLAYLIST_URLS`
+5. `app/api/playlists-fast/route.ts` - Playlist summary
+6. `app/page.tsx` - Fallback `Promise.allSettled` array
+7. `app/playlist/[id]/page.tsx` - Dedicated page
+8. `app/favorites/page.tsx` - `playlistTitles`, `playlistImageFallbacks`, `playlistSlugOverrides`
 
-After code changes, populate database: `curl http://localhost:3000/api/playlist/[id]?refresh`
+Populate: `curl http://localhost:3000/api/playlist/[id]?refresh`
 
 ### Playlist Page UI
-- All playlist pages use `PlaylistTemplateCompact` component
-- Back button links to `/?filter=playlist` (the main page Playlists filter)
-- Grouped view (episodes/play counts): `EpisodeSection.tsx` renders collapsible sections
-- Tracks panel background: `bg-black/75` for readability over page backgrounds
-- Track rows in grouped view: single-row horizontal layout with `bg-black/50`
+All pages use `PlaylistTemplateCompact`. Back button → `/?filter=playlist`. Grouped view: `EpisodeSection.tsx`. Track rows: `bg-black/50` over `bg-black/75` panel.
 
 ### Nostr Publish Queue & Relay Management
-Favoriting saves to DB immediately (no `nostrEventId`), then queues Nostr publish in the background. Queue flushes with 500ms debounce, creating one `RelayManager` for all pending events. After publish, `FavoriteButton` PATCHes the `nostrEventId` back to the DB.
-
-**Relay rules**: `RelayManager` uses a 5s connection timeout (`Promise.race` — nostr-tools has no built-in timeout). **Always call `disconnectAll()`** after publishing or WebSocket connections leak. Key files: `lib/nostr/publish-queue.ts`, `lib/nostr/relay.ts`.
+Favoriting saves to DB immediately, queues Nostr publish (500ms debounce). **Always call `disconnectAll()`** after publishing or WebSocket connections leak. Key files: `lib/nostr/publish-queue.ts`, `lib/nostr/relay.ts`.
 
 ### Favorites Page (`/favorites`)
-- **Optimistic unfavorite** — removes track from local state immediately, no reload
-- **Auto-sync** — `useAutoSyncFavorites` batch-publishes unpublished favorites on page load (1.5s delay)
-- **Playlist favorites gotcha**: Playlists aren't Feed rows, so the API returns the raw `feedId` as title. The `isPlaylist()` check and `playlistImageFallbacks` map must use the **lowercased feedId** (e.g., `'greatesthits'`), not the human name. `playlistSlugOverrides` handles ID-to-slug mismatches (e.g., `greatestHits-playlist` → `greatest-hits`).
+Optimistic unfavorite, auto-sync on page load. **Playlist favorites gotcha**: `isPlaylist()` and `playlistImageFallbacks` must use **lowercased feedId**, not the human name. `playlistSlugOverrides` handles ID-to-slug mismatches.
 
 ### Nostr Playlist Publishing
-Favorites can be shared as a kind 34139 addressable Nostr event (`d` tag = `stablekraft-favorites`). Re-publishing replaces the previous version (same `d` tag). Key files: `lib/nostr/playlist-events.ts`, `components/favorites/PublishPlaylistButton.tsx`.
+Kind 34139 addressable event (`d` tag = `stablekraft-favorites`). Re-publishing replaces previous version. Key files: `lib/nostr/playlist-events.ts`, `components/favorites/PublishPlaylistButton.tsx`.
 
 ### Favorite Publishers Resolution (`app/api/favorites/albums/route.ts`)
-Publisher favorites use three feedId formats:
-- **Synthetic artist IDs** (`artist-adam-curry`) — resolved by querying album feeds by artist name
-- **Feed GUIDs** (`d7b4abee-...`) — fallback lookup by `Feed.guid` column
-- **Feed IDs** (`wavlake-publisher-aa909244`) — direct `Feed.id` match
-
-**Image chain**: DB feed image → Podcast Index API → album feed image by artist name (publisher feeds often lack artwork). **NIP-51 republish** excluded for publisher favorites — only tracks and albums support it.
+Three feedId formats: synthetic artist IDs (`artist-adam-curry`), feed GUIDs, feed IDs. Image chain: DB → PI API → album feed image by artist name.
 
 ### BackButton (`components/BackButton.tsx`)
-Uses `window.history.length` to detect prior navigation. Do NOT use `document.referrer` — it doesn't update during SPA navigation.
+Uses `window.history.length`. Do NOT use `document.referrer` — doesn't update during SPA navigation.
 
-### Lightning Wallet Detection (`components/Lightning/BitcoinConnectProvider.tsx`)
-Keysend capability is inferred from provider type (`hasKeysendMethod && type !== 'unknown'`). Do NOT probe by sending a real keysend payment — wallets like Alby extension surface this as a user-facing payment popup on every page load. When the Alby extension auto-connects via `window.webln` (bypassing Bitcoin Connect), `detectWalletProviderType()` in `lib/lightning/wallet-detection.ts` falls back to checking `window.webln` and returns `type: 'extension'` — without this, keysend detection fails for the Alby extension.
+### Lightning Wallet Detection
+Keysend inferred from provider type (`hasKeysendMethod && type !== 'unknown'`). Do NOT probe with real keysend — triggers payment popup. Alby extension detection: `detectWalletProviderType()` in `lib/lightning/wallet-detection.ts`.
 
 ### BoostBox Integration (`lib/lightning/boostbox.ts`)
-LNURL payments use [BoostBox](https://tardbox.com) to store Podcasting 2.0 boost metadata. Before requesting an LNURL invoice, metadata is POSTed to BoostBox which returns a `desc` string (e.g., `rss::payment::boost https://tardbox.com/boost/01K9... message`). That `desc` becomes the LNURL invoice comment so recipients can fetch full payment context. Keysend payments are unaffected — they use Helipad TLV records directly.
+LNURL payments use [BoostBox](https://tardbox.com) for Podcasting 2.0 boost metadata. Keysend unaffected (uses Helipad TLV). Graceful degradation if unreachable. Client-only — always uses `/api/lightning/boostbox` proxy (API key via `BOOSTBOX_API_KEY` env var). Feature flag: `LIGHTNING_CONFIG.features.boostbox`.
 
-- API spec: https://tardbox.com/openapi.json
-- Docs: https://tardbox.com/docs
 - Source: https://github.com/ChadFarrow/boostbox
-- List all boosts: `GET /boosts` (auth required) — returns all stored boosts sorted newest-first
-- Server-side proxy: `app/api/lightning/boostbox/route.ts` (avoids CORS, API key via `BOOSTBOX_API_KEY` env var)
-- Feature flag: `LIGHTNING_CONFIG.features.boostbox` in `lib/lightning/config.ts`
-- If BoostBox is unreachable, payments proceed without metadata (graceful degradation)
-- LNURL comment length: `requestInvoice()` in `lib/lightning/lnurl.ts` truncates comments exceeding the server's `commentAllowed` limit instead of throwing — preserves the BoostBox URL at the start of `desc`
-- `boostbox.ts` is client-only — always uses the `/api/lightning/boostbox` proxy (no direct BoostBox calls or API keys in the client bundle)
+- `requestInvoice()` truncates comments exceeding `commentAllowed` limit — preserves BoostBox URL at start
 
-**BoostBox metadata field mapping**: `buildHelipadMetadata` → `mapHelipadToBoostBox` populates BoostBox payload fields from Helipad metadata. Key mappings: `feed_guid` ← `remote_feed_guid`, `feed_title` ← `album` (falls back to `podcast`/artist name), `publisher_guid` ← `publisher_guid`, `item_guid` ← `episode_guid`/`remote_item_guid`, `sender_id`/`sender_npub` ← passed through from Helipad, `group` ← `uuid` (groups all splits from same boost, matching Fountain/Castamatic), `remote_publisher_guid` ← `publisher_guid`, `boost_link` ← passed through. `split` is sent as a whole number percentage (e.g., `20` for 20%).
+**BoostBox vs keysend**: Value splits try keysend first. BoostBox called only for LNURL fallback. Fountain.fm addresses skip keysend by design (`isFountain` check).
 
-**Feed.guid gotcha for BoostBox**: `feed_guid` in BoostBox comes from `remoteFeedGuid` prop → Helipad `remote_feed_guid`, which ultimately reads from `Feed.guid` in the DB (the `podcast:guid` from feed XML). If `Feed.guid` is null, BoostBox boosts will be missing `feed_guid`. Feeds imported before guid-writing code was added may have `guid: null` — reparse the feed or manually update the DB column. The guid is written during feed import/reparse from the XML's `<podcast:guid>` tag.
-
-**BoostBox vs keysend**: Value splits try keysend first (preferred for Helipad TLV metadata). BoostBox is only called when a recipient falls through to LNURL — either because the recipient's Lightning Address doesn't return keysend info (e.g., Strike, Zeus, Primal) or the wallet doesn't support keysend. Fountain.fm addresses skip keysend by design (see `isFountain` check in `value-splits.ts`). Whether the BoostBox `desc` URL is visible in the sender/recipient wallet depends on the LNURL server's `commentAllowed` support — Strike shows it, Fountain.fm does not.
+**Feed.guid gotcha**: `feed_guid` in BoostBox comes from `Feed.guid` in DB. If null, reparse the feed. Written during import from `<podcast:guid>` tag.
 
 ### Helipad Metadata (`components/Lightning/BoostButton.tsx`)
-Helipad metadata for boost payments is built by `buildHelipadMetadata(amount, msg)` inside `BoostButton`, following the BLIP-0010 spec for keysend TLV 7629169. This single helper is used by all payment paths (direct LNURL, direct keysend, value splits, and platform fee metaboost). Do NOT duplicate the metadata construction — add new fields to the helper. The `name` field is intentionally omitted from the base metadata; in value splits, `value-splits.ts` sets `name` per-recipient to identify which split the payment is for (BLIP-0010). Key fields: `guid` (preferred podcast identifier from `remoteFeedGuid`), `sender_id`/`sender_npub` (Nostr npub if authenticated), `url` (feed URL — no `feed` or `feedId` fields).
+Built by `buildHelipadMetadata(amount, msg)`, BLIP-0010 spec. Single helper for all payment paths — do NOT duplicate. `name` field omitted from base; `value-splits.ts` sets it per-recipient.
 
-**BoostButton props for metadata**: When adding BoostButton to a page, pass these props for complete BoostBox/Helipad metadata: `feedUrl` (album RSS URL), `remoteFeedGuid` (album's podcast:guid — must be a real GUID, never a feed slug/ID), `albumName` (album/feed title), `publisherGuid` (publisher's feed ID), `episodeGuid` (track GUID — omit for album-level boosts so `item_guid` is absent from BoostBox metadata). The album slug API (`/api/albums/[slug]`) returns `feedGuid` (the `Feed.guid` column from the DB) alongside `feedId`. For track-level BoostButtons on album pages, `remoteFeedGuid` should fall back to the album: `track.v4vValue?.feedGuid || album.feedGuid`. Do NOT fall back to `feedId` — it's a slug, not a GUID, and would send incorrect `feed_guid` to BoostBox.
+**BoostButton props**: `feedUrl`, `remoteFeedGuid` (must be real GUID, never feed slug/ID), `albumName`, `publisherGuid`, `episodeGuid` (omit for album-level). Do NOT fall back to `feedId` for `remoteFeedGuid` — it's a slug, not a GUID.
 
 ### Episode/Play Count Markers
-Playlists can include `<podcast:txt purpose="episode">` or `<podcast:txt purpose="playcount">` markers in XML to group tracks into collapsible sections. After adding markers, refresh: `curl https://stablekraft.app/api/playlist/[id]?refresh`
+`<podcast:txt purpose="episode">` or `<podcast:txt purpose="playcount">` in XML. Refresh: `curl https://stablekraft.app/api/playlist/[id]?refresh`
