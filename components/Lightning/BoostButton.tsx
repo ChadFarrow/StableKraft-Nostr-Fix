@@ -1219,7 +1219,7 @@ export function BoostButton({
                           })}
                           {/* StableKraft Platform Fee */}
                           <div className="bg-gray-800/50 rounded-lg p-3 flex items-center justify-between gap-2 border border-gray-700/50 min-w-0">
-                            <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
                               <Zap className="w-3 h-3 text-green-400 flex-shrink-0" />
                               <div className="flex flex-col flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
