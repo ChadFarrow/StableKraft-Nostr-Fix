@@ -14,7 +14,7 @@ import { useBitcoinConnect } from '@/components/Lightning/BitcoinConnectProvider
 import { ValueSplitsService } from '@/lib/lightning/value-splits';
 import { ValueRecipient } from '@/lib/lightning/value-parser';
 import { hasV4V as checkHasV4V, getV4VRecipients, getPrimaryRecipient } from '@/lib/v4v-utils';
-import { prefetchUpcomingTracks } from '@/lib/audio-prefetch';
+import { prefetchUpcomingTracks, prefetchAudio } from '@/lib/audio-prefetch';
 
 interface AudioContextType {
   // Audio state
@@ -125,6 +125,12 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   const stallCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const recoveryAttemptRef = useRef<number>(0);
   const userInitiatedPauseRef = useRef<boolean>(false); // Track if pause was user-initiated
+
+  // iOS background track advancement refs
+  const pendingNextTrackUrlRef = useRef<string | null>(null); // Pre-computed URL for next track
+  const iosAdvanceTimerRef = useRef<NodeJS.Timeout | null>(null); // Proactive advance timer
+  const trackEndProcessedRef = useRef<boolean>(false); // Prevent double-advance from timer + ended event
+  const preloadAudioRef = useRef<HTMLAudioElement | null>(null); // Hidden Audio element for preloading next track
 
   // Web Audio API for volume normalization (compressor)
   const webAudioContextRef = useRef<AudioContext | null>(null);
@@ -597,6 +603,42 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
+
+  // iOS background track advancement safety net:
+  // When returning to foreground, check if the track ended while backgrounded
+  // and the ended/timer handlers didn't successfully advance to the next track
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleVisibilityForTrackAdvance = () => {
+      if (document.visibilityState !== 'visible') return;
+
+      // Check both audio and video elements
+      const audio = audioRef.current;
+      const video = videoRef.current;
+      const currentElement = (video && !video.paused && !video.ended) ? video : audio;
+      if (!currentElement) return;
+
+      // If the audio element has ended and nothing new has started playing,
+      // the background advance failed — trigger it now
+      if (currentElement.ended) {
+        console.log('📱 Track ended while backgrounded — advancing on foreground return');
+        // Reset the processed flag so playNextTrack can proceed
+        trackEndProcessedRef.current = false;
+        if (playNextTrackRef.current) {
+          playNextTrackRef.current();
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityForTrackAdvance);
+    // Also listen for pageshow (iOS Safari fires this on PWA reactivation)
+    window.addEventListener('pageshow', handleVisibilityForTrackAdvance);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityForTrackAdvance);
+      window.removeEventListener('pageshow', handleVisibilityForTrackAdvance);
     };
   }, []);
 
@@ -1385,6 +1427,19 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
 
     const handlePlay = () => {
       setIsPlaying(true);
+      // Reset iOS background advance tracking for next track end
+      trackEndProcessedRef.current = false;
+      pendingNextTrackUrlRef.current = null;
+      if (iosAdvanceTimerRef.current) {
+        clearTimeout(iosAdvanceTimerRef.current);
+        iosAdvanceTimerRef.current = null;
+      }
+      // Clean up preload Audio element
+      if (preloadAudioRef.current) {
+        preloadAudioRef.current.removeAttribute('src');
+        preloadAudioRef.current.load();
+        preloadAudioRef.current = null;
+      }
       // Update media session playback state immediately for iOS
       if ('mediaSession' in navigator && navigator.mediaSession) {
         navigator.mediaSession.playbackState = 'playing';
@@ -1406,6 +1461,31 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     const handleEnded = async () => {
       console.log('🎵 Track ended, attempting to play next track');
 
+      // Clear proactive advance timer (no longer needed)
+      if (iosAdvanceTimerRef.current) {
+        clearTimeout(iosAdvanceTimerRef.current);
+        iosAdvanceTimerRef.current = null;
+      }
+
+      // Auto-boost: always fire on track end, even if proactive timer already advanced
+      // This runs before the double-advance guard because auto-boost is per-ended-track,
+      // not per-advance. Read from ref to get latest settings (closure may be stale).
+      const { enabled: autoBoostOn, amount: autoBoostAmt } = autoBoostSettingsRef.current;
+      if (!radioMode && autoBoostOn && currentPlayingAlbum && currentTrackIndex >= 0) {
+        const track = currentPlayingAlbum.tracks[currentTrackIndex];
+        if (track && triggerAutoBoostRef.current) {
+          // Fire and forget - don't await, don't block next track
+          triggerAutoBoostRef.current(track, currentPlayingAlbum, autoBoostAmt || 50);
+        }
+      }
+
+      // Prevent double-advance: proactive timer may have already triggered playNextTrack
+      if (trackEndProcessedRef.current) {
+        console.log('📱 Track advance already handled by proactive timer, skipping playNextTrack');
+        return;
+      }
+      trackEndProcessedRef.current = true;
+
       // CRITICAL for iOS PWA: Set auto-transitioning flag so playAlbum uses seamless playback
       // This flag ensures seamless playback is used even if isPlaying state has changed
       isAutoTransitioningRef.current = true;
@@ -1414,17 +1494,6 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
       // before triggering next track. This prevents iOS from releasing the audio session.
       if ('mediaSession' in navigator && navigator.mediaSession) {
         navigator.mediaSession.playbackState = 'playing';
-      }
-
-      // Auto-boost: fire and forget - doesn't block next track (disabled in radio mode)
-      // Read from ref to get latest settings (closure may be stale)
-      const { enabled: autoBoostOn, amount: autoBoostAmt } = autoBoostSettingsRef.current;
-      if (!radioMode && autoBoostOn && currentPlayingAlbum && currentTrackIndex >= 0) {
-        const track = currentPlayingAlbum.tracks[currentTrackIndex];
-        if (track && triggerAutoBoostRef.current) {
-          // Fire and forget - don't await
-          triggerAutoBoostRef.current(track, currentPlayingAlbum, autoBoostAmt || 50);
-        }
       }
 
       try {
@@ -1474,17 +1543,17 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
           }
         }
 
-        // Preload next track when we're close to the end (last 5 seconds)
-        // This helps mobile devices prepare for smooth transitions
+        // Pre-compute and preload next track for smooth transitions
+        // Critical for iOS background playback where network + JS are throttled
         const timeRemaining = (track.endTime || currentElement.duration) - currentElement.currentTime;
-        if (timeRemaining > 0 && timeRemaining <= 5 && !currentElement.paused) {
-          // Get next track info
+        if (timeRemaining > 0 && timeRemaining <= 15 && !currentElement.paused) {
+          // Get next track info (shared by all preload strategies)
           let nextTrack = null;
           if (isShuffleMode && shuffledPlaylist.length > 0) {
             const nextShuffleIndex = currentShuffleIndex + 1;
             if (nextShuffleIndex < shuffledPlaylist.length) {
               nextTrack = shuffledPlaylist[nextShuffleIndex]?.track;
-            } else if (shuffledPlaylist.length > 0) {
+            } else if (repeatMode === 'all' && shuffledPlaylist.length > 0) {
               nextTrack = shuffledPlaylist[0]?.track;
             }
           } else if (currentTrackIndex + 1 < currentPlayingAlbum.tracks.length) {
@@ -1493,27 +1562,78 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
             nextTrack = currentPlayingAlbum.tracks[0];
           }
 
-          // Preload next track to ensure smooth mobile playback
           if (nextTrack && (nextTrack.url || nextTrack.alternateEnclosures?.length > 0)) {
             const nextTrackUrl = getTrackPlaybackUrl(nextTrack);
-            const nextElement = isVideoUrl(nextTrackUrl, nextTrack.mediaType) ? videoRef.current : audioRef.current;
-            if (nextElement && nextElement !== currentElement) {
-              // Use URL strategy to get the best URL (proxy for CORS-problematic domains)
-              const urlsToTry = getAudioUrlsToTry(nextTrackUrl);
-              let secureNextUrl = urlsToTry[0] || nextTrackUrl;
+            const urlsToTry = getAudioUrlsToTry(nextTrackUrl);
+            let secureNextUrl = urlsToTry[0] || nextTrackUrl;
+            if (secureNextUrl.startsWith('http://')) {
+              secureNextUrl = secureNextUrl.replace(/^http:/, 'https:');
+            }
 
-              // Upgrade HTTP to HTTPS for preloaded tracks
-              if (secureNextUrl.startsWith('http://')) {
-                secureNextUrl = secureNextUrl.replace(/^http:/, 'https:');
-              }
+            // Store pre-computed URL for fast access in handleEnded
+            pendingNextTrackUrlRef.current = secureNextUrl;
 
-              // Only preload if not already loaded
-              if (!nextElement.src || nextElement.src !== secureNextUrl) {
-                console.log('🔄 Preloading next track for smooth transition:', nextTrack.title);
-                nextElement.src = secureNextUrl;
-                nextElement.preload = 'auto';
-                nextElement.load();
+            // At 15s: Preload next track audio via hidden Audio element
+            // This populates the browser's HTTP cache so load() in handleEnded is instant
+            if (!preloadAudioRef.current || preloadAudioRef.current.src !== secureNextUrl) {
+              console.log('🔄 Preloading next track audio into browser cache:', nextTrack.title);
+              if (preloadAudioRef.current) {
+                preloadAudioRef.current.removeAttribute('src');
+                preloadAudioRef.current.load(); // Reset previous preload
               }
+              const preloader = new Audio();
+              preloader.preload = 'auto';
+              preloader.src = secureNextUrl;
+              preloadAudioRef.current = preloader;
+              // Also prefetch via fetch() as backup cache warming
+              prefetchAudio(secureNextUrl).catch(() => {});
+            }
+
+            // At 5s: Cross-element preload (audio <-> video transitions)
+            if (timeRemaining <= 5) {
+              const nextElement = isVideoUrl(nextTrackUrl, nextTrack.mediaType) ? videoRef.current : audioRef.current;
+              if (nextElement && nextElement !== currentElement) {
+                if (!nextElement.src || nextElement.src !== secureNextUrl) {
+                  console.log('🔄 Preloading next track into alternate element:', nextTrack.title);
+                  nextElement.src = secureNextUrl;
+                  nextElement.preload = 'auto';
+                  nextElement.load();
+                }
+              }
+            }
+
+            // At 5s: Schedule proactive advance timer (iOS background)
+            // Fires shortly after the track should end, while iOS may still allow JS execution
+            // (iOS keeps JS semi-active while audio was recently playing)
+            if (!iosAdvanceTimerRef.current && timeRemaining <= 5 && timeRemaining > 0.5) {
+              const advanceInMs = (timeRemaining + 0.2) * 1000; // 200ms after expected end
+              console.log(`📱 Scheduling proactive track advance in ${Math.round(advanceInMs)}ms`);
+              iosAdvanceTimerRef.current = setTimeout(() => {
+                iosAdvanceTimerRef.current = null;
+                const el = isVideoMode ? videoRef.current : audioRef.current;
+                // Only advance if track actually ended (or is at the very end)
+                if (el && (el.ended || (el.duration > 0 && el.currentTime >= el.duration - 0.5))) {
+                  // Guard against double-advance (handleEnded may have already fired)
+                  if (!trackEndProcessedRef.current) {
+                    trackEndProcessedRef.current = true;
+
+                    // Trigger auto-boost for the track that just ended
+                    // (handleEnded may not fire if we swap the source before it triggers)
+                    const { enabled: autoBoostOn, amount: autoBoostAmt } = autoBoostSettingsRef.current;
+                    if (!radioMode && autoBoostOn && currentPlayingAlbum && currentTrackIndex >= 0) {
+                      const endedTrack = currentPlayingAlbum.tracks[currentTrackIndex];
+                      if (endedTrack && triggerAutoBoostRef.current) {
+                        triggerAutoBoostRef.current(endedTrack, currentPlayingAlbum, autoBoostAmt || 50);
+                      }
+                    }
+
+                    console.log('📱 Proactive advance timer fired, triggering next track');
+                    if (playNextTrackRef.current) {
+                      playNextTrackRef.current();
+                    }
+                  }
+                }
+              }, advanceInMs);
             }
           }
         }
@@ -1656,7 +1776,20 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         element.removeEventListener('stalled', handleStalled);
         element.removeEventListener('waiting', handleWaiting);
       });
-      
+
+      // Clean up iOS background advance timer
+      if (iosAdvanceTimerRef.current) {
+        clearTimeout(iosAdvanceTimerRef.current);
+        iosAdvanceTimerRef.current = null;
+      }
+
+      // Clean up preload Audio element
+      if (preloadAudioRef.current) {
+        preloadAudioRef.current.removeAttribute('src');
+        preloadAudioRef.current.load();
+        preloadAudioRef.current = null;
+      }
+
       // Clean up HLS instance - but NOT if:
       // 1. We're in the middle of initializing HLS
       // 2. Video is currently playing (don't destroy active HLS stream)
