@@ -28,6 +28,55 @@ export default function AdminPanel() {
     message?: string;
   } | null>(null);
 
+  // Bulk import state
+  const [bulkSearching, setBulkSearching] = useState(false);
+  const [bulkImporting, setBulkImporting] = useState(false);
+  const [bulkPreview, setBulkPreview] = useState<{
+    query: string;
+    type?: string;
+    totalFound: number;
+    newFeeds: number;
+    existingFeeds: number;
+    blacklistedFeeds: number;
+    feeds: Array<{
+      piId: number;
+      title: string;
+      author: string;
+      image: string;
+      feedUrl: string;
+      medium: string;
+      episodeCount: number;
+      alreadyExists: boolean;
+      isBlacklisted: boolean;
+      existingFeedId?: string;
+    }>;
+  } | null>(null);
+  const [bulkImportProgress, setBulkImportProgress] = useState<{
+    current: number;
+    total: number;
+    imported: number;
+    skipped: number;
+    failed: number;
+    currentFeed?: string;
+    currentStatus?: string;
+  } | null>(null);
+  const [bulkImportResult, setBulkImportResult] = useState<{
+    imported: number;
+    skipped: number;
+    failed: number;
+    total: number;
+    results: Array<{
+      feedUrl: string;
+      status: string;
+      title?: string;
+      artist?: string;
+      trackCount?: number;
+      feedId?: string;
+      error?: string;
+    }>;
+  } | null>(null);
+  const [bulkSelectedFeeds, setBulkSelectedFeeds] = useState<Set<string>>(new Set());
+
   // Orphan cleanup state
   const [parsingMissingTracks, setParsingMissingTracks] = useState(false);
   const [parseProgress, setParseProgress] = useState<{
@@ -296,6 +345,149 @@ export default function AdminPanel() {
     }
   };
 
+  // Check if a URL is a Podcast Index search URL
+  const isPodcastIndexSearchUrl = (url: string): boolean => {
+    try {
+      const parsed = new URL(url);
+      return (
+        (parsed.hostname === 'podcastindex.org' || parsed.hostname === 'www.podcastindex.org') &&
+        parsed.pathname === '/search' &&
+        !!parsed.searchParams.get('q')
+      );
+    } catch {
+      return false;
+    }
+  };
+
+  // Search PI and show preview
+  const searchBulkFeeds = async (url: string) => {
+    setBulkSearching(true);
+    setBulkPreview(null);
+    setBulkImportResult(null);
+    setBulkImportProgress(null);
+
+    try {
+      const response = await fetch(`/api/admin/bulk-import?url=${encodeURIComponent(url)}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast.error(data.error || 'Failed to search Podcast Index');
+        return;
+      }
+
+      if (data.feeds.length === 0) {
+        toast.info('No feeds found for this search');
+        return;
+      }
+
+      setBulkPreview(data);
+      // Pre-select all new (non-existing, non-blacklisted) feeds
+      const newFeedUrls = data.feeds
+        .filter((f: any) => !f.alreadyExists && !f.isBlacklisted)
+        .map((f: any) => f.feedUrl);
+      setBulkSelectedFeeds(new Set(newFeedUrls));
+    } catch (error) {
+      console.error('Error searching bulk feeds:', error);
+      toast.error('Network error. Please try again.');
+    } finally {
+      setBulkSearching(false);
+    }
+  };
+
+  // Import selected feeds with SSE progress
+  const importBulkFeeds = async () => {
+    if (bulkSelectedFeeds.size === 0) {
+      toast.error('No feeds selected for import');
+      return;
+    }
+
+    setBulkImporting(true);
+    setBulkImportProgress(null);
+    setBulkImportResult(null);
+
+    try {
+      const feedUrls = Array.from(bulkSelectedFeeds);
+      const response = await fetch('/api/admin/bulk-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feedUrls, type: 'album' }),
+      });
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        toast.error('Failed to start bulk import');
+        setBulkImporting(false);
+        return;
+      }
+
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.type === 'start') {
+                setBulkImportProgress({
+                  current: 0,
+                  total: data.total,
+                  imported: 0,
+                  skipped: 0,
+                  failed: 0,
+                });
+              } else if (data.type === 'progress') {
+                setBulkImportProgress({
+                  current: data.current,
+                  total: data.total,
+                  imported: data.imported,
+                  skipped: data.skipped,
+                  failed: data.failed,
+                  currentFeed: data.title || data.feedUrl,
+                  currentStatus: data.status,
+                });
+              } else if (data.type === 'complete') {
+                setBulkImportResult({
+                  imported: data.imported,
+                  skipped: data.skipped,
+                  failed: data.failed,
+                  total: data.total,
+                  results: data.results,
+                });
+                setBulkImportProgress(null);
+
+                if (data.imported > 0) {
+                  toast.success(`Imported ${data.imported} feeds! (${data.skipped} skipped, ${data.failed} failed)`);
+                } else {
+                  toast.info(`No new feeds imported. ${data.skipped} already existed.`);
+                }
+
+                fetchRecentFeeds();
+              }
+            } catch {
+              // Ignore parse errors
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error during bulk import:', error);
+      toast.error('Bulk import failed. Please try again.');
+    } finally {
+      setBulkImporting(false);
+      setBulkImportProgress(null);
+    }
+  };
+
   const addFeed = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -303,6 +495,12 @@ export default function AdminPanel() {
 
     if (!feedUrl) {
       toast.error('Please enter a RSS feed URL');
+      return;
+    }
+
+    // Detect Podcast Index search URLs → redirect to bulk import flow
+    if (isPodcastIndexSearchUrl(feedUrl)) {
+      searchBulkFeeds(feedUrl);
       return;
     }
 
@@ -707,25 +905,263 @@ export default function AdminPanel() {
                 />
                 <button
                   type="submit"
-                  disabled={addingFeed || !newFeedUrl.trim()}
+                  disabled={addingFeed || bulkSearching || !newFeedUrl.trim()}
                   className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
                 >
-                  {addingFeed ? (
+                  {addingFeed || bulkSearching ? (
                     <>
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      Processing...
+                      {bulkSearching ? 'Searching...' : 'Processing...'}
                     </>
+                  ) : isPodcastIndexSearchUrl(newFeedUrl.trim()) ? (
+                    'Search & Import'
                   ) : (
                     'Add / Update'
                   )}
                 </button>
               </div>
               <p className="mt-2 text-xs text-gray-400">
-                Paste any RSS feed URL or Podcast Index link (e.g., podcastindex.org/podcast/12345). New feeds will be added and parsed. Existing feeds will be reparsed to update metadata, tracks, and payment splits.
+                Paste any RSS feed URL, Podcast Index link (e.g., podcastindex.org/podcast/12345), or PI search page URL (e.g., podcastindex.org/search?q=...) for bulk import. New feeds will be added and parsed. Existing feeds will be reparsed.
               </p>
             </div>
           </form>
         </div>
+
+        {/* Bulk Import Preview */}
+        {(bulkPreview || bulkImportProgress || bulkImportResult) && (
+          <div className="bg-white/5 backdrop-blur-sm rounded-xl border border-green-500/30 p-6 mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl font-semibold text-green-400">
+                Bulk Import from Podcast Index
+              </h2>
+              <button
+                onClick={() => {
+                  setBulkPreview(null);
+                  setBulkImportProgress(null);
+                  setBulkImportResult(null);
+                  setBulkSelectedFeeds(new Set());
+                }}
+                className="text-gray-400 hover:text-white transition-colors p-1 hover:bg-white/10 rounded"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Search Info */}
+            {bulkPreview && (
+              <div className="mb-4">
+                <p className="text-sm text-gray-300">
+                  Search: <span className="text-white font-medium">&quot;{bulkPreview.query}&quot;</span>
+                  {bulkPreview.type && (
+                    <span className="ml-2 px-2 py-0.5 bg-purple-600/20 text-purple-300 rounded text-xs">
+                      {bulkPreview.type}
+                    </span>
+                  )}
+                </p>
+                <div className="flex gap-4 mt-2 text-xs">
+                  <span className="text-gray-400">
+                    Found: <span className="text-white font-medium">{bulkPreview.totalFound}</span>
+                  </span>
+                  <span className="text-green-400">
+                    New: {bulkPreview.newFeeds}
+                  </span>
+                  <span className="text-blue-400">
+                    Existing: {bulkPreview.existingFeeds}
+                  </span>
+                  {bulkPreview.blacklistedFeeds > 0 && (
+                    <span className="text-red-400">
+                      Blacklisted: {bulkPreview.blacklistedFeeds}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Import Progress */}
+            {bulkImportProgress && (
+              <div className="mb-4 space-y-2">
+                <div className="flex justify-between text-xs text-gray-400">
+                  <span>Importing {bulkImportProgress.current} of {bulkImportProgress.total}</span>
+                  <span>{Math.round((bulkImportProgress.current / bulkImportProgress.total) * 100)}%</span>
+                </div>
+                <div className="w-full bg-gray-700 rounded-full h-2">
+                  <div
+                    className="bg-green-500 h-2 rounded-full transition-all duration-300"
+                    style={{ width: `${(bulkImportProgress.current / bulkImportProgress.total) * 100}%` }}
+                  />
+                </div>
+                {bulkImportProgress.currentFeed && (
+                  <p className="text-xs text-gray-500 truncate">
+                    {bulkImportProgress.currentStatus === 'imported' ? '✅' :
+                     bulkImportProgress.currentStatus === 'skipped' ? '⏭️' : '❌'}{' '}
+                    {bulkImportProgress.currentFeed}
+                  </p>
+                )}
+                <div className="flex gap-4 text-xs">
+                  <span className="text-green-400">{bulkImportProgress.imported} imported</span>
+                  <span className="text-blue-400">{bulkImportProgress.skipped} skipped</span>
+                  <span className="text-red-400">{bulkImportProgress.failed} failed</span>
+                </div>
+              </div>
+            )}
+
+            {/* Import Results Summary */}
+            {bulkImportResult && (
+              <div className="mb-4">
+                <div className="grid grid-cols-3 gap-3 mb-3">
+                  <div className="bg-green-500/10 rounded p-3 text-center">
+                    <p className="text-2xl font-bold text-green-400">{bulkImportResult.imported}</p>
+                    <p className="text-xs text-gray-400">Imported</p>
+                  </div>
+                  <div className="bg-blue-500/10 rounded p-3 text-center">
+                    <p className="text-2xl font-bold text-blue-400">{bulkImportResult.skipped}</p>
+                    <p className="text-xs text-gray-400">Skipped</p>
+                  </div>
+                  <div className="bg-red-500/10 rounded p-3 text-center">
+                    <p className="text-2xl font-bold text-red-400">{bulkImportResult.failed}</p>
+                    <p className="text-xs text-gray-400">Failed</p>
+                  </div>
+                </div>
+
+                {/* Detailed results list */}
+                {bulkImportResult.results.length > 0 && (
+                  <div className="max-h-48 overflow-y-auto space-y-1">
+                    {bulkImportResult.results.map((result, idx) => (
+                      <div key={idx} className="flex items-center gap-2 text-xs py-1 px-2 rounded bg-white/5">
+                        <span>{result.status === 'imported' ? '✅' : result.status === 'skipped' ? '⏭️' : '❌'}</span>
+                        <span className="flex-1 truncate text-gray-300">
+                          {result.title || result.feedUrl}
+                        </span>
+                        {result.artist && (
+                          <span className="text-gray-500 truncate max-w-[120px]">{result.artist}</span>
+                        )}
+                        {result.trackCount !== undefined && (
+                          <span className="text-gray-500">{result.trackCount}t</span>
+                        )}
+                        {result.error && (
+                          <span className="text-red-400 truncate max-w-[150px]">{result.error}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Feed List with Checkboxes */}
+            {bulkPreview && !bulkImportProgress && !bulkImportResult && (
+              <div className="space-y-3">
+                {/* Select All / None */}
+                <div className="flex items-center gap-3 text-sm">
+                  <button
+                    onClick={() => {
+                      const allNew = bulkPreview.feeds
+                        .filter(f => !f.alreadyExists && !f.isBlacklisted)
+                        .map(f => f.feedUrl);
+                      setBulkSelectedFeeds(new Set(allNew));
+                    }}
+                    className="text-blue-400 hover:text-blue-300 transition-colors"
+                  >
+                    Select all new
+                  </button>
+                  <span className="text-gray-600">|</span>
+                  <button
+                    onClick={() => setBulkSelectedFeeds(new Set())}
+                    className="text-gray-400 hover:text-gray-300 transition-colors"
+                  >
+                    Select none
+                  </button>
+                  <span className="text-gray-600">|</span>
+                  <span className="text-gray-400">
+                    {bulkSelectedFeeds.size} selected
+                  </span>
+                </div>
+
+                {/* Feed List */}
+                <div className="max-h-96 overflow-y-auto space-y-2">
+                  {bulkPreview.feeds.map((feed) => {
+                    const isSelected = bulkSelectedFeeds.has(feed.feedUrl);
+                    const isDisabled = feed.alreadyExists || feed.isBlacklisted;
+
+                    return (
+                      <label
+                        key={feed.piId}
+                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                          isDisabled
+                            ? 'bg-white/2 border-white/5 opacity-50 cursor-default'
+                            : isSelected
+                              ? 'bg-green-500/10 border-green-500/30'
+                              : 'bg-white/5 border-white/10 hover:bg-white/10'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          disabled={isDisabled}
+                          onChange={(e) => {
+                            const next = new Set(bulkSelectedFeeds);
+                            if (e.target.checked) {
+                              next.add(feed.feedUrl);
+                            } else {
+                              next.delete(feed.feedUrl);
+                            }
+                            setBulkSelectedFeeds(next);
+                          }}
+                          className="rounded border-gray-500 bg-white/10 text-green-500 focus:ring-green-500"
+                        />
+                        {feed.image && (
+                          <img
+                            src={feed.image}
+                            alt={feed.title}
+                            className="w-10 h-10 rounded object-cover flex-shrink-0"
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                          />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-white font-medium truncate">{feed.title}</p>
+                          <p className="text-xs text-gray-400 truncate">{feed.author}</p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {feed.episodeCount > 0 && (
+                            <span className="text-xs text-gray-500">{feed.episodeCount} tracks</span>
+                          )}
+                          {feed.alreadyExists && (
+                            <span className="px-2 py-0.5 bg-blue-600/20 text-blue-400 rounded text-xs">
+                              exists
+                            </span>
+                          )}
+                          {feed.isBlacklisted && (
+                            <span className="px-2 py-0.5 bg-red-600/20 text-red-400 rounded text-xs">
+                              blocked
+                            </span>
+                          )}
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+
+                {/* Import Button */}
+                <button
+                  onClick={importBulkFeeds}
+                  disabled={bulkImporting || bulkSelectedFeeds.size === 0}
+                  className="w-full px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center justify-center gap-2"
+                >
+                  {bulkImporting ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Importing...
+                    </>
+                  ) : (
+                    <>Import {bulkSelectedFeeds.size} Feed{bulkSelectedFeeds.size !== 1 ? 's' : ''}</>
+                  )}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Delete by URL */}
         <div className="bg-white/5 backdrop-blur-sm rounded-xl border border-red-500/30 p-6 mb-8">

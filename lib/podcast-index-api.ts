@@ -315,6 +315,42 @@ class PodcastIndexAPI {
     }
   }
 
+  /**
+   * Search for feeds by term, optionally filtered by medium (e.g., 'music')
+   */
+  async searchByTerm(query: string, medium?: string, max?: number): Promise<PodcastIndexFeed[]> {
+    try {
+      let url = `${this.baseUrl}/search/byterm?q=${encodeURIComponent(query)}`;
+      if (medium) {
+        url += `&medium=${encodeURIComponent(medium)}`;
+      }
+      if (max) {
+        url += `&max=${max}`;
+      }
+
+      const response = await fetch(url, {
+        headers: this.getAuthHeaders(),
+        signal: AbortSignal.timeout(15000)
+      });
+
+      if (!response.ok) {
+        console.error(`Podcast Index search error: ${response.status} ${response.statusText}`);
+        return [];
+      }
+
+      const data = await response.json();
+
+      if (data.status === 'true' && data.feeds) {
+        return data.feeds as PodcastIndexFeed[];
+      }
+
+      return [];
+    } catch (error) {
+      console.error(`Error searching Podcast Index for "${query}":`, error);
+      return [];
+    }
+  }
+
   async resolveArtworkForTrack(feedGuid: string, itemGuid?: string): Promise<string | null> {
     try {
       // First try to get episode-specific artwork if itemGuid is provided
@@ -460,6 +496,43 @@ export async function resolvePodcastIndexUrl(url: string): Promise<{ feedUrl: st
   } catch {
     return null;
   }
+}
+
+/**
+ * Parse a Podcast Index search page URL and return the search parameters.
+ * Handles formats like:
+ *   https://podcastindex.org/search?q=Christian%20Leuenberg&type=music
+ * Returns the search query and type, or null if not a PI search URL.
+ */
+export function parsePodcastIndexSearchUrl(url: string): { query: string; type?: string } | null {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname !== 'podcastindex.org' && parsed.hostname !== 'www.podcastindex.org') {
+      return null;
+    }
+
+    if (parsed.pathname !== '/search') {
+      return null;
+    }
+
+    const query = parsed.searchParams.get('q');
+    if (!query) {
+      return null;
+    }
+
+    const type = parsed.searchParams.get('type') || undefined;
+    return { query, type };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Search Podcast Index by term with optional medium filter.
+ * Convenience export for the singleton API instance.
+ */
+export async function searchPodcastIndex(query: string, medium?: string, max?: number): Promise<PodcastIndexFeed[]> {
+  return podcastIndexAPI.searchByTerm(query, medium, max);
 }
 
 // Re-export the PodcastIndexFeed type for use in other modules
