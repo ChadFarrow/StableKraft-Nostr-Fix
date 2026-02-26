@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { parseRSSFeedWithSegments, calculateTrackOrder, detectTrackMediaType } from '@/lib/rss-parser-db';
 import { resolvePodcastIndexUrl } from '@/lib/podcast-index-api';
+import { normalizeUrl } from '@/lib/url-utils';
 
 interface RemoteItemResult {
   added: number;
@@ -201,15 +202,18 @@ export async function POST(request: NextRequest) {
       console.log(`🔄 Resolved Podcast Index URL → ${resolvedUrl}`);
     }
 
-    // Find the feed by URL (try resolved URL first, then original)
+    // Normalize URLs for consistent lookup (handles encoding differences like spaces vs %20)
+    const normalizedResolvedUrl = normalizeUrl(resolvedUrl);
+
+    // Build a set of URL variants to check (normalized + raw, resolved + original)
+    const urlVariants = new Set([normalizedResolvedUrl]);
+    if (resolvedUrl !== normalizedResolvedUrl) urlVariants.add(resolvedUrl);
+    if (originalUrl !== normalizedResolvedUrl && originalUrl !== resolvedUrl) urlVariants.add(originalUrl);
+
+    // Find the feed by any URL variant
     let feed = await prisma.feed.findFirst({
-      where: { originalUrl: resolvedUrl }
+      where: { originalUrl: { in: Array.from(urlVariants) } }
     });
-    if (!feed && resolvedUrl !== originalUrl) {
-      feed = await prisma.feed.findFirst({
-        where: { originalUrl }
-      });
-    }
 
     // Parse the RSS feed first (needed whether feed exists or not)
     let parsedFeed;
@@ -261,8 +265,8 @@ export async function POST(request: NextRequest) {
         const newFeed = await prisma.feed.create({
           data: {
             id: feedId,
-            originalUrl: resolvedUrl,
-            cdnUrl: resolvedUrl,
+            originalUrl: normalizedResolvedUrl,
+            cdnUrl: normalizedResolvedUrl,
             type: feedType,
             priority: 'normal',
             title: parsedFeed.title,
@@ -560,10 +564,16 @@ export async function POST(request: NextRequest) {
         console.log(`✅ Updated feed-level v4v data: ${parsedFeed.v4vRecipient}`);
       }
       
-      // Filter out tracks that already exist
-      const newItems = parsedFeed.items.filter(item => 
-        !item.guid || !existingGuids.has(item.guid)
-      );
+      // Filter out tracks that already exist (check GUID, then audioUrl+title for items without GUIDs)
+      const existingAudioUrls = new Set(existingTracks.map(t => t.audioUrl).filter(Boolean));
+      const existingTitles = new Set(existingTracks.map(t => t.title).filter(Boolean));
+      const newItems = parsedFeed.items.filter(item => {
+        // If item has a GUID that matches an existing track, skip it
+        if (item.guid && existingGuids.has(item.guid)) return false;
+        // For items without GUIDs, check if audioUrl AND title both match existing tracks
+        if (!item.guid && item.audioUrl && existingAudioUrls.has(item.audioUrl) && item.title && existingTitles.has(item.title)) return false;
+        return true;
+      });
       
       // Add new tracks with proper trackOrder
       if (newItems.length > 0) {

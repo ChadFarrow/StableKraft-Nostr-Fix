@@ -166,10 +166,16 @@ export async function POST(
         console.log(`✅ Updated feed-level v4v data: ${parsedFeed.v4vRecipient}`);
       }
 
-      // Filter out tracks that already exist
-      const newItems = parsedFeed.items.filter(item =>
-        !item.guid || !existingGuids.has(item.guid)
-      );
+      // Filter out tracks that already exist (check GUID, then audioUrl+title for items without GUIDs)
+      const existingAudioUrls = new Set(existingTracks.map(t => t.audioUrl).filter(Boolean));
+      const existingTitles = new Set(existingTracks.map(t => t.title).filter(Boolean));
+      const newItems = parsedFeed.items.filter(item => {
+        // If item has a GUID that matches an existing track, skip it
+        if (item.guid && existingGuids.has(item.guid)) return false;
+        // For items without GUIDs, check if audioUrl AND title both match existing tracks
+        if (!item.guid && item.audioUrl && existingAudioUrls.has(item.audioUrl) && item.title && existingTitles.has(item.title)) return false;
+        return true;
+      });
 
       // Add new tracks with proper trackOrder
       if (newItems.length > 0) {
