@@ -131,6 +131,8 @@ LNURL payments use [BoostBox](https://tardbox.com) for Podcasting 2.0 boost meta
 
 **Feed.guid gotcha**: `feed_guid` in BoostBox comes from `Feed.guid` in DB. If null, reparse the feed. Written during import from `<podcast:guid>` tag.
 
+**BoostBox → Helipad flow**: LNURL boost comment contains `rss::payment::boost https://tardbox.com/boost/<id> <message>`. Helipad sends HEAD to that URL, reads `x-rss-payment` header (URL-encoded JSON metadata). BoostBox serves both GET and HEAD on `/boost/:id`. Helipad's `metadata.rs` regex must include `tardbox.com` — upstream PR: [Podcastindex-org/helipad#148](https://github.com/Podcastindex-org/helipad/pull/148).
+
 ### Helipad Metadata (`components/Lightning/BoostButton.tsx`)
 Built by `buildHelipadMetadata(amount, msg)`, BLIP-0010 spec. Single helper for all payment paths — do NOT duplicate. `name` field omitted from base; `value-splits.ts` sets it per-recipient.
 
