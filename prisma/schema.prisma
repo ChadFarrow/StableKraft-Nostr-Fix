@@ -192,6 +192,7 @@ model SystemPlaylistTrack {
   trackId        String
   position       Int
   episodeId      String?
+  episodeTitle   String?
   SystemPlaylist SystemPlaylist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
   Track          Track          @relation(fields: [trackId], references: [id], onDelete: Cascade)
 

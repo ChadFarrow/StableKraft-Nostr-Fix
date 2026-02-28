@@ -263,35 +263,38 @@ export async function getPlaylistFromDatabase(config: PlaylistConfig): Promise<{
     console.log(`⚡ [${config.shortName}] Using database playlist (${dbPlaylist.SystemPlaylistTrack.length} tracks)`);
 
     // Transform to expected response format
-    // Convert episodeId (e.g., "ep-23-plays") back to readable title (e.g., "23 plays")
+    // Use stored episodeTitle if available, fall back to converting episodeId
     const episodeIdToTitle = (epId: string | null): string => {
       if (!epId) return '';
       return epId.replace('ep-', '').replace(/-/g, ' ');
     };
 
-    const tracks = dbPlaylist.SystemPlaylistTrack.map((pt, index) => ({
-      id: pt.Track.id,
-      title: pt.Track.title,
-      artist: pt.Track.artist || pt.Track.Feed?.artist || 'Unknown Artist',
-      album: pt.Track.album || pt.Track.Feed?.title || 'Unknown Album',
-      audioUrl: pt.Track.audioUrl,
-      duration: pt.Track.duration || 0,
-      image: pt.Track.image || pt.Track.Feed?.image,
-      publishedAt: pt.Track.publishedAt?.toISOString(),
-      v4vRecipient: pt.Track.v4vRecipient,
-      v4vValue: pt.Track.v4vValue,
-      feedGuid: pt.Track.guid,
-      itemGuid: pt.Track.guid,
-      guid: pt.Track.guid,
-      index,
-      episodeId: pt.episodeId,
-      episodeTitle: episodeIdToTitle(pt.episodeId),
-      playlistContext: {
-        episodeTitle: episodeIdToTitle(pt.episodeId),
+    const tracks = dbPlaylist.SystemPlaylistTrack.map((pt, index) => {
+      const title = pt.episodeTitle || episodeIdToTitle(pt.episodeId);
+      return {
+        id: pt.Track.id,
+        title: pt.Track.title,
+        artist: pt.Track.artist || pt.Track.Feed?.artist || 'Unknown Artist',
+        album: pt.Track.album || pt.Track.Feed?.title || 'Unknown Album',
+        audioUrl: pt.Track.audioUrl,
+        duration: pt.Track.duration || 0,
+        image: pt.Track.image || pt.Track.Feed?.image,
+        publishedAt: pt.Track.publishedAt?.toISOString(),
+        v4vRecipient: pt.Track.v4vRecipient,
+        v4vValue: pt.Track.v4vValue,
+        feedGuid: pt.Track.guid,
         itemGuid: pt.Track.guid,
-        position: pt.position
-      }
-    }));
+        guid: pt.Track.guid,
+        index,
+        episodeId: pt.episodeId,
+        episodeTitle: title,
+        playlistContext: {
+          episodeTitle: title,
+          itemGuid: pt.Track.guid,
+          position: pt.position
+        }
+      };
+    });
 
     // Build episode groups from database data using O(n) pre-indexing
     const tracksByEpisode = new Map<string, typeof tracks>();
@@ -308,7 +311,7 @@ export async function getPlaylistFromDatabase(config: PlaylistConfig): Promise<{
 
     const episodes: EpisodeGroup[] = Array.from(tracksByEpisode.entries()).map(([epId, episodeTracks], idx) => ({
       id: epId,
-      title: epId.replace('ep-', '').replace(/-/g, ' ') || 'Unknown Episode',
+      title: episodeTracks[0]?.episodeTitle || epId.replace('ep-', '').replace(/-/g, ' ') || 'Unknown Episode',
       trackCount: episodeTracks.length,
       tracks: episodeTracks as any,
       index: idx
@@ -401,6 +404,7 @@ export async function savePlaylistToDatabase(
         trackId: track.id,
         position: index,
         episodeId: track.episodeId || null,
+        episodeTitle: track.episodeTitle || null,
       }))
       .filter(t => {
         if (!t.trackId) return false;
