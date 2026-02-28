@@ -35,7 +35,7 @@ jobs:
         sleep 5
 
         # Playlist names used throughout
-        PLAYLISTS=("hgh" "mmt" "sas" "mmm" "iam" "itdv" "b4ts" "upbeats")
+        PLAYLISTS=("hgh" "mmt" "sas" "mmm" "iam" "itdv" "b4ts" "upbeats" "flowgnar" "lt" "tft" "greatest-hits")
 
         # Step 2: Reparse ALL music feeds to detect new tracks FIRST
         # This must run BEFORE playlist refresh to catch new tracks
