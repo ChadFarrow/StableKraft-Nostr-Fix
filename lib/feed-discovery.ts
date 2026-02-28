@@ -142,14 +142,22 @@ export async function addUnresolvedFeeds(feedGuids: string[]): Promise<number> {
 
   for (const feedGuid of feedGuids) {
     try {
-      // Check if feed already exists by ID first (fast lookup)
-      const existingFeed = await prisma.feed.findUnique({
+      // Check if feed already exists by ID or guid column
+      const existingById = await prisma.feed.findUnique({
         where: { id: feedGuid },
         select: { id: true }
       });
 
-      if (existingFeed) {
-        console.log(`⚡ Feed GUID already exists in database: ${feedGuid}`);
+      if (existingById) {
+        continue;
+      }
+
+      const existingByGuid = await prisma.feed.findUnique({
+        where: { guid: feedGuid },
+        select: { id: true }
+      });
+
+      if (existingByGuid) {
         continue;
       }
 
