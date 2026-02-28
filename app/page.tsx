@@ -793,7 +793,7 @@ function HomePageContent() {
           console.warn('⚠️ Fast playlist endpoint failed, falling back to individual APIs');
           
           // Fallback to individual playlist APIs if fast endpoint fails
-          const [upbeatsResponse, b4tsResponse, itdvResponse, hghResponse, iamResponse, mmmResponse, mmtResponse, sasResponse, flowgnarResponse, ltResponse, greatestHitsResponse] = await Promise.allSettled([
+          const [upbeatsResponse, b4tsResponse, itdvResponse, hghResponse, iamResponse, mmmResponse, mmtResponse, sasResponse, flowgnarResponse, ltResponse, tftResponse, greatestHitsResponse] = await Promise.allSettled([
             fetch('/api/playlist/upbeats'),
             fetch('/api/playlist/b4ts'),
             fetch('/api/playlist/itdv'),
@@ -804,6 +804,7 @@ function HomePageContent() {
             fetch('/api/playlist/sas'),
             fetch('/api/playlist/flowgnar'),
             fetch('/api/playlist/lt'),
+            fetch('/api/playlist/tft'),
             fetch('/api/playlist/greatest-hits')
           ]);
 
@@ -917,6 +918,17 @@ function HomePageContent() {
             }
           } else {
             console.warn('⚠️ Failed to load LT playlist');
+          }
+
+          // Process TFT playlist
+          if (tftResponse.status === 'fulfilled' && tftResponse.value.ok) {
+            const tftData = await tftResponse.value.json();
+            if (tftData.success && tftData.albums) {
+              allAlbums.push(...tftData.albums);
+              console.log(`✅ Loaded ${tftData.albums.length} TFT playlist albums`);
+            }
+          } else {
+            console.warn('⚠️ Failed to load TFT playlist');
           }
 
           // Process Greatest Hits playlist

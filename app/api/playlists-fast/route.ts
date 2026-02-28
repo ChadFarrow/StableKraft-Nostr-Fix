@@ -283,6 +283,30 @@ export async function GET() {
         }
       },
       {
+        id: 'tft-playlist',
+        title: 'Two for Tunestr Music Playlist',
+        artist: 'Various Artists',
+        album: 'Two for Tunestr Music Playlist',
+        description: 'Every music reference from Two for Tunestr',
+        image: 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/TFT-playlist-art.png',
+        coverArt: 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/TFT-playlist-art.png',
+        url: 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/TFT-music-playlist.xml',
+        feedId: 'tft-playlist',
+        type: 'playlist',
+        totalTracks: trackCounts['tft'] || 0,
+        tracks: [],
+        publishedAt: new Date().toISOString(),
+        isPlaylistCard: true,
+        playlistUrl: '/playlist/tft',
+        albumUrl: '/playlist/tft',
+        isLoading: true,
+        fullDataUrl: '/api/playlist/tft',
+        playlistContext: {
+          source: 'tft-playlist',
+          originalUrl: 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/TFT-music-playlist.xml'
+        }
+      },
+      {
         id: 'lt-playlist',
         title: 'Lightning Thrashes Music Playlist',
         artist: 'Various Artists',

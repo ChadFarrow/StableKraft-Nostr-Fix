@@ -146,6 +146,19 @@ export const PLAYLIST_CONFIGS: Record<string, PlaylistConfig> = {
     albumUrl: '/album/lightning-thrashes-playlist',
   },
 
+  tft: {
+    id: 'tft',
+    url: `${GITHUB_BASE}/TFT-music-playlist.xml`,
+    name: 'Two for Tunestr Music Playlist',
+    shortName: 'TFT',
+    author: 'ChadF',
+    description: 'Every music reference from Two for Tunestr',
+    cacheDuration: CACHE_6_HOURS,
+    maxDuration: TIMEOUT_STANDARD,
+    playlistUrl: '/playlist/tft',
+    albumUrl: '/album/tft-playlist',
+  },
+
   greatestHits: {
     id: 'greatestHits',
     url: `${GITHUB_BASE}/Greatest-Hits-music-playlist.xml`,
