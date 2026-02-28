@@ -453,7 +453,7 @@ export async function generatePodcastIndexHeaders(): Promise<Record<string, stri
  * Normalize Podcast Index API response to handle both 'feed' and 'feeds' formats
  */
 export function normalizeFeedResponse(data: any): PodcastIndexFeed | null {
-  if (data.status !== 'true') return null;
+  if (data.status !== 'true' && data.status !== true) return null;
   return data.feed || (data.feeds && data.feeds[0]) || null;
 }
 
