@@ -33,7 +33,9 @@ Runs at 4 AM EST: clears cache -> reparses feeds -> refreshes playlists -> parse
 ## Key Behaviors
 
 ### Playlist Resolution
-Playlists use `<podcast:remoteItem>` with `feedGuid` + `itemGuid`. On `?refresh`: find feeds without tracks → discover missing via PI API → parse new feeds → discover/link publisher feeds. Resolution rate ~80-90%.
+Playlists use `<podcast:remoteItem>` with `feedGuid` + `itemGuid`. On `?refresh`: discover missing Feed records via PI API → parse new feeds → discover/link publisher feeds → resolve tracks. Resolution rate ~80-90%.
+
+**Feed discovery on refresh** (`lib/playlist/handler.ts`): always runs `processPlaylistFeedDiscovery` for all feedGuids, not just unresolved tracks. Tracks can resolve via Track GUIDs even when parent Feed records don't exist as browsable albums — discovery must check Feed existence independently.
 
 **Publisher discovery** (`lib/feed-discovery.ts`): checks album XML for publisher tags (`parsePublisherFeedFromXML`), falls back to PI API search by artist name. Deduplicates PI API calls per-artist.
 
@@ -88,7 +90,7 @@ Three-layer strategy in `contexts/AudioContext.tsx`:
 Date fields: `Feed.oldestItemPubdate` = album release date, `Feed.createdAt` = when added to site. Backfill: `POST /api/admin/backfill-oldest-pubdate`.
 
 ### Adding New Playlists
-Files to modify (8 total):
+Files to modify (9 total):
 1. `lib/playlist/configs.ts` - Config entry
 2. `app/api/playlist/[id]/route.ts` - Main API route
 3. `app/api/playlist/[id]-fast/route.ts` - Fast API route
@@ -97,8 +99,9 @@ Files to modify (8 total):
 6. `app/page.tsx` - Fallback `Promise.allSettled` array
 7. `app/playlist/[id]/page.tsx` - Dedicated page
 8. `app/favorites/page.tsx` - `playlistTitles`, `playlistImageFallbacks`, `playlistSlugOverrides`
+9. `.github/workflows/refresh-playlists.yml` - Add to `PLAYLISTS` array
 
-Populate: `curl http://localhost:3000/api/playlist/[id]?refresh`
+Populate: `curl https://stablekraft.app/api/playlist/[id]?refresh` — this discovers missing Feed records, parses them, discovers publishers, and resolves tracks.
 
 ### Playlist Page UI
 All pages use `PlaylistTemplateCompact`. Back button → `/?filter=playlist`. Grouped view: `EpisodeSection.tsx`. Track rows: `bg-black/50` over `bg-black/75` panel.
@@ -139,4 +142,7 @@ Built by `buildHelipadMetadata(amount, msg)`, BLIP-0010 spec. Single helper for 
 **BoostButton props**: `feedUrl`, `remoteFeedGuid` (must be real GUID, never feed slug/ID), `albumName`, `publisherGuid`, `episodeGuid` (omit for album-level). Do NOT fall back to `feedId` for `remoteFeedGuid` — it's a slug, not a GUID.
 
 ### Episode/Play Count Markers
-`<podcast:txt purpose="episode">` or `<podcast:txt purpose="playcount">` in XML. Refresh: `curl https://stablekraft.app/api/playlist/[id]?refresh`
+`<podcast:txt purpose="episode">` or `<podcast:txt purpose="playcount">` in XML. Parser decodes XML entities (`&apos;` `&quot;` `&amp;` etc.) via `decodeXmlEntities()` in `lib/playlist/parser.ts`. Original titles stored in `SystemPlaylistTrack.episodeTitle` column — do NOT reverse-engineer titles from episode IDs (lossy). Refresh: `curl https://stablekraft.app/api/playlist/[id]?refresh`
+
+### Daily Workflow Playlists
+The `PLAYLISTS` array in `.github/workflows/refresh-playlists.yml` must include ALL playlist IDs. Missing playlists won't get nightly feed discovery, reparsing, or publisher imports.
