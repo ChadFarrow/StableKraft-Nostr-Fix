@@ -15,7 +15,7 @@ const FALLBACK_COUNTS: Record<string, number> = {
   'itdv': 125,
   'flowgnar': 188,
   'lt': 1290,
-  'tft': 107,
+  'tft': 173,
   'greatestHits': 1247,
 };
 

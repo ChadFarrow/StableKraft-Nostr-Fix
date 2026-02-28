@@ -5,6 +5,20 @@
 import type { RemoteItem, ParsedPlaylistItem, GroupedItems } from './types';
 
 /**
+ * Decode XML entities to their character equivalents
+ */
+function decodeXmlEntities(text: string): string {
+  return text
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(parseInt(code, 10)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, code) => String.fromCharCode(parseInt(code, 16)));
+}
+
+/**
  * Parse artwork URL from playlist XML
  */
 export function parseArtworkUrl(xmlText: string): string | null {
@@ -72,7 +86,7 @@ export function parsePlaylistWithEpisodes(xmlText: string): ParsedPlaylistItem[]
       const purpose = match[1] as 'episode' | 'playcount';
       items.push({
         type: purpose,
-        title: match[2].trim()
+        title: decodeXmlEntities(match[2].trim())
       });
     } else if (match[3] && match[4]) {
       // Remote item - match[3] is feedGuid, match[4] is itemGuid
