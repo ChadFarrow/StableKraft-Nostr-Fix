@@ -390,6 +390,7 @@ export function BoostButton({
         // Reset Nostr status
         setNostrError(null);
         setNostrStatus('idle');
+        let nostrPostingFailed = false;
 
         if (LIGHTNING_CONFIG.features.nostrIntegration && (trackId || feedId) && isNostrAuthenticated && nostrUser) {
           console.log('✅ Boost: All conditions met, proceeding to post to Nostr...');
@@ -413,8 +414,10 @@ export function BoostButton({
               console.error('❌ Boost: Signer not available:', reconnectResult.error);
               setNostrError(reconnectResult.error || 'Signer not available. Please try reconnecting.');
               setNostrStatus('failed');
-              return;
-            }
+              nostrPostingFailed = true;
+              // Don't return - let execution continue to auto-close the modal
+              // Payment already succeeded, Nostr posting is secondary
+            } else {
 
             const signerType = signer.getSignerType();
             
@@ -670,9 +673,11 @@ export function BoostButton({
                 setNostrError(`Signing failed: ${errorMessage}. Please try reconnecting with Amber.`);
               }
               setNostrStatus('failed');
-              return;
+              nostrPostingFailed = true;
+              // Don't return - let execution continue to auto-close the modal
             }
 
+            if (signedEvent) {
             console.log('✅ Boost: Event signed successfully:', {
               eventId: signedEvent.id.slice(0, 16) + '...',
               pubkey: signedEvent.pubkey.slice(0, 16) + '...',
@@ -720,11 +725,13 @@ export function BoostButton({
                   });
                   setNostrError('Boost stored but may not have been published to Nostr relays.');
                   setNostrStatus('failed');
+                  nostrPostingFailed = true;
                 }
               } else {
                 console.error('❌ Boost: API returned success=false:', zapData);
                 setNostrError(zapData.error || 'Failed to post boost to Nostr.');
                 setNostrStatus('failed');
+                nostrPostingFailed = true;
               }
             } else {
               const errorData = await zapResponse.json().catch(() => ({}));
@@ -736,7 +743,10 @@ export function BoostButton({
               });
               setNostrError(errorData.error || `API error: ${zapResponse.statusText}`);
               setNostrStatus('failed');
+              nostrPostingFailed = true;
             }
+            } // end if (signedEvent)
+            } // end else (reconnectResult.success)
           } catch (nostrError) {
             console.error('❌ Boost: Exception during Nostr posting:', {
               error: nostrError instanceof Error ? nostrError.message : String(nostrError),
@@ -754,6 +764,7 @@ export function BoostButton({
               setNostrError(`Failed to post to Nostr: ${errorMessage}. Please try reconnecting with Amber.`);
             }
             setNostrStatus('failed');
+            nostrPostingFailed = true;
 
             // Don't fail the boost if Nostr posting fails
           }
@@ -769,10 +780,14 @@ export function BoostButton({
         });
 
         // Close modal after success
+        // Use longer delay if Nostr posting failed so user can read the warning
+        const closeDelay = nostrPostingFailed ? 4000 : 2000;
         setTimeout(() => {
           setShowModal(false);
           setSuccess(false);
           setMessage('');
+          setNostrError(null);
+          setNostrStatus('idle');
           // Reset amount to default from settings
           if (settings.defaultBoostAmount) {
             setCustomAmount(settings.defaultBoostAmount.toString());
@@ -783,7 +798,7 @@ export function BoostButton({
           if (onClose) {
             onClose();
           }
-        }, 2000);
+        }, closeDelay);
       }
     } catch (err) {
       console.error('Boost error:', err);
