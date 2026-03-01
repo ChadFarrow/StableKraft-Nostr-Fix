@@ -45,6 +45,8 @@ Playlists use `<podcast:remoteItem>` with `feedGuid` + `itemGuid`. On `?refresh`
 
 **Type filter gotcha**: Wavlake feeds often get `type: 'podcast'`. All DB queries for album/music content must include `'podcast'` in the type filter: `type: { in: ['album', 'music', 'podcast'] }`.
 
+**PI API status gotcha**: `normalizeFeedResponse` in `lib/podcast-index-api.ts` must accept both `status: 'true'` (string) and `status: true` (boolean) — the PI API returns either. Use `data.status !== 'true' && data.status !== true` for rejection checks. The `=== 'true'` checks elsewhere are safe (boolean `true` is truthy in `&&` chains).
+
 **Podroll exclusion**: `process-remote-items/route.ts` strips `<podcast:podroll>` sections before extracting `<podcast:remoteItem>` tags. Without this, podroll-referenced feeds get imported as albums.
 
 ### Feed Blacklist (`lib/feed-exclusions.ts`)
