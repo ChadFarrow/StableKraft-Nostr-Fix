@@ -80,14 +80,11 @@ export function BitcoinConnectProvider({ children }: { children: React.ReactNode
   const balanceIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    // CRITICAL: Check login type FIRST - skip WebLN initialization if user logged in with Amber (NIP-46/NIP-55)
-    const loginType = typeof window !== 'undefined' ? localStorage.getItem('nostr_login_type') : null;
-    if (loginType === 'nip46' || loginType === 'nip55' || loginType === 'amber') {
-      setIsLoading(false);
-      return;
-    }
-
     // Initialize Bitcoin Connect on component mount (client-side only)
+    // Note: We always initialize Bitcoin Connect even for NIP-46/NIP-55/Amber logins
+    // because users may separately connect an NWC wallet for Lightning payments.
+    // init() doesn't trigger popups — only requestProvider()/launchModal() do.
+    // The WebLN auto-connect for Alby is guarded separately below.
     if (typeof window !== 'undefined') {
       import('@getalby/bitcoin-connect').then(({ init, onConnected, onDisconnected }) => {
         init({
