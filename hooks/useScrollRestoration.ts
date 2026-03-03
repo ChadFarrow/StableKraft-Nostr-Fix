@@ -5,6 +5,8 @@ import { usePathname } from 'next/navigation';
 
 const STORAGE_KEY_PREFIX = 'scroll_';
 const DEBOUNCE_MS = 300;
+const RESTORE_MAX_ATTEMPTS = 25;
+const RESTORE_INTERVAL_MS = 100;
 
 export function useScrollRestoration() {
   const pathname = usePathname();
@@ -37,12 +39,21 @@ export function useScrollRestoration() {
   const restoreScrollPosition = useCallback((path: string) => {
     const savedPosition = getScrollPosition(path);
     if (savedPosition !== null && savedPosition > 0) {
-      // Use requestAnimationFrame to ensure DOM has settled
+      let attempts = 0;
+      const tryRestore = () => {
+        window.scrollTo(0, savedPosition);
+        // Check if we actually scrolled close enough (page may not be tall enough yet)
+        if (Math.abs(window.scrollY - savedPosition) < 10) {
+          return; // Success
+        }
+        attempts++;
+        if (attempts < RESTORE_MAX_ATTEMPTS) {
+          setTimeout(tryRestore, RESTORE_INTERVAL_MS);
+        }
+      };
+      // Start after a short delay to let initial render happen
       requestAnimationFrame(() => {
-        // Small delay to handle async content loading
-        setTimeout(() => {
-          window.scrollTo(0, savedPosition);
-        }, 50);
+        setTimeout(tryRestore, 50);
       });
     }
   }, [getScrollPosition]);
