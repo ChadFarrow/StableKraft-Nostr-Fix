@@ -634,10 +634,11 @@ export function BoostButton({
             setNostrStatus('signing');
             let signedEvent;
             try {
-              // Add timeout for signing (30 seconds should be enough)
+              // Timeout must match NIP-46 relay-based timeout (120s) — Primal and other
+              // remote signers route through Nostr relays which can take 40-80+ seconds
               const signPromise = signer.signEvent(noteTemplate as any);
-              const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Signing timeout after 30 seconds')), 30000)
+              const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Signing timeout after 120 seconds')), 120000)
               );
               
               signedEvent = await Promise.race([signPromise, timeoutPromise]) as any;
