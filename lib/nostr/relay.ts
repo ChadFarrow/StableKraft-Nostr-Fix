@@ -94,10 +94,27 @@ export class RelayManager {
 
   /**
    * Get all connected relay URLs
+   * Only returns relays with live WebSocket connections
    * @returns Array of relay URLs
    */
   getConnectedRelays(): string[] {
-    return Array.from(this.relays.keys());
+    return Array.from(this.relays.entries())
+      .filter(([_, relay]) => this.isRelayConnected(relay))
+      .map(([url]) => url);
+  }
+
+  /**
+   * Check if a relay's WebSocket is actually open.
+   * nostr-tools v2 Relay has a `connected` getter that checks readyState.
+   * Falls back to assuming connected if the property doesn't exist (older versions).
+   */
+  private isRelayConnected(relay: Relay): boolean {
+    // nostr-tools v2.x: relay.connected checks ws.readyState === WebSocket.OPEN
+    if ('connected' in relay) {
+      return relay.connected === true;
+    }
+    // Fallback: if property doesn't exist, assume connected (relay object exists)
+    return true;
   }
 
   /**
@@ -108,9 +125,7 @@ export class RelayManager {
   isConnected(url: string): boolean {
     const relay = this.relays.get(url);
     if (!relay) return false;
-    // Check the actual WebSocket state — relay.connected is false when
-    // iOS Safari kills the WebSocket after ~30s of backgrounding
-    return relay.connected === true;
+    return this.isRelayConnected(relay);
   }
 
   /**
