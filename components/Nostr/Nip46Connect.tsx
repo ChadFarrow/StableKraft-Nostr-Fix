@@ -10,6 +10,7 @@ interface Nip46ConnectProps {
   onConnected: () => void;
   onError: (error: string) => void;
   onCancel: () => void;
+  signerApp?: 'amber' | 'primal';
 }
 
 export default function Nip46Connect({
@@ -18,6 +19,7 @@ export default function Nip46Connect({
   onConnected,
   onError,
   onCancel,
+  signerApp = 'amber',
 }: Nip46ConnectProps) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'waiting' | 'connecting' | 'connected' | 'error'>('waiting');
@@ -44,7 +46,7 @@ export default function Nip46Connect({
         typeof arg === 'string' ? arg : JSON.stringify(arg)
       ).join(' ');
       
-      if (message.includes('NIP-46') || message.includes('Amber') || message.includes('relay')) {
+      if (message.includes('NIP-46') || message.includes('Amber') || message.includes('Primal') || message.includes('relay')) {
         setErrorLog(prev => [...prev.slice(-19), {
           timestamp: new Date().toLocaleTimeString(),
           message: message.substring(0, 200),
@@ -52,14 +54,14 @@ export default function Nip46Connect({
         }]);
       }
     };
-    
+
     console.warn = (...args: any[]) => {
       originalWarn(...args);
-      const message = args.map(arg => 
+      const message = args.map(arg =>
         typeof arg === 'string' ? arg : JSON.stringify(arg)
       ).join(' ');
-      
-      if (message.includes('NIP-46') || message.includes('Amber') || message.includes('relay')) {
+
+      if (message.includes('NIP-46') || message.includes('Amber') || message.includes('Primal') || message.includes('relay')) {
         setErrorLog(prev => [...prev.slice(-19), {
           timestamp: new Date().toLocaleTimeString(),
           message: `⚠️ ${message.substring(0, 200)}`,
@@ -120,7 +122,7 @@ export default function Nip46Connect({
           setConnectionStatus('error');
           setIsConnecting(false);
 
-          const errorMessage = `Connection timed out after ${TIMEOUT_SECONDS} seconds.\n\nMake sure you:\n1. Scanned the QR code and approved the connection in Amber\n2. Have a stable internet connection\n3. Aren't blocking the relay connection with ad blockers or privacy extensions`;
+          const errorMessage = `Connection timed out after ${TIMEOUT_SECONDS} seconds.\n\nMake sure you:\n1. Scanned the QR code and approved the connection in ${appName}\n2. Have a stable internet connection\n3. Aren't blocking the relay connection with ad blockers or privacy extensions`;
 
           onError(errorMessage);
           return;
@@ -156,14 +158,16 @@ export default function Nip46Connect({
     }
   }, [connectionStatus, onConnected, connectionToken, debugInfo.relayUrl, debugInfo.appPubkey]);
 
-  // Generate deep link URL for Amber
+  // Generate deep link URL for signer app
   useEffect(() => {
-    if (isAndroid()) {
+    if (signerApp === 'primal' && isIOS()) {
+      // Primal on iOS handles nostrconnect:// URIs
+      setDeepLinkUrl(connectionToken);
+    } else if (isAndroid()) {
       // Amber supports nostrconnect:// URIs directly
-      // Also support amber:// deep link as fallback
-      setDeepLinkUrl(connectionToken); // connectionToken is already the nostrconnect:// URI
+      setDeepLinkUrl(connectionToken);
     }
-  }, [connectionToken, signerUrl]);
+  }, [connectionToken, signerUrl, signerApp]);
 
   const handleDeepLink = () => {
     if (deepLinkUrl) {
@@ -183,15 +187,19 @@ export default function Nip46Connect({
   };
 
   const isMobile = isAndroid() || isIOS();
+  const appName = signerApp === 'primal' ? 'Primal' : 'Amber';
+  const isPrimalIOS = signerApp === 'primal' && isIOS();
 
   return (
     <div className="space-y-4">
       <div className="text-center">
-        <h3 className="text-lg font-semibold mb-2">Connect with Amber</h3>
+        <h3 className="text-lg font-semibold mb-2">Connect with {appName}</h3>
         <p className="text-sm text-gray-600 mb-4">
-          {isMobile
-            ? 'Copy the connection link below and paste it into Amber, or tap the button to open Amber directly'
-            : 'Scan the QR code with Amber on your phone, or copy the connection URI and paste it into Amber'}
+          {isPrimalIOS
+            ? 'Tap the button below to open Primal and approve the connection, or copy the link to paste manually'
+            : isMobile
+            ? `Copy the connection link below and paste it into ${appName}, or tap the button to open ${appName} directly`
+            : `Scan the QR code with ${appName} on your phone, or copy the connection URI and paste it into ${appName}`}
         </p>
       </div>
 
@@ -226,7 +234,7 @@ export default function Nip46Connect({
             </button>
           </div>
           <p className="text-xs text-gray-500">
-            Copy this link and paste it into Amber&apos;s connection field
+            Copy this link and paste it into {appName}&apos;s connection field
           </p>
         </div>
       ) : (
@@ -251,24 +259,28 @@ export default function Nip46Connect({
               </button>
             </div>
             <p className="text-xs text-gray-500">
-              Paste this in Amber on your phone to connect
+              Paste this in {appName} on your phone to connect
             </p>
           </div>
         </details>
       )}
 
-      {/* Deep Link Button (Android only) */}
-      {isAndroid() && deepLinkUrl && (
+      {/* Deep Link Button (Android for Amber, iOS for Primal) */}
+      {((isAndroid() && deepLinkUrl) || (isPrimalIOS && deepLinkUrl)) && (
         <div className="space-y-2">
           <button
             onClick={handleDeepLink}
             disabled={isConnecting}
-            className="w-full px-4 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            className={`w-full px-4 py-3 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed font-medium ${
+              signerApp === 'primal'
+                ? 'bg-purple-600 hover:bg-purple-700'
+                : 'bg-blue-600 hover:bg-blue-700'
+            }`}
           >
-            {isConnecting ? 'Opening Amber...' : 'Open in Amber App'}
+            {isConnecting ? `Opening ${appName}...` : `Open in ${appName}`}
           </button>
           <p className="text-xs text-gray-500 text-center">
-            Tap to open Amber and connect automatically
+            Tap to open {appName} and connect automatically
           </p>
         </div>
       )}
@@ -280,12 +292,12 @@ export default function Nip46Connect({
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
           </div>
           <p className="text-sm text-blue-800 text-center font-medium">
-            Waiting for Amber to connect...
+            Waiting for {appName} to connect...
           </p>
           <p className="text-xs text-blue-600 text-center">
             {isMobile
-              ? 'Please open Amber and approve the connection'
-              : 'Please scan the QR code and approve the connection in Amber'}
+              ? `Please open ${appName} and approve the connection`
+              : `Please scan the QR code and approve the connection in ${appName}`}
           </p>
           {debugInfo.connectionCheckCount && debugInfo.connectionCheckCount > 10 && (
             <p className="text-xs text-yellow-700 text-center">
@@ -384,28 +396,41 @@ export default function Nip46Connect({
       {/* Instructions */}
       <div className="p-4 bg-gray-50 border border-gray-200 rounded-md">
         <h4 className="text-sm font-semibold mb-2">How to connect:</h4>
-        <ol className="text-xs text-gray-600 space-y-1 list-decimal list-inside">
-          <li>Open the Amber app on your device</li>
-          <li>Go to Settings → Remote Signing (NIP-46) or use the &quot;Connect&quot; option</li>
-          {isMobile ? (
-            isAndroid() ? (
-              <>
-                <li>Tap &quot;Open in Amber App&quot; button above, or copy the connection link and paste it in Amber</li>
-              </>
+        {signerApp === 'primal' ? (
+          <ol className="text-xs text-gray-600 space-y-1 list-decimal list-inside">
+            <li>Open the Primal app on your iOS device</li>
+            <li>Go to Settings → Nostr Signing (NIP-46)</li>
+            {isMobile ? (
+              <li>Tap &quot;Open in Primal&quot; above, or copy the connection link and paste it in Primal</li>
             ) : (
               <>
-                <li>Copy the connection link above and paste it into Amber&apos;s connection field</li>
+                <li>Scan the QR code above with your phone&apos;s camera, or</li>
+                <li>Copy the connection link and paste it into Primal</li>
               </>
-            )
-          ) : (
-            <>
-              <li>Scan the QR code above with your phone&apos;s camera, or</li>
-              <li>Copy the connection link and paste it into Amber&apos;s connection field</li>
-            </>
-          )}
-          <li>Approve the connection request in Amber</li>
-          <li>Wait for the connection to be established</li>
-        </ol>
+            )}
+            <li>Approve the connection request in Primal</li>
+            <li>Primal auto-signs with Full trust — connection should be near-instant</li>
+          </ol>
+        ) : (
+          <ol className="text-xs text-gray-600 space-y-1 list-decimal list-inside">
+            <li>Open the Amber app on your device</li>
+            <li>Go to Settings → Remote Signing (NIP-46) or use the &quot;Connect&quot; option</li>
+            {isMobile ? (
+              isAndroid() ? (
+                <li>Tap &quot;Open in Amber App&quot; button above, or copy the connection link and paste it in Amber</li>
+              ) : (
+                <li>Copy the connection link above and paste it into Amber&apos;s connection field</li>
+              )
+            ) : (
+              <>
+                <li>Scan the QR code above with your phone&apos;s camera, or</li>
+                <li>Copy the connection link and paste it into Amber&apos;s connection field</li>
+              </>
+            )}
+            <li>Approve the connection request in Amber</li>
+            <li>Wait for the connection to be established</li>
+          </ol>
+        )}
       </div>
 
       {/* Manual Check/Continue Buttons - Show when connecting or waiting */}
@@ -423,13 +448,13 @@ export default function Nip46Connect({
                     setIsConnecting(false);
                     setTimeout(() => onConnected(), 500);
                   } else {
-                    alert('Connection not yet established. Please approve the connection in Amber.');
+                    alert(`Connection not yet established. Please approve the connection in ${appName}.`);
                   }
                 } catch (err) {
                   alert('Error checking connection status.');
                 }
               } else {
-                alert('No connection found. Make sure you\'ve approved the connection in Amber.');
+                alert(`No connection found. Make sure you've approved the connection in ${appName}.`);
               }
             }}
             className="flex-1 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-md text-sm"

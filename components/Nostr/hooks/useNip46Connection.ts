@@ -40,7 +40,7 @@ export interface Nip46ConnectionActions {
 }
 
 export interface UseNip46ConnectionOptions {
-  loginMethod: 'extension' | 'nip05' | 'amber';
+  loginMethod: 'extension' | 'nip05' | 'amber' | 'primal';
   isSubmitting: boolean;
 }
 
@@ -232,7 +232,7 @@ export function useNip46Connection(options: UseNip46ConnectionOptions): Nip46Con
     let cancelled = false;
 
     const initConnection = async () => {
-      if (loginMethod === 'amber' && !amberConnectionInitialized && !showPasteUri && !isSubmitting && !isInitializingAmber) {
+      if ((loginMethod === 'amber' || loginMethod === 'primal') && !amberConnectionInitialized && !showPasteUri && !isSubmitting && !isInitializingAmber) {
         setIsInitializingAmber(true);
         setAmberConnectionError(null);
 
@@ -262,7 +262,7 @@ export function useNip46Connection(options: UseNip46ConnectionOptions): Nip46Con
 
   // Cleanup when switching away from Amber tab
   useEffect(() => {
-    if (loginMethod !== 'amber' && amberConnectionInitialized) {
+    if (loginMethod !== 'amber' && loginMethod !== 'primal' && amberConnectionInitialized) {
       cleanupAmberConnection();
     }
   }, [loginMethod, amberConnectionInitialized, cleanupAmberConnection]);
