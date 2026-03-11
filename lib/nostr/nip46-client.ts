@@ -231,7 +231,27 @@ export class NIP46Client {
     if (this.connection.signerUrl && this.connection.signerUrl.startsWith('wss://')) {
       return this.connection.signerUrl;
     }
-    
+
+    // If signerUrl is a nostrconnect:// URI, extract relay from query params
+    // Primal and other NIP-46 signers use: nostrconnect://<pubkey>?relay=wss://...
+    if (this.connection.signerUrl?.startsWith('nostrconnect://')) {
+      try {
+        const url = new URL(this.connection.signerUrl.replace('nostrconnect://', 'http://'));
+        const relayParam = url.searchParams.get('relay');
+        if (relayParam) {
+          const relayUrl = decodeURIComponent(relayParam);
+          if (relayUrl.startsWith('wss://')) {
+            // Store it for future use so we don't re-parse every time
+            (this.connection as any).relayUrl = relayUrl;
+            return relayUrl;
+          }
+        }
+      } catch (err) {
+        console.error('❌ NIP-46: Failed to parse nostrconnect:// URI to get relay URL:', err);
+      }
+      throw new Error(`Failed to extract relay URL from nostrconnect:// URI`);
+    }
+
     // Last resort: if signerUrl is a bunker:// URI but we got here, something went wrong
     if (this.connection.signerUrl?.startsWith('bunker://')) {
       // Try one more time to parse it
@@ -249,8 +269,8 @@ export class NIP46Client {
       }
       throw new Error(`Failed to extract relay URL from bunker:// URI: ${this.connection.signerUrl}`);
     }
-    
-    throw new Error(`Invalid relay URL: ${this.connection.signerUrl}. Expected wss:// URL or bunker:// URI.`);
+
+    throw new Error(`Invalid relay URL: ${this.connection.signerUrl}. Expected wss://, nostrconnect://, or bunker:// URI.`);
   }
 
   /**
@@ -459,6 +479,13 @@ export class NIP46Client {
       } catch (err) {
         console.warn('⚠️ NIP-46: Failed to parse nostrconnect:// URI, using as-is:', err);
       }
+    }
+
+    // Store the extracted relay URL on the connection so getRelayUrl() can find it
+    // Without this, getRelayUrl() can't resolve nostrconnect:// URIs and all
+    // downstream relay checks (isConnected, ensureSubscription, sendRequest) fail
+    if (relayUrl.startsWith('wss://') && this.connection) {
+      (this.connection as any).relayUrl = relayUrl;
     }
 
     return this.startRelayConnection(relayUrl);
@@ -2513,43 +2540,24 @@ export class NIP46Client {
    * @param isIOS - Whether the device is iOS (uses shorter threshold)
    * @returns true if reconnection was performed
    */
-  async checkAndReconnectIfNeeded(isIOS: boolean = false): Promise<boolean> {
-    const staleThreshold = isIOS
-      ? NIP46Client.IOS_STALE_THRESHOLD_MS
-      : NIP46Client.DEFAULT_STALE_THRESHOLD_MS;
-
-    const timeSinceLastEvent = this.lastEventTime > 0 ? Date.now() - this.lastEventTime : Infinity;
-    const isConnectionStale = timeSinceLastEvent > staleThreshold;
-
-    if (!isConnectionStale) {
-      return false;
-    }
-
-    this.debugLog('🔄 NIP-46: Proactive reconnection check (visibility change):', {
-      isIOS,
-      staleThreshold: `${staleThreshold / 1000}s`,
-      timeSinceLastEvent: timeSinceLastEvent === Infinity ? 'never' : `${Math.floor(timeSinceLastEvent / 1000)}s`,
-    });
-
+  async checkAndReconnectIfNeeded(_isIOS: boolean = false): Promise<boolean> {
     try {
       const relayUrl = this.getRelayUrl();
-      if (relayUrl && relayUrl.startsWith('wss://')) {
-        // Check if relay WebSocket is still in OPEN state before full reconnection
-        const connectedRelays = this.relayClient?.getConnectedRelays?.() || [];
-        if (connectedRelays.includes(relayUrl)) {
-          // Relay still connected — just refresh lastEventTime, no teardown needed
-          this.lastEventTime = Date.now();
-          this.debugLog('✅ NIP-46: Relay still connected, refreshed lastEventTime (no reconnection needed)');
-          return false;
-        }
+      if (!relayUrl || !relayUrl.startsWith('wss://')) return false;
 
-        // Relay disconnected — full reconnect required
-        this.debugLog('🔄 NIP-46: Relay disconnected, performing full reconnection');
-        await this.startRelayConnection(relayUrl);
-        this.lastEventTime = Date.now();
-        this.debugLog('✅ NIP-46: Proactive reconnection successful');
-        return true;
+      // Check actual WebSocket state (getConnectedRelays now filters by relay.connected)
+      const connectedRelays = this.relayClient?.getConnectedRelays?.() || [];
+      if (connectedRelays.includes(relayUrl)) {
+        // WebSocket is alive — no reconnection needed
+        return false;
       }
+
+      // WebSocket is dead — full reconnect required (relay + subscription)
+      this.debugLog('🔄 NIP-46: Relay WebSocket dead on visibility change, reconnecting');
+      await this.startRelayConnection(relayUrl);
+      this.lastEventTime = Date.now();
+      this.debugLog('✅ NIP-46: Proactive reconnection successful');
+      return true;
     } catch (err) {
       console.error('❌ NIP-46: Proactive reconnection failed:', err);
     }
@@ -2891,22 +2899,9 @@ export class NIP46Client {
         
         const isRelayConnected = relayManager.isConnected(relayUrl);
 
-        // Check if connection is stale (no events received recently)
-        // iOS Safari kills WebSocket connections after ~30 seconds when backgrounded
-        // Use shorter threshold on iOS to detect stale connections faster
-        const staleThreshold = isIOS()
-          ? NIP46Client.IOS_STALE_THRESHOLD_MS
-          : NIP46Client.DEFAULT_STALE_THRESHOLD_MS;
-        const timeSinceLastEvent = this.lastEventTime > 0 ? Date.now() - this.lastEventTime : Infinity;
-        const isConnectionStale = timeSinceLastEvent > staleThreshold;
-
-        if (!isRelayConnected || isConnectionStale) {
-          this.debugLog('⚠️ NIP-46: Relay needs reconnection:', {
+        if (!isRelayConnected) {
+          this.debugLog('⚠️ NIP-46: Relay WebSocket is dead, reconnecting:', {
             relayUrl: relayUrl,
-            isRelayConnected,
-            isConnectionStale,
-            timeSinceLastEvent: timeSinceLastEvent === Infinity ? 'never' : `${Math.floor(timeSinceLastEvent / 1000)}s`,
-            reason: !isRelayConnected ? 'relay disconnected' : 'connection stale (iOS background?)',
           });
           await this.startRelayConnection(relayUrl);
           // Update lastEventTime after successful reconnection
