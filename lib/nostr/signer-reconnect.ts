@@ -74,7 +74,7 @@ async function restoreNIP46Connection(
       console.warn('⚠️ No saved NIP-46/nsecBunker connection found');
       return {
         success: false,
-        error: 'Nostr connection lost. Please log out and reconnect with Amber.'
+        error: 'Nostr connection lost. Please log out and reconnect your signer.'
       };
     }
 
@@ -83,7 +83,7 @@ async function restoreNIP46Connection(
       console.warn('⚠️ Stored connection is for different user. Cannot restore.');
       return {
         success: false,
-        error: 'Connection mismatch: Please log out and reconnect with Amber.'
+        error: 'Connection mismatch: Please log out and reconnect your signer.'
       };
     }
 
@@ -135,7 +135,7 @@ async function restoreNIP46Connection(
         const errorMsg = authError instanceof Error ? authError.message : String(authError);
         return {
           success: false,
-          error: `Authentication failed: ${errorMsg}. Please try reconnecting with Amber.`
+          error: `Authentication failed: ${errorMsg}. Please try reconnecting your signer.`
         };
       }
     }
@@ -164,7 +164,7 @@ async function restoreNIP46Connection(
       if (!signer.isAvailable()) {
         return {
           success: false,
-          error: 'Signer not available after reconnection. Please try logging out and reconnecting with Amber.'
+          error: 'Signer not available after reconnection. Please try logging out and reconnecting your signer.'
         };
       }
     }
@@ -177,7 +177,7 @@ async function restoreNIP46Connection(
     console.error('❌ Reconnection error:', errorMessage);
     return {
       success: false,
-      error: `Reconnection failed: ${errorMessage}. Please try reconnecting with Amber.`
+      error: `Reconnection failed: ${errorMessage}. Please try reconnecting your signer.`
     };
   }
 }
@@ -229,7 +229,7 @@ async function restoreNIP55Connection(
 }
 
 /**
- * Verify NIP-46 connection is active
+ * Verify NIP-46 connection is active, attempting reconnection if stale
  */
 export async function verifyNIP46Connection(
   signer: ReturnType<typeof getUnifiedSigner>
@@ -239,11 +239,11 @@ export async function verifyNIP46Connection(
   if (!nip46Client) {
     return {
       success: false,
-      error: 'Nostr client not available. Please try reconnecting with Amber.'
+      error: 'Nostr client not available. Please try reconnecting your signer.'
     };
   }
 
-  const isConnected = nip46Client.isConnected();
+  let isConnected = nip46Client.isConnected();
   const connection = nip46Client.getConnection();
   const pubkey = nip46Client.getPubkey();
 
@@ -253,10 +253,23 @@ export async function verifyNIP46Connection(
     hasPubkey: !!pubkey,
   });
 
+  // If connection object exists but relay is stale (e.g. iOS killed WebSocket),
+  // attempt to re-authenticate before giving up
+  if (!isConnected && connection) {
+    console.log('🔄 NIP-46: Connection stale, attempting re-authentication...');
+    try {
+      await nip46Client.authenticate();
+      isConnected = nip46Client.isConnected();
+      console.log('🔄 NIP-46: Re-authentication result:', { isConnected });
+    } catch (err) {
+      console.warn('⚠️ NIP-46: Re-authentication failed:', err);
+    }
+  }
+
   if (!isConnected || !connection) {
     return {
       success: false,
-      error: 'Connection not established. Please try reconnecting with Amber.'
+      error: 'Connection not established. Please try reconnecting your signer.'
     };
   }
 
@@ -267,7 +280,7 @@ export async function verifyNIP46Connection(
     } catch (error) {
       return {
         success: false,
-        error: 'Failed to get public key. Please try reconnecting with Amber.'
+        error: 'Failed to get public key. Please try reconnecting your signer.'
       };
     }
   }

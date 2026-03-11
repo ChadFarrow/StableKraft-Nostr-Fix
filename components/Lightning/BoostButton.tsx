@@ -666,11 +666,11 @@ export function BoostButton({
               
               // Set user-visible error
               if (errorMessage.includes('timeout')) {
-                setNostrError('Signing timed out. Amber may not be responding. Please check that Amber is open and try again.');
+                setNostrError('Signing timed out. Your signer may not be responding. Please check that it is open and try again.');
               } else if (errorMessage.includes('not available') || errorMessage.includes('disconnected')) {
-                setNostrError('Connection lost. Please try reconnecting with Amber.');
+                setNostrError('Connection lost. Please try reconnecting your signer.');
               } else {
-                setNostrError(`Signing failed: ${errorMessage}. Please try reconnecting with Amber.`);
+                setNostrError(`Signing failed: ${errorMessage}. Please try reconnecting your signer.`);
               }
               setNostrStatus('failed');
               nostrPostingFailed = true;
@@ -761,7 +761,7 @@ export function BoostButton({
             } else if (errorMessage.includes('No signer available')) {
               setNostrError('No Nostr signer available. Please connect a Nostr wallet (NIP-07 extension, NIP-46, or NIP-55).');
             } else {
-              setNostrError(`Failed to post to Nostr: ${errorMessage}. Please try reconnecting with Amber.`);
+              setNostrError(`Failed to post to Nostr: ${errorMessage}. Please try reconnecting your signer.`);
             }
             setNostrStatus('failed');
             nostrPostingFailed = true;
@@ -1376,7 +1376,7 @@ export function BoostButton({
                     <div className="font-semibold mb-1">⚠️ Boost payment succeeded, but Nostr posting failed:</div>
                     <div>{nostrError}</div>
                     <div className="mt-2 text-xs text-yellow-300/80">
-                      Tip: Try logging out and reconnecting with Amber to restore the connection.
+                      Tip: Try logging out and reconnecting your signer to restore the connection.
                     </div>
                   </div>
                 )}
