@@ -3807,51 +3807,31 @@ export class NIP46Client {
   }
 
   /**
-   * Ensure the relay subscription is active.
-   * iOS Safari kills WebSocket connections when backgrounded (~30s). When the relay
-   * manager auto-reconnects the TCP socket, old Nostr subscriptions (REQ) are lost.
-   * This method detects stale subscriptions and re-establishes them so responses
-   * from remote signers (like Primal) are actually received.
+   * Ensure the relay subscription is active before signing.
+   * iOS Safari kills WebSocket connections after ~30s of backgrounding.
+   * When the WebSocket dies, the Nostr subscription (REQ) dies with it.
+   * RelayManager.isConnected() now checks actual WebSocket state, so we
+   * can reliably detect dead connections and re-establish everything.
    */
   private async ensureSubscription(): Promise<void> {
     if (!this.relayClient || !this.connection) return;
 
-    // Check if relay was reconnected after the subscription was created
-    // If so, the subscription is dead and needs to be re-established
     try {
       const relayUrl = this.getRelayUrl();
       if (!relayUrl || relayUrl.startsWith('bunker://')) return;
 
-      const connectedRelays = this.relayClient.getConnectedRelays?.() || [];
-      if (connectedRelays.length === 0) {
-        // Relay not connected at all — startRelayConnection will handle everything
-        console.warn('⚠️ NIP-46: Relay not connected, re-establishing connection and subscription');
-        await this.startRelayConnection(relayUrl);
-        return;
-      }
+      // Check if the relay WebSocket is actually alive (not just if the object exists)
+      const relayManager = (this.relayClient as any).relayManager;
+      const isRelayAlive = relayManager?.isConnected?.(relayUrl) === true;
 
-      // Heuristic: if we haven't received any events since the subscription was set up
-      // AND the subscription is older than the stale threshold, re-establish it.
-      // This catches the case where iOS killed the WebSocket and relay auto-reconnected
-      // but the subscription was lost.
-      const staleThresholdMs = isIOS()
-        ? NIP46Client.IOS_STALE_THRESHOLD_MS
-        : NIP46Client.DEFAULT_STALE_THRESHOLD_MS;
-      const subscriptionAge = Date.now() - this.subscriptionSetupTime;
-      const timeSinceLastEvent = this.lastEventTime > 0
-        ? Date.now() - this.lastEventTime
-        : Infinity;
-
-      // Subscription is stale if:
-      // 1. It's older than the stale threshold, AND
-      // 2. We haven't received events recently (within the threshold)
-      // This avoids unnecessary re-subscribes when everything is working fine
-      if (this.subscriptionSetupTime > 0 && subscriptionAge > staleThresholdMs && timeSinceLastEvent > staleThresholdMs) {
-        console.warn(`⚠️ NIP-46: Subscription appears stale (age: ${Math.floor(subscriptionAge / 1000)}s, last event: ${timeSinceLastEvent === Infinity ? 'never' : Math.floor(timeSinceLastEvent / 1000) + 's ago'}). Re-establishing...`);
+      if (!isRelayAlive) {
+        // WebSocket is dead (iOS backgrounding, network change, etc.)
+        // Need full reconnection: new relay client + new subscription
+        console.warn('⚠️ NIP-46: Relay WebSocket is dead, re-establishing connection and subscription for signing');
         await this.startRelayConnection(relayUrl);
       }
     } catch (err) {
-      console.warn('⚠️ NIP-46: Error checking subscription health:', err);
+      console.warn('⚠️ NIP-46: Error checking relay health:', err);
       // Don't throw — let the sign request proceed anyway
     }
   }
