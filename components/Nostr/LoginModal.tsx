@@ -26,7 +26,7 @@ export default function LoginModal({ onClose }: LoginModalProps) {
   const [hasExtension, setHasExtension] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [nip05Identifier, setNip05Identifier] = useState('');
-  const [loginMethod, setLoginMethod] = useState<'extension' | 'nip05' | 'amber'>('extension');
+  const [loginMethod, setLoginMethod] = useState<'extension' | 'nip05' | 'amber' | 'primal'>('extension');
 
   // NIP-55 state
   const [nip55Client, setNip55Client] = useState<NIP55Client | null>(null);
@@ -110,10 +110,15 @@ export default function LoginModal({ onClose }: LoginModalProps) {
   // Check NIP-55 availability on Android and set up callback handler early
   // NIP-55 is Android-only and NOT supported on iOS
   useEffect(() => {
-    // Skip NIP-55 setup entirely on iOS
+    // Skip NIP-55 setup entirely on iOS — auto-select Primal instead
     if (isIOS()) {
       console.log('ℹ️ NIP-55: Skipping NIP-55 setup on iOS (not supported)');
       setIsNip55Available(false);
+      // Auto-select Primal on iOS if no extension detected
+      if (!hasExtension && loginMethod === 'extension') {
+        console.log('📱 iOS detected: Auto-selecting Primal login (best iOS signer)');
+        setLoginMethod('primal');
+      }
       return;
     }
 
@@ -1008,6 +1013,16 @@ export default function LoginModal({ onClose }: LoginModalProps) {
             Amber
           </button>
           <button
+            onClick={() => setLoginMethod('primal')}
+            className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+              loginMethod === 'primal'
+                ? 'border-b-2 border-purple-600 text-purple-600'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Primal
+          </button>
+          <button
             onClick={() => setLoginMethod('nip05')}
             className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
               loginMethod === 'nip05'
@@ -1115,6 +1130,68 @@ export default function LoginModal({ onClose }: LoginModalProps) {
                   cleanupAmberConnection();
                 }}
               />
+            )}
+          </>
+        )}
+
+        {/* Primal Login (iOS-optimized NIP-46) */}
+        {loginMethod === 'primal' && (
+          <>
+            {/* Loading state while initializing */}
+            {isInitializingAmber && !showNip46Connect && (
+              <div className="mb-4 flex flex-col items-center gap-3 py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+                <p className="text-sm text-gray-600">Preparing Primal connection...</p>
+              </div>
+            )}
+
+            {/* Error state with retry */}
+            {amberConnectionError && !showNip46Connect && !isInitializingAmber && (
+              <div className="mb-4">
+                <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded mb-3">
+                  {amberConnectionError}
+                </div>
+                <button
+                  onClick={() => {
+                    setAmberConnectionError(null);
+                    setAmberConnectionInitialized(false);
+                  }}
+                  className="w-full px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700"
+                >
+                  Retry Connection
+                </button>
+              </div>
+            )}
+
+            {/* QR Code / Connection UI */}
+            {showNip46Connect && (
+              <Nip46Connect
+                connectionToken={nip46ConnectionToken}
+                signerUrl={nip46SignerUrl}
+                signerApp="primal"
+                onConnected={() => {
+                  setShowNip46Connect(false);
+                  handleNip46Connected();
+                }}
+                onError={(error) => {
+                  setError(error);
+                  setIsSubmitting(false);
+                  setShowNip46Connect(false);
+                  setAmberConnectionInitialized(false);
+                }}
+                onCancel={() => {
+                  cleanupAmberConnection();
+                }}
+              />
+            )}
+
+            {/* iOS recommendation note */}
+            {!isInitializingAmber && !amberConnectionError && !showNip46Connect && (
+              <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-md">
+                <p className="text-xs text-purple-800">
+                  <strong>Best for iOS:</strong> Primal auto-signs with Full trust and responds near-instantly. Great for iPhone and iPad users.
+                </p>
+              </div>
             )}
           </>
         )}
