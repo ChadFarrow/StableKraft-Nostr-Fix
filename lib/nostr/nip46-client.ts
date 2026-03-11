@@ -134,6 +134,7 @@ export class NIP46Client {
   private aggressiveModeLogged: boolean = false; // Track if we've already logged aggressive mode message
   private pendingRequestCleanupInterval: NodeJS.Timeout | null = null; // Periodic cleanup for orphaned requests
   private lastSuccessfulKeyPairIndex: number = -1; // Cache last-successful decryption keypair index
+  private subscriptionSetupTime: number = 0; // Track when relay subscription was created
   // Known Amber pubkey from user's npub: npub12xwrqqxuee2k3452uuae7kp0g5yxgpapjrrrz2r0wx7v8pdqynqqc0ez5k
   private readonly knownAmberPubkey: string | null = (() => {
     try {
@@ -721,6 +722,7 @@ export class NIP46Client {
     await new Promise(resolve => setTimeout(resolve, subscriptionDelay));
     
     
+    this.subscriptionSetupTime = Date.now();
     this.relaySubscription = this.relayClient.subscribe({
       relays: subscribeRelays,
       filters,
@@ -3805,11 +3807,61 @@ export class NIP46Client {
   }
 
   /**
+   * Ensure the relay subscription is active.
+   * iOS Safari kills WebSocket connections when backgrounded (~30s). When the relay
+   * manager auto-reconnects the TCP socket, old Nostr subscriptions (REQ) are lost.
+   * This method detects stale subscriptions and re-establishes them so responses
+   * from remote signers (like Primal) are actually received.
+   */
+  private async ensureSubscription(): Promise<void> {
+    if (!this.relayClient || !this.connection) return;
+
+    // Check if relay was reconnected after the subscription was created
+    // If so, the subscription is dead and needs to be re-established
+    try {
+      const relayUrl = this.getRelayUrl();
+      if (!relayUrl || relayUrl.startsWith('bunker://')) return;
+
+      const connectedRelays = this.relayClient.getConnectedRelays?.() || [];
+      if (connectedRelays.length === 0) {
+        // Relay not connected at all — startRelayConnection will handle everything
+        console.warn('⚠️ NIP-46: Relay not connected, re-establishing connection and subscription');
+        await this.startRelayConnection(relayUrl);
+        return;
+      }
+
+      // Heuristic: if we haven't received any events since the subscription was set up
+      // AND the subscription is older than the stale threshold, re-establish it.
+      // This catches the case where iOS killed the WebSocket and relay auto-reconnected
+      // but the subscription was lost.
+      const staleThresholdMs = isIOS()
+        ? NIP46Client.IOS_STALE_THRESHOLD_MS
+        : NIP46Client.DEFAULT_STALE_THRESHOLD_MS;
+      const subscriptionAge = Date.now() - this.subscriptionSetupTime;
+      const timeSinceLastEvent = this.lastEventTime > 0
+        ? Date.now() - this.lastEventTime
+        : Infinity;
+
+      // Subscription is stale if:
+      // 1. It's older than the stale threshold, AND
+      // 2. We haven't received events recently (within the threshold)
+      // This avoids unnecessary re-subscribes when everything is working fine
+      if (this.subscriptionSetupTime > 0 && subscriptionAge > staleThresholdMs && timeSinceLastEvent > staleThresholdMs) {
+        console.warn(`⚠️ NIP-46: Subscription appears stale (age: ${Math.floor(subscriptionAge / 1000)}s, last event: ${timeSinceLastEvent === Infinity ? 'never' : Math.floor(timeSinceLastEvent / 1000) + 's ago'}). Re-establishing...`);
+        await this.startRelayConnection(relayUrl);
+      }
+    } catch (err) {
+      console.warn('⚠️ NIP-46: Error checking subscription health:', err);
+      // Don't throw — let the sign request proceed anyway
+    }
+  }
+
+  /**
    * Sign an event using the remote signer
    */
   async signEvent(event: Event): Promise<Event> {
     this.debugLog('🔵 [NIP46-SIGN] signEvent called - starting signature request');
-    
+
     if (!this.connection?.connected) {
       this.debugLog('⚠️ [NIP46-SIGN] Connection not marked as connected, calling authenticate()');
       await this.authenticate();
@@ -3828,9 +3880,14 @@ export class NIP46Client {
       throw new Error('Signer public key not available. Please wait for the connection to be established.');
     }
 
+    // CRITICAL: Ensure relay subscription is active before signing.
+    // iOS PWA kills WebSockets when backgrounded; relay may auto-reconnect
+    // but the Nostr subscription (REQ) is lost, so responses never arrive.
+    await this.ensureSubscription();
+
     const signerPubkey = this.connection.pubkey;
     this.debugLog('✅ [NIP46-SIGN] Proceeding with signEvent - pubkey confirmed:', signerPubkey.slice(0, 16) + '...');
-    
+
     // CRITICAL: Verify we're using the user's pubkey, not Amber's pubkey
     console.error(`[NIP46-SIGN] Using pubkey for signing: ${signerPubkey.slice(0, 16)}...`);
     try {
