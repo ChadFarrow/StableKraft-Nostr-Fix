@@ -107,9 +107,10 @@ export class RelayManager {
    */
   isConnected(url: string): boolean {
     const relay = this.relays.get(url);
-    // Check if relay is connected by trying to access its readyState
-    // Relay class doesn't expose status directly, so we check if it exists
-    return relay !== undefined;
+    if (!relay) return false;
+    // Check the actual WebSocket state — relay.connected is false when
+    // iOS Safari kills the WebSocket after ~30s of backgrounding
+    return relay.connected === true;
   }
 
   /**
