@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma';
 import { ValueTagParser } from '@/lib/lightning/value-parser';
 import { isValidFeedUrl, normalizeUrl } from '@/lib/url-utils';
 import { calculateTrackOrder, parsePodcastGuidFromXML } from '@/lib/rss-parser-db';
+import { decodeHtmlEntities } from '@/lib/decode-entities';
 
 const PODCAST_INDEX_API_KEY = process.env.PODCAST_INDEX_API_KEY;
 const PODCAST_INDEX_API_SECRET = process.env.PODCAST_INDEX_API_SECRET;
@@ -110,8 +111,8 @@ export async function parseFeedXML(feedUrl: string): Promise<ParseFeedResult | n
       // Extract season number for track ordering (podcast:season or itunes:season)
       const seasonMatch = itemContent.match(/<podcast:season>(\d+)<\/podcast:season>|<itunes:season>(\d+)<\/itunes:season>/);
 
-      const title = titleMatch ? (titleMatch[1] || titleMatch[2] || '').trim() : '';
-      const description = descMatch ? (descMatch[1] || descMatch[2] || '').trim() : '';
+      const title = titleMatch ? decodeHtmlEntities((titleMatch[1] || titleMatch[2] || '').trim()) : '';
+      const description = descMatch ? decodeHtmlEntities((descMatch[1] || descMatch[2] || '').trim()) : '';
       const guid = guidMatch ? guidMatch[1].trim() : '';
       const audioUrl = audioMatch ? audioMatch[1] : '';
       const image = imageMatch ? imageMatch[1] : '';
