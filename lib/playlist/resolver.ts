@@ -7,6 +7,7 @@ import { validateDuration } from '@/lib/duration-validation';
 import type { RemoteItem, ResolvedTrack, EpisodeGroup, PlaylistConfig, GroupedItems } from './types';
 import type { V4VValue } from '@/lib/v4v-utils';
 import { generateEpisodeId } from './parser';
+import { decodeHtmlEntities } from '@/lib/decode-entities';
 
 /** Check if a URL looks like an actual image (not just a bare domain) */
 function isValidImageUrl(url: string | null | undefined): boolean {
@@ -81,15 +82,15 @@ export async function resolvePlaylistItems(
 
         resolvedTracks.push({
           id: track.id,
-          title: track.title,
-          artist: artistName,
+          title: decodeHtmlEntities(track.title),
+          artist: decodeHtmlEntities(artistName),
           audioUrl: track.audioUrl,
           url: track.audioUrl,
           duration: track.duration || 0,
           publishedAt: track.publishedAt?.toISOString() || new Date().toISOString(),
           image: imageUrl,
-          albumTitle: track.Feed.title,
-          feedTitle: track.Feed.title,
+          albumTitle: decodeHtmlEntities(track.Feed.title),
+          feedTitle: decodeHtmlEntities(track.Feed.title),
           feedId: track.Feed.id,
           guid: track.guid,
           v4vRecipient: track.v4vRecipient,

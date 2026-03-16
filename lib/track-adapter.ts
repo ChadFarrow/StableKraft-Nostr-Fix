@@ -6,6 +6,7 @@
  */
 
 import { Track } from '@prisma/client';
+import { decodeHtmlEntities } from '@/lib/decode-entities';
 
 /**
  * Extended Track type for components (similar to legacy MusicTrackRecord)
@@ -50,10 +51,10 @@ export function prismaTrackToExtendedTrack(track: Track & { Feed?: any }): Exten
 
   return {
     id: track.id,
-    title: track.title,
-    artist: track.artist || 'Unknown Artist',
+    title: decodeHtmlEntities(track.title),
+    artist: decodeHtmlEntities(track.artist || 'Unknown Artist'),
     episodeId: track.guid || track.id,
-    episodeTitle: track.title, // Track title as episode title
+    episodeTitle: decodeHtmlEntities(track.title), // Track title as episode title
     episodeDate: track.publishedAt || track.createdAt,
     episodeGuid: track.guid || undefined,
     startTime: track.startTime || undefined,

@@ -2,14 +2,16 @@
  * Utility functions for music track parsing
  */
 
+import { decodeHtmlEntities } from '@/lib/decode-entities';
+
 export class ParserUtils {
   /**
    * Get text content from XML element
    */
   static getTextContent(element: any, tagName: string): string | undefined {
     const value = element[tagName];
-    if (typeof value === 'string') return value.trim();
-    if (value && typeof value === 'object' && value._) return value._.trim();
+    if (typeof value === 'string') return decodeHtmlEntities(value.trim());
+    if (value && typeof value === 'object' && value._) return decodeHtmlEntities(value._.trim());
     return undefined;
   }
 

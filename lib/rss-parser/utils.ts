@@ -2,6 +2,7 @@
  * Utility functions for RSS parsing
  */
 import { logger } from '../logger';
+import { decodeHtmlEntities } from '@/lib/decode-entities';
 
 // Development logging utility
 const isDev = process.env.NODE_ENV === 'development';
@@ -38,7 +39,7 @@ export class RSSUtils {
    */
   static getElementText(element: Element | null): string {
     if (!element) return '';
-    return element.textContent?.trim() || '';
+    return decodeHtmlEntities(element.textContent?.trim() || '');
   }
 
   /**
