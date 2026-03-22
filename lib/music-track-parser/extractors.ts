@@ -55,7 +55,7 @@ export class TrackExtractors {
         return type === 'remote' && parseFloat(ParserUtils.getAttributeValue(recipient, 'percentage') || '0') > 0;
       });
 
-      if (startTime > 0 && duration > 0 && (hasRemoteItems || hasRemoteRecipients)) {
+      if (startTime >= 0 && duration > 0 && (hasRemoteItems || hasRemoteRecipients)) {
         // Extract recipient information for V4V data
         const primaryRecipient = recipientsArray.find((recipient: any) => {
           if (!recipient) return false;
@@ -72,6 +72,7 @@ export class TrackExtractors {
         // Try to extract track title from recipient name, remoteItem, or custom fields
         let trackTitle = `Music Track at ${ParserUtils.formatTime(startTime)}`;
         let remotePercentage = 0;
+        let remoteStartTime = 0;
         let feedGuid = '';
         let itemGuid = '';
 
@@ -79,8 +80,9 @@ export class TrackExtractors {
           const primaryRemoteItem = remoteItemsArray[0];
           feedGuid = ParserUtils.getAttributeValue(primaryRemoteItem, 'feedGuid') || '';
           itemGuid = ParserUtils.getAttributeValue(primaryRemoteItem, 'itemGuid') || '';
-          // Try to get percentage from the split itself
-          remotePercentage = parseFloat(ParserUtils.getAttributeValue(split, 'remotePercentage') || '0');
+          // Per spec: remotePercentage defaults to 100 if not defined
+          remotePercentage = parseFloat(ParserUtils.getAttributeValue(split, 'remotePercentage') || '100');
+          remoteStartTime = parseFloat(ParserUtils.getAttributeValue(split, 'remoteStartTime') || '0');
           trackTitle = `External Music Track at ${ParserUtils.formatTime(startTime)}`;
         } else if (primaryRecipient) {
           const recipientName = ParserUtils.getTextContent(primaryRecipient, 'name') ||
@@ -153,6 +155,7 @@ export class TrackExtractors {
             customKey: ParserUtils.getAttributeValue(split, 'customKey'),
             customValue: ParserUtils.getAttributeValue(split, 'customValue'),
             remotePercentage,
+            remoteStartTime,
             feedGuid,
             itemGuid,
             resolvedTitle,
@@ -192,7 +195,7 @@ export class TrackExtractors {
           recipient.type === 'remote' && recipient.percentage > 0
         );
 
-      if (hasRemoteRecipients && timeSplit.startTime > 0 && timeSplit.endTime > timeSplit.startTime) {
+      if (hasRemoteRecipients && timeSplit.startTime >= 0 && timeSplit.endTime > timeSplit.startTime) {
         // Find the primary remote recipient
         const primaryRecipient = timeSplit.recipients.find((recipient: RSSValueRecipient) =>
           recipient.type === 'remote'
@@ -363,7 +366,7 @@ export class TrackExtractors {
       for (const chapter of chaptersData.chapters) {
         chapterMap.set(chapter.startTime, {
           title: chapter.title,
-          image: chapter.image,
+          image: chapter.img || chapter.image,
           url: chapter.url
         });
       }
@@ -374,7 +377,7 @@ export class TrackExtractors {
 
         const startTime = parseFloat(ParserUtils.getAttributeValue(split, 'startTime') || '0');
         const duration = parseFloat(ParserUtils.getAttributeValue(split, 'duration') || '0');
-        const remotePercentage = parseFloat(ParserUtils.getAttributeValue(split, 'remotePercentage') || '0');
+        const remotePercentage = parseFloat(ParserUtils.getAttributeValue(split, 'remotePercentage') || '100');
 
         // Check for remoteItem elements (V4V music sharing)
         const remoteItems = split['podcast:remoteItem'] || split.remoteItem || [];
@@ -387,7 +390,7 @@ export class TrackExtractors {
           return feedGuid && itemGuid;
         });
 
-        if (startTime > 0 && duration > 0 && hasRemoteItems) {
+        if (startTime >= 0 && duration > 0 && hasRemoteItems) {
           // Find matching chapter by start time
           const chapter = chapterMap.get(startTime);
           if (chapter && !chapter.title.includes('Into The Doerfel-Verse')) {
@@ -463,7 +466,7 @@ export class TrackExtractors {
       for (const chapter of chaptersData.chapters) {
         chapterMap.set(chapter.startTime, {
           title: chapter.title,
-          image: chapter.image,
+          image: chapter.img || chapter.image,
           url: chapter.url
         });
       }

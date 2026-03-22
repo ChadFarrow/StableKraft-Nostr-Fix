@@ -647,6 +647,7 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
           albumName={(currentTrack as any).feedTitle || (currentTrack as any).albumTitle || currentPlayingAlbum.title}
           publisherGuid={(currentPlayingAlbum as any).publisher?.feedGuid}
           publisherUrl={(currentPlayingAlbum as any).publisher?.publisherUrl}
+          remoteStartTime={currentTrack.v4vValue?.remoteStartTime}
         />
       )}
     </div>

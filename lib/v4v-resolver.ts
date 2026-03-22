@@ -230,6 +230,15 @@ export class V4VResolver {
   }
 
   /**
+   * Strip nested podcast:valueTimeSplit from a feed XML.
+   * Per spec: when resolving a remote value block, only root-level
+   * splits should be used — any nested VTS children are ignored.
+   */
+  static stripNestedValueTimeSplits(feedXml: string): string {
+    return feedXml.replace(/<podcast:valueTimeSplit[\s\S]*?<\/podcast:valueTimeSplit>/gi, '');
+  }
+
+  /**
    * Parse track info from feed XML
    */
   private static parseTrackFromFeed(feedXml: string, itemGuid: string): V4VResolutionResult {

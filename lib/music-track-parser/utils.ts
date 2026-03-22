@@ -50,6 +50,16 @@ export class ParserUtils {
   }
 
   /**
+   * Check if a feed medium indicates a music feed
+   * Music feeds treat all chapters as music tracks
+   */
+  static isMusicMediumFeed(medium?: string): boolean {
+    if (!medium) return false;
+    const m = medium.toLowerCase().trim();
+    return m === 'music' || m === 'musicl';
+  }
+
+  /**
    * Check if a chapter represents a music track
    */
   static isMusicChapter(chapter: { title: string; startTime: number }): boolean {
