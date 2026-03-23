@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { Feed, Track } from '@prisma/client';
 import { getPlaylistUrls, getAllPlaylistIds } from '@/lib/playlist/configs';
 import { getBlacklistedFeedIds, BLACKLISTED_FEED_URLS } from '@/lib/feed-exclusions';
+import { PODCAST_FEED_IDS, PODCAST_FEED_URLS } from '@/lib/podcast-feeds';
 
 interface FeedWithTracks extends Feed {
   Track: Track[];
@@ -416,12 +417,99 @@ export async function GET(request: Request) {
           // Start with empty array for playlist filter - playlists will be added after this
           filteredAlbums = [];
           break;
-        case 'podcasts':
-          // Filter feeds that are music podcasts (type = 'podcast' with music content)
-          filteredAlbums = deduplicatedAlbums.filter((album: any) =>
-            album.type === 'podcast' || album.type === 'music-podcast'
-          );
+        case 'podcasts': {
+          // Curated podcast feeds — these are normally blacklisted from album view,
+          // so we query them directly from DB by ID or URL
+          const podcastFeeds = await prisma.feed.findMany({
+            where: {
+              OR: [
+                { id: { in: PODCAST_FEED_IDS } },
+                { guid: { in: PODCAST_FEED_IDS } },
+                { originalUrl: { in: PODCAST_FEED_URLS } },
+              ]
+            },
+            select: {
+              id: true,
+              guid: true,
+              title: true,
+              description: true,
+              originalUrl: true,
+              type: true,
+              artist: true,
+              image: true,
+              priority: true,
+              status: true,
+              createdAt: true,
+              updatedAt: true,
+              oldestItemPubdate: true,
+              v4vRecipient: true,
+              v4vValue: true,
+              Track: {
+                where: { audioUrl: { not: '' } },
+                select: {
+                  id: true,
+                  guid: true,
+                  title: true,
+                  duration: true,
+                  audioUrl: true,
+                  image: true,
+                  publishedAt: true,
+                  v4vRecipient: true,
+                  v4vValue: true,
+                  startTime: true,
+                  endTime: true,
+                  trackOrder: true,
+                  mediaType: true,
+                  alternateEnclosures: true,
+                },
+                orderBy: [
+                  { trackOrder: 'asc' },
+                  { publishedAt: 'asc' },
+                  { createdAt: 'asc' }
+                ]
+              },
+              _count: { select: { Track: true } }
+            }
+          });
+          filteredAlbums = podcastFeeds.map((feed: any) => ({
+            id: feed.id,
+            title: feed.title,
+            type: feed.type || 'podcast',
+            artist: feed.artist || feed.title,
+            description: feed.description || '',
+            coverArt: feed.image || '',
+            releaseDate: feed.oldestItemPubdate || feed.createdAt,
+            dateAdded: feed.createdAt,
+            feedUrl: feed.originalUrl,
+            feedGuid: feed.guid || null,
+            feedId: feed.id,
+            remoteFeedGuid: feed.guid || null,
+            guid: feed.Track?.[0]?.guid || feed.id,
+            episodeGuid: feed.Track?.[0]?.guid || feed.id,
+            link: feed.originalUrl,
+            priority: feed.priority,
+            tracks: (feed.Track || []).map((track: any) => ({
+              id: track.id,
+              title: track.title,
+              duration: track.duration || 180,
+              url: track.audioUrl,
+              image: track.image,
+              publishedAt: track.publishedAt,
+              guid: track.guid,
+              v4vRecipient: track.v4vRecipient,
+              v4vValue: track.v4vValue,
+              startTime: track.startTime,
+              endTime: track.endTime,
+              mediaType: track.mediaType || 'audio',
+              alternateEnclosures: track.alternateEnclosures,
+            })),
+            totalTracks: feed._count?.Track || feed.Track?.length || 0,
+            trackCount: feed._count?.Track || feed.Track?.length || 0,
+            v4vRecipient: feed.v4vRecipient,
+            v4vValue: feed.v4vValue,
+          }));
           break;
+        }
         case 'videos':
           // Filter albums that have at least one video track (either mediaType is video or has video in alternateEnclosures)
           filteredAlbums = deduplicatedAlbums.filter(album =>
