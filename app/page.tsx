@@ -180,7 +180,7 @@ function HomePageContent() {
   const [backgroundImageLoaded, setBackgroundImageLoaded] = useState(false);
 
   // Controls state - Initialize from URL params (works on both server and client)
-  const validFilters: FilterType[] = ['all', 'albums', 'eps', 'singles', 'publishers', 'playlist', 'videos'];
+  const validFilters: FilterType[] = ['all', 'albums', 'eps', 'singles', 'publishers', 'playlist', 'podcasts', 'videos'];
   const urlFilter = searchParams?.get('filter');
   const initialFilter = (urlFilter && validFilters.includes(urlFilter as FilterType))
     ? (urlFilter as FilterType)
@@ -1514,6 +1514,7 @@ function HomePageContent() {
                 <option value="singles">Singles</option>
                 <option value="publishers">Publishers</option>
                 <option value="playlist">Playlists</option>
+                <option value="podcasts">Podcasts</option>
                 <option value="videos">Videos</option>
               </select>
 
@@ -1526,6 +1527,7 @@ function HomePageContent() {
                   { value: 'singles', label: 'Singles' },
                   { value: 'publishers', label: 'Publishers' },
                   { value: 'playlist', label: 'Playlists' },
+                  { value: 'podcasts', label: 'Podcasts' },
                   { value: 'videos', label: 'Videos' },
                 ].map((filter) => (
                   <button
@@ -1658,7 +1660,7 @@ function HomePageContent() {
               )}
 
               {/* Controls Bar - Sort only (other controls in main menu); options vary by filter */}
-              {(activeFilter === 'all' || activeFilter === 'albums' || activeFilter === 'eps' || activeFilter === 'singles' || activeFilter === 'publishers' || activeFilter === 'playlist') && (
+              {(activeFilter === 'all' || activeFilter === 'albums' || activeFilter === 'eps' || activeFilter === 'singles' || activeFilter === 'publishers' || activeFilter === 'playlist' || activeFilter === 'podcasts') && (
                 <ControlsBar
                   activeFilter={activeFilter}
                   onFilterChange={handleFilterChange}
