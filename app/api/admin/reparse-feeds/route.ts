@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
       // For 'all': publisher feeds don't need tracks, others do
       whereClause = {
         status: 'active',
-        type: { in: ['album', 'music', 'publisher'] },
+        type: { in: ['album', 'music', 'publisher', 'podcast'] },
         OR: [
           { lastFetched: null },
           { lastFetched: { lt: cutoffTime } }
