@@ -48,12 +48,19 @@ const GlobalNowPlayingBar: React.FC = () => {
   const getArtworkUrl = React.useCallback((trackIndex: number): string => {
     if (!currentPlayingAlbum) return getPlaceholderImageUrl('thumbnail');
 
+    // Prioritize chapter art when chapters are active
+    const chapterImg = chapters.length > 0 && currentChapterIndex >= 0
+      ? chapters[currentChapterIndex]?.img
+      : undefined;
+    if (chapterImg && chapterImg.trim() !== '') {
+      return getProxiedImageUrl(chapterImg);
+    }
+
     const track = currentPlayingAlbum.tracks?.[trackIndex];
     const trackImage = track?.image;
     const albumCoverArt = currentPlayingAlbum.coverArt;
 
     // Prioritize track image, then album cover art
-    // Check if track image is valid
     if (trackImage && trackImage.trim() !== '' && trackImage !== 'null') {
       return getProxiedImageUrl(trackImage);
     }
@@ -65,7 +72,7 @@ const GlobalNowPlayingBar: React.FC = () => {
 
     // Use placeholder when no artwork is available
     return getPlaceholderImageUrl('thumbnail');
-  }, [currentPlayingAlbum]);
+  }, [currentPlayingAlbum, chapters, currentChapterIndex]);
 
   // Create track object for NowPlaying component
   // Use useMemo to ensure the object reference changes when dependencies change

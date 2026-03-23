@@ -173,8 +173,11 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
     return `#${toHex(newR)}${toHex(newG)}${toHex(newB)}`;
   };
 
-  // Prioritize track image, fallback to album coverArt, and proxy external URLs
-  const originalImageUrl = currentTrack?.image || currentPlayingAlbum?.coverArt || '';
+  // Prioritize chapter art, then track image, fallback to album coverArt
+  const chapterImg = chapters.length > 0 && currentChapterIndex >= 0
+    ? chapters[currentChapterIndex]?.img
+    : undefined;
+  const originalImageUrl = chapterImg || currentTrack?.image || currentPlayingAlbum?.coverArt || '';
   const albumArt = originalImageUrl
     ? getProxiedImageUrl(originalImageUrl)
     : '/api/placeholder/400/400';
