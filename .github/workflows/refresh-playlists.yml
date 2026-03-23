@@ -56,6 +56,28 @@ jobs:
           echo "⚠️ Music feed reparse had issues (HTTP $HTTP_CODE) - continuing..."
         fi
 
+        # Step 2b: Reparse podcast feeds (curated list — these are blacklisted from album view)
+        # Uses per-feed reparse endpoint to ensure each podcast gets fresh episodes
+        echo ""
+        echo "📋 Step 2b: Reparsing podcast feeds for new episodes..."
+
+        PODCAST_FEEDS=("3aebb7a8-5942-5ee7-a148-8bdc14f1f3d4")  # UpBeats
+
+        for FEED_ID in "${PODCAST_FEEDS[@]}"; do
+          echo "  🔄 Reparsing podcast feed $FEED_ID..."
+          PODCAST_REPARSE=$(curl -s -X POST -w "\n%{http_code}" "${BASE_URL}/api/admin/feeds/${FEED_ID}/reparse")
+          HTTP_CODE=$(echo "$PODCAST_REPARSE" | tail -n1)
+          RESPONSE_BODY=$(echo "$PODCAST_REPARSE" | sed '$d')
+          if [ "$HTTP_CODE" -eq 200 ]; then
+            NEW=$(echo "$RESPONSE_BODY" | jq -r '.newTracks // 0' 2>/dev/null || echo "?")
+            TITLE=$(echo "$RESPONSE_BODY" | jq -r '.title // "?"' 2>/dev/null || echo "?")
+            echo "  ✓ ${TITLE} reparsed: ${NEW} new episodes"
+          else
+            echo "  ⚠️ Podcast feed $FEED_ID reparse had issues (HTTP $HTTP_CODE) - continuing..."
+          fi
+          sleep 2
+        done
+
         # Step 3: Refresh playlists with full v4v parsing
         echo ""
         echo "📋 Step 3: Refreshing playlists with full RSS parsing (includes v4v payment data)..."
