@@ -1,6 +1,6 @@
 {
   "name": "podcast-music-site",
-  "version": "1.2ac933d26",
+  "version": "1.2a385e634",
   "private": true,
   "scripts": {
     "dev": "next dev",
