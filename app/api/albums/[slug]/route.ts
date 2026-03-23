@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { generateAlbumSlug, getPublisherInfo } from '@/lib/url-utils';
 import { getAllPlaylistIds, getPlaylistUrls, getPlaylistConfig, PLAYLIST_CONFIGS } from '@/lib/playlist/configs';
+import { PODCAST_FEED_IDS, PODCAST_FEED_URLS } from '@/lib/podcast-feeds';
 
 const ITDV_PLAYLIST_URL = 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/ITDV-music-playlist.xml';
 const HGH_PLAYLIST_URL = 'https://raw.githubusercontent.com/ChadFarrow/chadf-musicl-playlists/refs/heads/main/docs/HGH-music-playlist.xml';
@@ -962,13 +963,29 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         return v4vValue;
       };
 
-      const tracks = feed.Track
+      // Check if this is a curated podcast feed
+      const isPodcastFeed = PODCAST_FEED_IDS.includes(feed.id) ||
+        PODCAST_FEED_IDS.includes(feed.guid || '') ||
+        PODCAST_FEED_URLS.includes(feed.originalUrl);
+
+      const deduplicatedTracks = feed.Track
         .filter((track: any, index: number, self: any[]) => {
           // Deduplicate tracks by URL and title
-          return self.findIndex((t: any) => 
+          return self.findIndex((t: any) =>
             t.audioUrl === track.audioUrl && t.title === track.title
           ) === index;
-        })
+        });
+
+      // For podcast feeds, sort episodes newest-first
+      if (isPodcastFeed) {
+        deduplicatedTracks.sort((a: any, b: any) => {
+          const dateA = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+          const dateB = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+          return dateB - dateA;
+        });
+      }
+
+      const tracks = deduplicatedTracks
         .map((track: any, index: number) => ({
         id: track.id,
         guid: track.guid,
@@ -987,9 +1004,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         v4vValue: parseV4VValue(track.v4vValue),
         status: track.status || 'active',
         mediaType: track.mediaType || 'audio',
-        alternateEnclosures: track.alternateEnclosures
+        alternateEnclosures: track.alternateEnclosures,
+        publishedAt: track.publishedAt || null,
       }));
-      
+
       // Determine if this is a playlist based on track variety
       const isPlaylist = tracks.length > 1 &&
         new Set(tracks.map((t: any) => t.artist || feed.artist)).size > 1;
@@ -1253,7 +1271,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         v4vValue: parseV4VValue(feed.v4vValue) || parseV4VValue(feed.Track?.[0]?.v4vValue) || null,
         // Include albums for publisher feeds
         albums: publisherAlbums.length > 0 ? publisherAlbums : undefined,
-        isPublisher: feed.type === 'publisher' || feed.type === 'test' ? true : undefined
+        isPublisher: feed.type === 'publisher' || feed.type === 'test' ? true : undefined,
+        isPodcast: isPodcastFeed || undefined
       };
     }
 

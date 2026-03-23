@@ -921,7 +921,7 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
             
             <div className="flex items-center justify-center lg:justify-start gap-6 text-sm text-gray-400">
               <span>{getAlbumYear(album.releaseDate)}</span>
-              <span>{Array.isArray(album.tracks) ? album.tracks.length : 0} tracks</span>
+              <span>{Array.isArray(album.tracks) ? album.tracks.length : 0} {(album as any).isPodcast ? 'episodes' : 'tracks'}</span>
               <span>{calculateTotalDuration(album.tracks)} min</span>
               {album.explicit && <span className="bg-red-600 text-white px-2 py-1 rounded text-xs">EXPLICIT</span>}
             </div>
@@ -1198,7 +1198,11 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
                           {track.subtitle && (
                             <p className="text-xs text-gray-400 italic truncate">{track.subtitle}</p>
                           )}
-                          <p className="text-xs text-gray-400 truncate">{album?.artist}</p>
+                          <p className="text-xs text-gray-400 truncate">
+                            {(album as any)?.isPodcast && (track as any).publishedAt
+                              ? new Date((track as any).publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                              : album?.artist}
+                          </p>
                         </div>
                         <div className="hidden md:block">
                           <p className="font-medium text-base line-clamp-2 whitespace-normal break-words">
@@ -1209,7 +1213,9 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
                                 Video
                               </span>
                             )}
-                            <span className="text-gray-400 font-normal"> • {album?.artist}</span>
+                            {(album as any)?.isPodcast && (track as any).publishedAt
+                              ? <span className="text-gray-400 font-normal"> • {new Date((track as any).publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                              : <span className="text-gray-400 font-normal"> • {album?.artist}</span>}
                             {track.subtitle && (
                               <span className="text-gray-400 font-normal italic"> — {track.subtitle}</span>
                             )}
