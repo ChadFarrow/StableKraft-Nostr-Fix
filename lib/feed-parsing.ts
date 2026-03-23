@@ -9,7 +9,7 @@ import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { ValueTagParser } from '@/lib/lightning/value-parser';
 import { isValidFeedUrl, normalizeUrl } from '@/lib/url-utils';
-import { calculateTrackOrder, parsePodcastGuidFromXML } from '@/lib/rss-parser-db';
+import { calculateTrackOrder, parsePodcastGuidFromXML, fetchChapters } from '@/lib/rss-parser-db';
 import { decodeHtmlEntities } from '@/lib/decode-entities';
 
 const PODCAST_INDEX_API_KEY = process.env.PODCAST_INDEX_API_KEY;
@@ -69,6 +69,8 @@ export interface ParsedEpisode {
   episode?: number | null;
   season?: number;
   v4vValue?: any;
+  chaptersUrl?: string;
+  chapters?: Array<{ title: string; startTime: number; endTime?: number; img?: string }>;
 }
 
 export interface ParseFeedResult {
@@ -110,6 +112,8 @@ export async function parseFeedXML(feedUrl: string): Promise<ParseFeedResult | n
       const episodeMatch = itemContent.match(/<podcast:episode>(\d+)<\/podcast:episode>|<itunes:episode>(\d+)<\/itunes:episode>/);
       // Extract season number for track ordering (podcast:season or itunes:season)
       const seasonMatch = itemContent.match(/<podcast:season>(\d+)<\/podcast:season>|<itunes:season>(\d+)<\/itunes:season>/);
+      // Extract chapters URL
+      const chaptersMatch = itemContent.match(/<podcast:chapters[^>]*url="([^"]*)"/);
 
       const title = titleMatch ? decodeHtmlEntities((titleMatch[1] || titleMatch[2] || '').trim()) : '';
       const description = descMatch ? decodeHtmlEntities((descMatch[1] || descMatch[2] || '').trim()) : '';
@@ -120,6 +124,7 @@ export async function parseFeedXML(feedUrl: string): Promise<ParseFeedResult | n
       const pubDate = pubDateMatch ? pubDateMatch[1] : '';
       const episode = episodeMatch ? parseInt(episodeMatch[1] || episodeMatch[2]) : null;
       const season = seasonMatch ? parseInt(seasonMatch[1] || seasonMatch[2]) : undefined;
+      const chaptersUrl = chaptersMatch ? chaptersMatch[1] : undefined;
 
       if (title && guid) {
         episodes.push({
@@ -131,7 +136,8 @@ export async function parseFeedXML(feedUrl: string): Promise<ParseFeedResult | n
           duration,
           pubDate,
           episode,
-          season
+          season,
+          chaptersUrl
         });
       }
     }
@@ -382,6 +388,8 @@ export async function importFeedToDatabase(feedData: any, episodes: ParsedEpisod
               trackOrder: trackOrderValue,
               ...(v4vData && { v4vValue: v4vData }),
               ...(v4vRecipient && { v4vRecipient }),
+              ...(episode.chaptersUrl && { chaptersUrl: episode.chaptersUrl }),
+              ...(episode.chapters && { chapters: episode.chapters }),
               updatedAt: new Date()
             }
           });
@@ -452,7 +460,7 @@ export async function getEpisodesFromAPI(feedId: number): Promise<ParsedEpisode[
     }
 
     // Convert Podcast Index episodes to our format with v4v data
-    return episodesData.items.map((ep: any) => ({
+    const episodes: ParsedEpisode[] = episodesData.items.map((ep: any) => ({
       title: ep.title,
       description: ep.description || '',
       guid: ep.guid,
@@ -461,8 +469,23 @@ export async function getEpisodesFromAPI(feedId: number): Promise<ParsedEpisode[
       duration: ep.duration?.toString() || '0',
       pubDate: new Date(ep.datePublished * 1000).toUTCString(),
       v4vValue: ep.value, // Include v4v data from API
-      episode: ep.episode || null // Include episode number for track ordering
+      episode: ep.episode || null, // Include episode number for track ordering
+      chaptersUrl: ep.chaptersUrl || undefined
     }));
+
+    // Fetch chapters for episodes that have chaptersUrl
+    const withChapters = episodes.filter(ep => ep.chaptersUrl);
+    if (withChapters.length > 0) {
+      console.log(`📖 Fetching chapters for ${withChapters.length} episodes from PI API...`);
+      await Promise.allSettled(
+        withChapters.map(async (ep) => {
+          const chapters = await fetchChapters(ep.chaptersUrl!);
+          if (chapters) ep.chapters = chapters;
+        })
+      );
+    }
+
+    return episodes;
   } catch (error) {
     console.error('❌ Error getting episodes from Podcast Index API:', error);
     return null;

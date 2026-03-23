@@ -129,7 +129,7 @@ export async function POST(
             podcastCategories: parsedFeed.podcastCategories || []
           };
 
-          // Update v4v data from the parsed feed item
+          // Update v4v data and chapters from the parsed feed item
           if (matchedItem) {
             if (matchedItem.v4vRecipient) {
               updateData.v4vRecipient = matchedItem.v4vRecipient;
@@ -137,6 +137,12 @@ export async function POST(
             }
             if (matchedItem.v4vValue) {
               updateData.v4vValue = matchedItem.v4vValue;
+            }
+            if (matchedItem.chaptersUrl) {
+              updateData.chaptersUrl = matchedItem.chaptersUrl;
+            }
+            if (matchedItem.chapters) {
+              updateData.chapters = matchedItem.chapters;
             }
           }
 
@@ -221,6 +227,8 @@ export async function POST(
             v4vValue: item.v4vValue,
             startTime: item.startTime,
             endTime: item.endTime,
+            chaptersUrl: item.chaptersUrl,
+            chapters: item.chapters || undefined,
             trackOrder: order,
             updatedAt: new Date()
           };

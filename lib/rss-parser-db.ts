@@ -139,6 +139,54 @@ export interface ParsedItem {
   mediaType?: 'audio' | 'video';
   mimeType?: string;
   alternateEnclosures?: AlternateEnclosure[];
+  chaptersUrl?: string;
+  chapters?: Array<{ title: string; startTime: number; endTime?: number; img?: string }>;
+}
+
+export type ParsedChapter = { title: string; startTime: number; endTime?: number; img?: string };
+
+/**
+ * Normalize raw chapters JSON data: filter toc:false, sort by startTime, chain endTimes.
+ * Shared by fetchChapters() (server-side import) and /api/chapters (client proxy).
+ */
+export function parseChaptersJSON(
+  data: any
+): ParsedChapter[] | null {
+  if (!data?.chapters || !Array.isArray(data.chapters)) return null;
+
+  const chapters = data.chapters
+    .filter((ch: any) => ch.toc !== false)
+    .sort((a: any, b: any) => a.startTime - b.startTime)
+    .map((ch: any, i: number, arr: any[]) => ({
+      title: ch.title,
+      startTime: ch.startTime,
+      endTime: ch.endTime ?? arr[i + 1]?.startTime ?? undefined,
+      img: ch.img || ch.image || undefined,
+    }));
+
+  return chapters.length > 0 ? chapters : null;
+}
+
+/**
+ * Fetch and parse podcast chapters from a chapters JSON URL.
+ * Filters toc:false, sorts by startTime, chains endTimes.
+ */
+export async function fetchChapters(
+  chaptersUrl: string
+): Promise<ParsedChapter[] | null> {
+  try {
+    const response = await fetch(chaptersUrl, {
+      headers: { 'User-Agent': 'StableKraft/1.0' },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    return parseChaptersJSON(data);
+  } catch (error) {
+    console.warn(`⚠️ Failed to fetch chapters from ${chaptersUrl}:`, error instanceof Error ? error.message : error);
+    return null;
+  }
 }
 
 // Helper function to detect media type from MIME type or URL
@@ -1017,10 +1065,13 @@ export async function parseRSSFeed(feedUrl: string): Promise<ParsedFeed> {
           console.log('ℹ️ DEBUG: No V4V data found in item');
         }
         
-        // Parse time segments if present (for music segments in podcasts)
+        // Extract chapters URL for podcast chapter navigation
         if (item['podcast:chapters']) {
-          // This would need more complex parsing based on the chapters format
-          // For now, we'll leave it as a placeholder
+          const chaptersElement = item['podcast:chapters'];
+          const chapUrl = chaptersElement?.$?.url || chaptersElement?.url;
+          if (chapUrl && typeof chapUrl === 'string') {
+            parsedItem.chaptersUrl = chapUrl;
+          }
         }
         
         items.push(parsedItem);
@@ -1028,7 +1079,27 @@ export async function parseRSSFeed(feedUrl: string): Promise<ParsedFeed> {
       
       console.log(`✅ DEBUG: Parsed ${items.length} items from feed (skipped ${skippedCount} without enclosures, found ${videoCount} video items)`);
     }
-    
+
+    // Fetch chapters for items that have chaptersUrl (batch, max 10 concurrent)
+    const itemsWithChapters = items.filter(item => item.chaptersUrl);
+    if (itemsWithChapters.length > 0) {
+      console.log(`📖 Fetching chapters for ${itemsWithChapters.length} episodes...`);
+      const batchSize = 10;
+      for (let i = 0; i < itemsWithChapters.length; i += batchSize) {
+        const batch = itemsWithChapters.slice(i, i + batchSize);
+        const results = await Promise.allSettled(
+          batch.map(async (item) => {
+            const chapters = await fetchChapters(item.chaptersUrl!);
+            if (chapters) {
+              item.chapters = chapters;
+            }
+          })
+        );
+        const succeeded = results.filter(r => r.status === 'fulfilled').length;
+        console.log(`  📖 Batch ${Math.floor(i / batchSize) + 1}: ${succeeded}/${batch.length} chapters fetched`);
+      }
+    }
+
     // Parse feed-level V4V data
     let feedV4vRecipient = null;
     let feedV4vValue = null;

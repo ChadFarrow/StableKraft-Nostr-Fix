@@ -41,6 +41,8 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
     setFullscreenMode,
     isVideoMode,
     videoRef,
+    chapters,
+    currentChapterIndex,
   } = useAudio();
 
   const [isDragging, setIsDragging] = useState(false);
@@ -450,6 +452,11 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
           <p className="text-lg opacity-80 truncate">
             {currentTrack.artist || currentPlayingAlbum.artist || 'Unknown Artist'}
           </p>
+          {chapters.length > 0 && currentChapterIndex >= 0 && chapters[currentChapterIndex] && (
+            <p className="text-sm opacity-60 truncate mt-1">
+              Ch. {currentChapterIndex + 1}/{chapters.length}: {chapters[currentChapterIndex].title}
+            </p>
+          )}
         </div>
 
         {/* Progress Bar */}

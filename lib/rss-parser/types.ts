@@ -40,6 +40,9 @@ export interface RSSTrack {
   mediaType?: 'audio' | 'video';
   mimeType?: string;
   alternateEnclosures?: AlternateEnclosure[];
+  // Podcast chapters
+  chaptersUrl?: string;
+  chapters?: Array<{ title: string; startTime: number; endTime?: number; img?: string }>;
   // RSS parser custom fields
   'podcast:valueRecipient'?: any;
   'podcast:value'?: any;

@@ -174,4 +174,21 @@ Music podcasts imported as feeds have no dedicated filter tab. They'd show up mi
   - `remotePercentage` default change only matters when the attribute is absent (existing feeds that set it explicitly are unchanged)
   - `startTime >= 0` adds one previously-skipped track per episode at most
 - **Build verification**: `npm run build` before commit per CLAUDE.md rules
-- **No schema changes**: All data fits existing Feed/Track columns
+
+## Deployment Steps (Podcast Chapter Navigation)
+
+After merging `claude/add-podcast-feed-sUR9X` to main:
+
+1. **Run database migration** — two new nullable columns on Track:
+   ```sql
+   ALTER TABLE "Track" ADD COLUMN "chaptersUrl" TEXT;
+   ALTER TABLE "Track" ADD COLUMN "chapters" JSONB;
+   ```
+   Or via Prisma: `npx prisma migrate dev --name add_chapters_to_track`
+
+2. **Reparse the UpBeats feed** to backfill chaptersUrl + chapters for existing episodes:
+   ```
+   curl -X POST https://stablekraft.app/api/admin/feeds/3aebb7a8-5942-5ee7-a148-8bdc14f1f3d4/reparse
+   ```
+
+3. **Verify** — play an UpBeats episode; skip forward should jump to the next chapter (not next episode). Chapter title appears below the artist in both the mini bar and fullscreen player.

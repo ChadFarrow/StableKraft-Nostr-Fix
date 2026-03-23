@@ -327,6 +327,12 @@ async function reparseSingleFeed(feed: {
           if (matchedItem.alternateEnclosures?.length) {
             updateData.alternateEnclosures = JSON.parse(JSON.stringify(matchedItem.alternateEnclosures));
           }
+          if (matchedItem.chaptersUrl) {
+            updateData.chaptersUrl = matchedItem.chaptersUrl;
+          }
+          if (matchedItem.chapters) {
+            updateData.chapters = matchedItem.chapters;
+          }
           updateData.mediaType = detectTrackMediaType(matchedItem);
         }
 
@@ -407,6 +413,8 @@ async function reparseSingleFeed(feed: {
           v4vValue: item.v4vValue,
           startTime: item.startTime,
           endTime: item.endTime,
+          chaptersUrl: item.chaptersUrl,
+          chapters: item.chapters || undefined,
           trackOrder: order,
           updatedAt: new Date()
         };
