@@ -690,7 +690,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
           publishedAt: true,
           createdAt: true,
           mediaType: true,
-          alternateEnclosures: true
+          alternateEnclosures: true,
+          chaptersUrl: true,
+          chapters: true
         }
       }
     };
@@ -1167,6 +1169,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
                       status: true,
                       mediaType: true,
                       alternateEnclosures: true,
+                      chaptersUrl: true,
+                      chapters: true,
                       Feed: {
                         select: {
                           id: true,
