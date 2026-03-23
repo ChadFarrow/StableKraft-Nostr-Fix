@@ -117,6 +117,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   const [chapters, setChapters] = useState<PodcastChapter[]>([]);
   const [currentChapterIndex, setCurrentChapterIndex] = useState(-1);
   const chaptersTrackKeyRef = useRef<string>(''); // Track which episode chapters belong to
+  const currentTimeRef = useRef(0); // Ref for currentTime to avoid re-creating callbacks
 
   // iOS detection state (for JSX conditional rendering)
   const [isIOS, setIsIOS] = useState(false);
@@ -1531,6 +1532,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
 
     const handleTimeUpdate = () => {
       const currentElement = isVideoMode ? video : audio;
+      currentTimeRef.current = currentElement.currentTime;
       setCurrentTime(currentElement.currentTime);
 
       // Update position state for iOS lockscreen controls
@@ -2568,7 +2570,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     // Chapter navigation: if we have chapters and aren't at the last one, skip to next chapter
     if (chapters.length > 0 && currentChapterIndex >= 0 && currentChapterIndex < chapters.length - 1) {
       const nextChapter = chapters[currentChapterIndex + 1];
-      console.log(`📖 Skipping to next chapter: "${nextChapter.title}" at ${nextChapter.startTime}s`);
+      console.debug(`📖 Skipping to next chapter: "${nextChapter.title}" at ${nextChapter.startTime}s`);
       seek(nextChapter.startTime);
       setCurrentChapterIndex(currentChapterIndex + 1);
       return;
@@ -2767,17 +2769,17 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     // Chapter navigation: if we have chapters, go to previous chapter or start of current
     if (chapters.length > 0 && currentChapterIndex >= 0) {
       const currentChapter = chapters[currentChapterIndex];
-      const timeIntoChapter = currentTime - currentChapter.startTime;
+      const timeIntoChapter = currentTimeRef.current - currentChapter.startTime;
 
       if (timeIntoChapter > 3 || currentChapterIndex === 0) {
         // More than 3s into chapter (or first chapter): restart current chapter
-        console.log(`📖 Restarting chapter: "${currentChapter.title}" at ${currentChapter.startTime}s`);
+        console.debug(`📖 Restarting chapter: "${currentChapter.title}" at ${currentChapter.startTime}s`);
         seek(currentChapter.startTime);
         return;
       } else {
         // Less than 3s in: go to previous chapter
         const prevChapter = chapters[currentChapterIndex - 1];
-        console.log(`📖 Skipping to previous chapter: "${prevChapter.title}" at ${prevChapter.startTime}s`);
+        console.debug(`📖 Skipping to previous chapter: "${prevChapter.title}" at ${prevChapter.startTime}s`);
         seek(prevChapter.startTime);
         setCurrentChapterIndex(currentChapterIndex - 1);
         return;
@@ -2818,7 +2820,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     } else {
       console.log('⚠️ Already at first track');
     }
-  }, [isShuffleMode, shuffledPlaylist, currentShuffleIndex, playShuffledTrack, currentPlayingAlbum, currentTrackIndex, playAlbum, chapters, currentChapterIndex, currentTime, seek]);
+  }, [isShuffleMode, shuffledPlaylist, currentShuffleIndex, playShuffledTrack, currentPlayingAlbum, currentTrackIndex, playAlbum, chapters, currentChapterIndex, seek]);
 
   // Update the ref whenever playPreviousTrack changes
   useEffect(() => {
@@ -2841,7 +2843,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     if (track.chapters && Array.isArray(track.chapters) && track.chapters.length > 0) {
       setChapters(track.chapters);
       setCurrentChapterIndex(0);
-      console.log(`📖 Using ${track.chapters.length} pre-loaded chapters for: ${track.title}`);
+      console.debug(`📖 Using ${track.chapters.length} pre-loaded chapters for: ${track.title}`);
       return;
     }
 
@@ -2862,7 +2864,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         if (data?.chapters?.length > 0) {
           setChapters(data.chapters);
           setCurrentChapterIndex(0);
-          console.log(`📖 Fetched ${data.chapters.length} chapters for: ${track.title}`);
+          console.debug(`📖 Fetched ${data.chapters.length} chapters for: ${track.title}`);
         } else {
           setChapters([]);
           setCurrentChapterIndex(-1);

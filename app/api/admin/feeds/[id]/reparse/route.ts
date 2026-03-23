@@ -142,7 +142,7 @@ export async function POST(
               updateData.chaptersUrl = matchedItem.chaptersUrl;
             }
             if (matchedItem.chapters) {
-              updateData.chapters = JSON.parse(JSON.stringify(matchedItem.chapters));
+              updateData.chapters = matchedItem.chapters;
             }
           }
 
@@ -228,7 +228,7 @@ export async function POST(
             startTime: item.startTime,
             endTime: item.endTime,
             chaptersUrl: item.chaptersUrl,
-            chapters: item.chapters ? JSON.parse(JSON.stringify(item.chapters)) : undefined,
+            chapters: item.chapters || undefined,
             trackOrder: order,
             updatedAt: new Date()
           };

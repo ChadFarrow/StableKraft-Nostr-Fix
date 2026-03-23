@@ -143,13 +143,37 @@ export interface ParsedItem {
   chapters?: Array<{ title: string; startTime: number; endTime?: number; img?: string }>;
 }
 
+export type ParsedChapter = { title: string; startTime: number; endTime?: number; img?: string };
+
+/**
+ * Normalize raw chapters JSON data: filter toc:false, sort by startTime, chain endTimes.
+ * Shared by fetchChapters() (server-side import) and /api/chapters (client proxy).
+ */
+export function parseChaptersJSON(
+  data: any
+): ParsedChapter[] | null {
+  if (!data?.chapters || !Array.isArray(data.chapters)) return null;
+
+  const chapters = data.chapters
+    .filter((ch: any) => ch.toc !== false)
+    .sort((a: any, b: any) => a.startTime - b.startTime)
+    .map((ch: any, i: number, arr: any[]) => ({
+      title: ch.title,
+      startTime: ch.startTime,
+      endTime: ch.endTime ?? arr[i + 1]?.startTime ?? undefined,
+      img: ch.img || ch.image || undefined,
+    }));
+
+  return chapters.length > 0 ? chapters : null;
+}
+
 /**
  * Fetch and parse podcast chapters from a chapters JSON URL.
  * Filters toc:false, sorts by startTime, chains endTimes.
  */
 export async function fetchChapters(
   chaptersUrl: string
-): Promise<Array<{ title: string; startTime: number; endTime?: number; img?: string }> | null> {
+): Promise<ParsedChapter[] | null> {
   try {
     const response = await fetch(chaptersUrl, {
       headers: { 'User-Agent': 'StableKraft/1.0' },
@@ -158,19 +182,7 @@ export async function fetchChapters(
     if (!response.ok) return null;
 
     const data = await response.json();
-    if (!data.chapters || !Array.isArray(data.chapters)) return null;
-
-    const chapters = data.chapters
-      .filter((ch: any) => ch.toc !== false)
-      .sort((a: any, b: any) => a.startTime - b.startTime)
-      .map((ch: any, i: number, arr: any[]) => ({
-        title: ch.title,
-        startTime: ch.startTime,
-        endTime: ch.endTime ?? arr[i + 1]?.startTime ?? undefined,
-        img: ch.img || ch.image || undefined,
-      }));
-
-    return chapters.length > 0 ? chapters : null;
+    return parseChaptersJSON(data);
   } catch (error) {
     console.warn(`⚠️ Failed to fetch chapters from ${chaptersUrl}:`, error instanceof Error ? error.message : error);
     return null;

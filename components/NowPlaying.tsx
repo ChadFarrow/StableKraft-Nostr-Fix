@@ -8,6 +8,7 @@ interface Track {
   id?: string;
   title: string;
   artist: string;
+  chapterTitle?: string;
   albumTitle: string;
   duration: number;
   albumArt?: string;
@@ -132,9 +133,11 @@ const NowPlaying: React.FC<NowPlayingProps> = ({
             <p className="text-sm whitespace-nowrap animate-marquee hover:animate-none">
               <span className="font-bold text-white">{track.title}</span>
               <span className="text-gray-400"> - {track.artist}</span>
+              {track.chapterTitle && <span className="text-gray-500"> — {track.chapterTitle}</span>}
               <span className="px-8" />
               <span className="font-bold text-white">{track.title}</span>
               <span className="text-gray-400"> - {track.artist}</span>
+              {track.chapterTitle && <span className="text-gray-500"> — {track.chapterTitle}</span>}
             </p>
           </div>
           <span className="text-xs text-gray-400">
@@ -214,7 +217,7 @@ const NowPlaying: React.FC<NowPlayingProps> = ({
               {track.title}
             </p>
             <p className="text-sm text-gray-400 truncate">
-              {track.artist}
+              {track.artist}{track.chapterTitle && <span className="text-gray-500"> — {track.chapterTitle}</span>}
             </p>
           </div>
         </div>

@@ -79,7 +79,8 @@ const GlobalNowPlayingBar: React.FC = () => {
     return {
       id: track?.id || track?.guid || track?.episodeId || `${currentPlayingAlbum.id || currentPlayingAlbum.title}-${currentTrackIndex}`,
       title: track?.title || `Track ${currentTrackIndex + 1}`,
-      artist: chapterTitle || track?.artist || currentPlayingAlbum.artist,
+      artist: track?.artist || currentPlayingAlbum.artist,
+      chapterTitle,
       albumTitle: currentPlayingAlbum.title,
       duration: duration || 0,
       // Get artwork URL with proper fallbacks

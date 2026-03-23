@@ -1,19 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-export interface Chapter {
-  title: string;
-  startTime: number;
-  endTime?: number;
-  url?: string;
-  img?: string;
-  image?: string;
-  toc?: boolean;
-}
-
-interface ChaptersResponse {
-  version: string;
-  chapters: Chapter[];
-}
+import { parseChaptersJSON } from '@/lib/rss-parser-db';
 
 /**
  * GET /api/chapters?url=<chaptersUrl>
@@ -27,11 +13,33 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Missing url parameter' }, { status: 400 });
   }
 
-  // Basic URL validation
+  // URL validation + SSRF protection
+  let parsed: URL;
   try {
-    new URL(url);
+    parsed = new URL(url);
   } catch {
     return NextResponse.json({ error: 'Invalid URL' }, { status: 400 });
+  }
+
+  if (parsed.protocol !== 'https:') {
+    return NextResponse.json({ error: 'Only HTTPS URLs are allowed' }, { status: 400 });
+  }
+
+  // Block private/internal hostnames
+  const hostname = parsed.hostname.toLowerCase();
+  if (
+    hostname === 'localhost' ||
+    hostname === '[::1]' ||
+    hostname.endsWith('.local') ||
+    hostname.endsWith('.internal') ||
+    /^127\./.test(hostname) ||
+    /^10\./.test(hostname) ||
+    /^192\.168\./.test(hostname) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+    /^169\.254\./.test(hostname) ||
+    hostname === '0.0.0.0'
+  ) {
+    return NextResponse.json({ error: 'Private URLs are not allowed' }, { status: 400 });
   }
 
   try {
@@ -47,22 +55,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const data: ChaptersResponse = await response.json();
+    const data = await response.json();
+    const chapters = parseChaptersJSON(data);
 
-    if (!data.chapters || !Array.isArray(data.chapters)) {
+    if (!chapters) {
       return NextResponse.json({ error: 'Invalid chapters format' }, { status: 502 });
     }
-
-    // Filter out toc:false chapters, sort by startTime, chain endTimes
-    const chapters = data.chapters
-      .filter(ch => ch.toc !== false)
-      .sort((a, b) => a.startTime - b.startTime)
-      .map((ch, i, arr) => ({
-        title: ch.title,
-        startTime: ch.startTime,
-        endTime: ch.endTime ?? arr[i + 1]?.startTime ?? undefined,
-        img: ch.img || ch.image || undefined,
-      }));
 
     return NextResponse.json(
       { chapters },

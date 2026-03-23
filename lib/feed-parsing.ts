@@ -389,7 +389,7 @@ export async function importFeedToDatabase(feedData: any, episodes: ParsedEpisod
               ...(v4vData && { v4vValue: v4vData }),
               ...(v4vRecipient && { v4vRecipient }),
               ...(episode.chaptersUrl && { chaptersUrl: episode.chaptersUrl }),
-              ...(episode.chapters && { chapters: JSON.parse(JSON.stringify(episode.chapters)) }),
+              ...(episode.chapters && { chapters: episode.chapters }),
               updatedAt: new Date()
             }
           });
