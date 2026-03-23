@@ -295,11 +295,14 @@ function AlbumCard({ album, isPlaying = false, onPlay, className = '', linkFilte
               ? `${(album as any).albumCount || 0} ${((album as any).albumCount || 0) !== 1 ? 'releases' : 'release'}`
               : (() => {
                   const count = (album as any).trackCount || album.tracks?.length || 0;
+                  const isPodcast = (album as any).isPodcast === true;
                   const hasVideo = album.tracks?.some((t: any) =>
                     t.mediaType === 'video' ||
                     (t.alternateEnclosures && t.alternateEnclosures.some((enc: any) => enc.type?.includes('video')))
                   );
-                  const label = hasVideo ? (count !== 1 ? 'videos' : 'video') : (count !== 1 ? 'tracks' : 'track');
+                  const label = isPodcast
+                    ? (count !== 1 ? 'episodes' : 'episode')
+                    : hasVideo ? (count !== 1 ? 'videos' : 'video') : (count !== 1 ? 'tracks' : 'track');
                   return `${count} ${label}`;
                 })()
             }

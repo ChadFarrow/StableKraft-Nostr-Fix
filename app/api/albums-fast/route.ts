@@ -471,10 +471,18 @@ export async function GET(request: Request) {
               _count: { select: { Track: true } }
             }
           });
-          filteredAlbums = podcastFeeds.map((feed: any) => ({
+          filteredAlbums = podcastFeeds.map((feed: any) => {
+            // Sort podcast episodes newest-first
+            const sortedTracks = [...(feed.Track || [])].sort((a: any, b: any) => {
+              const dateA = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+              const dateB = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+              return dateB - dateA;
+            });
+            return {
             id: feed.id,
             title: feed.title,
             type: feed.type || 'podcast',
+            isPodcast: true,
             artist: feed.artist || feed.title,
             description: feed.description || '',
             coverArt: feed.image || '',
@@ -488,7 +496,7 @@ export async function GET(request: Request) {
             episodeGuid: feed.Track?.[0]?.guid || feed.id,
             link: feed.originalUrl,
             priority: feed.priority,
-            tracks: (feed.Track || []).map((track: any) => ({
+            tracks: sortedTracks.map((track: any) => ({
               id: track.id,
               title: track.title,
               duration: track.duration || 180,
@@ -507,7 +515,8 @@ export async function GET(request: Request) {
             trackCount: feed._count?.Track || feed.Track?.length || 0,
             v4vRecipient: feed.v4vRecipient,
             v4vValue: feed.v4vValue,
-          }));
+          };
+          });
           break;
         }
         case 'videos':
