@@ -62,8 +62,14 @@ export function generateAlbumSlug(title: string): string {
 /**
  * Generate album URL path
  */
-export function generateAlbumUrl(title: string): string {
-  return `/album/${generateAlbumSlug(title)}`;
+export function generateAlbumUrl(title: string, feedType?: string): string {
+  const slug = generateAlbumSlug(title);
+  if (feedType === 'podcast') return `/podcast/${slug}`;
+  return `/album/${slug}`;
+}
+
+export function generatePodcastUrl(title: string): string {
+  return `/podcast/${generateAlbumSlug(title)}`;
 }
 
 /**

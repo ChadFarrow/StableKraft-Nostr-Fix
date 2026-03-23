@@ -149,6 +149,8 @@ function AlbumCard({ album, isPlaying = false, onPlay, className = '', linkFilte
       albumUrl = (album as any).publisherUrl || `/publisher/${album.id}`;
     } else if (isPlaylistCard) {
       albumUrl = (album as any).playlistUrl || (album as any).albumUrl;
+    } else if ((album as any).isPodcast) {
+      albumUrl = generateAlbumUrl(album.title, 'podcast');
     } else {
       albumUrl = generateAlbumUrl(album.title);
     }
