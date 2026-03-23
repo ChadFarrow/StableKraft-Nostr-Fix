@@ -26,7 +26,9 @@ const GlobalNowPlayingBar: React.FC = () => {
     playNextTrack,
     playPreviousTrack,
     stop,
-    toggleShuffle
+    toggleShuffle,
+    chapters,
+    currentChapterIndex
   } = useAudio();
 
   // Helper function to proxy external image URLs
@@ -71,16 +73,19 @@ const GlobalNowPlayingBar: React.FC = () => {
     if (!currentPlayingAlbum) return null;
 
     const track = currentPlayingAlbum.tracks?.[currentTrackIndex];
+    const chapterTitle = chapters.length > 0 && currentChapterIndex >= 0
+      ? chapters[currentChapterIndex]?.title
+      : undefined;
     return {
       id: track?.id || track?.guid || track?.episodeId || `${currentPlayingAlbum.id || currentPlayingAlbum.title}-${currentTrackIndex}`,
       title: track?.title || `Track ${currentTrackIndex + 1}`,
-      artist: track?.artist || currentPlayingAlbum.artist,
+      artist: chapterTitle || track?.artist || currentPlayingAlbum.artist,
       albumTitle: currentPlayingAlbum.title,
       duration: duration || 0,
       // Get artwork URL with proper fallbacks
       albumArt: getArtworkUrl(currentTrackIndex)
     };
-  }, [currentPlayingAlbum, currentTrackIndex, duration, getArtworkUrl]);
+  }, [currentPlayingAlbum, currentTrackIndex, duration, getArtworkUrl, chapters, currentChapterIndex]);
 
   // Don't render if nothing is playing or if fullscreen mode is active
   if (!currentPlayingAlbum || isFullscreenMode) {

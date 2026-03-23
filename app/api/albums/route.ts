@@ -438,7 +438,8 @@ export async function GET(request: Request) {
         endTime: track.endTime,
         // Media type fields for video filtering
         mediaType: track.mediaType || 'audio',
-        alternateEnclosures: track.alternateEnclosures
+        alternateEnclosures: track.alternateEnclosures,
+        chaptersUrl: track.chaptersUrl || undefined
       }));
       
       // Determine if this is a playlist based on track variety

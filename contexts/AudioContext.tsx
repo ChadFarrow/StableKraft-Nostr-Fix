@@ -16,6 +16,13 @@ import { ValueRecipient } from '@/lib/lightning/value-parser';
 import { hasV4V as checkHasV4V, getV4VRecipients, getPrimaryRecipient } from '@/lib/v4v-utils';
 import { prefetchUpcomingTracks, prefetchAudio } from '@/lib/audio-prefetch';
 
+export interface PodcastChapter {
+  title: string;
+  startTime: number;
+  endTime?: number;
+  img?: string;
+}
+
 interface AudioContextType {
   // Audio state
   currentPlayingAlbum: RSSAlbum | null;
@@ -38,7 +45,11 @@ interface AudioContextType {
   // Repeat mode
   repeatMode: 'none' | 'one' | 'all';
   setRepeatMode: (mode: 'none' | 'one' | 'all') => void;
-  
+
+  // Chapter state
+  chapters: PodcastChapter[];
+  currentChapterIndex: number;
+
   // Audio controls
   playAlbum: (album: RSSAlbum, trackIndex?: number) => Promise<boolean>;
   playTrack: (audioUrl: string, startTime?: number, endTime?: number) => Promise<boolean>;
@@ -52,7 +63,7 @@ interface AudioContextType {
   playNextTrack: () => void;
   playPreviousTrack: () => void;
   stop: () => void;
-  
+
   // Media element refs for direct access
   audioRef: React.RefObject<HTMLAudioElement>;
   videoRef: React.RefObject<HTMLVideoElement>;
@@ -101,6 +112,11 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   // UI state
   const [isFullscreenMode, setIsFullscreenMode] = useState(false);
   const [repeatMode, setRepeatMode] = useState<'none' | 'one' | 'all'>('none');
+
+  // Chapter state for podcast navigation
+  const [chapters, setChapters] = useState<PodcastChapter[]>([]);
+  const [currentChapterIndex, setCurrentChapterIndex] = useState(-1);
+  const chaptersTrackKeyRef = useRef<string>(''); // Track which episode chapters belong to
 
   // iOS detection state (for JSX conditional rendering)
   const [isIOS, setIsIOS] = useState(false);
@@ -2549,6 +2565,16 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
 
   // Play next track - moved before useEffect hooks that depend on it
   const playNextTrack = useCallback(async () => {
+    // Chapter navigation: if we have chapters and aren't at the last one, skip to next chapter
+    if (chapters.length > 0 && currentChapterIndex >= 0 && currentChapterIndex < chapters.length - 1) {
+      const nextChapter = chapters[currentChapterIndex + 1];
+      console.log(`📖 Skipping to next chapter: "${nextChapter.title}" at ${nextChapter.startTime}s`);
+      seek(nextChapter.startTime);
+      setCurrentChapterIndex(currentChapterIndex + 1);
+      return;
+    }
+    // If at last chapter (or no chapters), fall through to normal next-track behavior
+
     console.log('⏭️ playNextTrack called from lockscreen', {
       repeatMode,
       currentTrackIndex,
@@ -2729,7 +2755,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         setCurrentTrackIndex(0);
       }
     }
-  }, [currentPlayingAlbum, currentTrackIndex, isShuffleMode, shuffledPlaylist, currentShuffleIndex, playShuffledTrack, playAlbum, repeatMode]);
+  }, [currentPlayingAlbum, currentTrackIndex, isShuffleMode, shuffledPlaylist, currentShuffleIndex, playShuffledTrack, playAlbum, repeatMode, chapters, currentChapterIndex, seek]);
 
   // Update the ref whenever playNextTrack changes
   useEffect(() => {
@@ -2738,6 +2764,26 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
 
   // Play previous track
   const playPreviousTrack = useCallback(async () => {
+    // Chapter navigation: if we have chapters, go to previous chapter or start of current
+    if (chapters.length > 0 && currentChapterIndex >= 0) {
+      const currentChapter = chapters[currentChapterIndex];
+      const timeIntoChapter = currentTime - currentChapter.startTime;
+
+      if (timeIntoChapter > 3 || currentChapterIndex === 0) {
+        // More than 3s into chapter (or first chapter): restart current chapter
+        console.log(`📖 Restarting chapter: "${currentChapter.title}" at ${currentChapter.startTime}s`);
+        seek(currentChapter.startTime);
+        return;
+      } else {
+        // Less than 3s in: go to previous chapter
+        const prevChapter = chapters[currentChapterIndex - 1];
+        console.log(`📖 Skipping to previous chapter: "${prevChapter.title}" at ${prevChapter.startTime}s`);
+        seek(prevChapter.startTime);
+        setCurrentChapterIndex(currentChapterIndex - 1);
+        return;
+      }
+    }
+
     console.log('⏮️ playPreviousTrack called from lockscreen');
 
     if (isShuffleMode && shuffledPlaylist.length > 0) {
@@ -2772,12 +2818,72 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     } else {
       console.log('⚠️ Already at first track');
     }
-  }, [isShuffleMode, shuffledPlaylist, currentShuffleIndex, playShuffledTrack, currentPlayingAlbum, currentTrackIndex, playAlbum]);
+  }, [isShuffleMode, shuffledPlaylist, currentShuffleIndex, playShuffledTrack, currentPlayingAlbum, currentTrackIndex, playAlbum, chapters, currentChapterIndex, currentTime, seek]);
 
   // Update the ref whenever playPreviousTrack changes
   useEffect(() => {
     playPreviousTrackRef.current = playPreviousTrack;
   }, [playPreviousTrack]);
+
+  // Fetch chapters when track changes and has chaptersUrl
+  useEffect(() => {
+    if (!currentPlayingAlbum) return;
+    const track = currentPlayingAlbum.tracks[currentTrackIndex];
+    if (!track) return;
+
+    const trackKey = `${track.chaptersUrl || ''}-${track.id || track.title}`;
+
+    // Only fetch if this is a different track's chapters
+    if (trackKey === chaptersTrackKeyRef.current) return;
+    chaptersTrackKeyRef.current = trackKey;
+
+    if (!track.chaptersUrl) {
+      setChapters([]);
+      setCurrentChapterIndex(-1);
+      return;
+    }
+
+    const controller = new AbortController();
+    fetch(`/api/chapters?url=${encodeURIComponent(track.chaptersUrl)}`, {
+      signal: controller.signal,
+    })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.chapters?.length > 0) {
+          setChapters(data.chapters);
+          setCurrentChapterIndex(0);
+          console.log(`📖 Loaded ${data.chapters.length} chapters for: ${track.title}`);
+        } else {
+          setChapters([]);
+          setCurrentChapterIndex(-1);
+        }
+      })
+      .catch(err => {
+        if (err.name !== 'AbortError') {
+          console.warn('Failed to load chapters:', err);
+          setChapters([]);
+          setCurrentChapterIndex(-1);
+        }
+      });
+
+    return () => controller.abort();
+  }, [currentPlayingAlbum, currentTrackIndex]);
+
+  // Update current chapter index based on playback position
+  useEffect(() => {
+    if (chapters.length === 0) return;
+
+    let chapterIdx = -1;
+    for (let i = chapters.length - 1; i >= 0; i--) {
+      if (currentTime >= chapters[i].startTime) {
+        chapterIdx = i;
+        break;
+      }
+    }
+    if (chapterIdx >= 0 && chapterIdx !== currentChapterIndex) {
+      setCurrentChapterIndex(chapterIdx);
+    }
+  }, [currentTime, chapters, currentChapterIndex]);
 
   // Play individual track function
   const playTrack = async (audioUrl: string, startTime: number = 0, endTime?: number): Promise<boolean> => {
@@ -2934,6 +3040,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     setFullscreenMode: setIsFullscreenMode,
     repeatMode,
     setRepeatMode,
+    chapters,
+    currentChapterIndex,
     playAlbum,
     playTrack,
     playShuffledTrack,
@@ -2960,6 +3068,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     isShuffleMode,
     isFullscreenMode,
     repeatMode,
+    chapters,
+    currentChapterIndex,
     playAlbum,
     playTrack,
     playShuffledTrack,

@@ -69,6 +69,7 @@ export interface ParsedEpisode {
   episode?: number | null;
   season?: number;
   v4vValue?: any;
+  chaptersUrl?: string;
 }
 
 export interface ParseFeedResult {
@@ -110,6 +111,8 @@ export async function parseFeedXML(feedUrl: string): Promise<ParseFeedResult | n
       const episodeMatch = itemContent.match(/<podcast:episode>(\d+)<\/podcast:episode>|<itunes:episode>(\d+)<\/itunes:episode>/);
       // Extract season number for track ordering (podcast:season or itunes:season)
       const seasonMatch = itemContent.match(/<podcast:season>(\d+)<\/podcast:season>|<itunes:season>(\d+)<\/itunes:season>/);
+      // Extract chapters URL
+      const chaptersMatch = itemContent.match(/<podcast:chapters[^>]*url="([^"]*)"/);
 
       const title = titleMatch ? decodeHtmlEntities((titleMatch[1] || titleMatch[2] || '').trim()) : '';
       const description = descMatch ? decodeHtmlEntities((descMatch[1] || descMatch[2] || '').trim()) : '';
@@ -120,6 +123,7 @@ export async function parseFeedXML(feedUrl: string): Promise<ParseFeedResult | n
       const pubDate = pubDateMatch ? pubDateMatch[1] : '';
       const episode = episodeMatch ? parseInt(episodeMatch[1] || episodeMatch[2]) : null;
       const season = seasonMatch ? parseInt(seasonMatch[1] || seasonMatch[2]) : undefined;
+      const chaptersUrl = chaptersMatch ? chaptersMatch[1] : undefined;
 
       if (title && guid) {
         episodes.push({
@@ -131,7 +135,8 @@ export async function parseFeedXML(feedUrl: string): Promise<ParseFeedResult | n
           duration,
           pubDate,
           episode,
-          season
+          season,
+          chaptersUrl
         });
       }
     }
@@ -382,6 +387,7 @@ export async function importFeedToDatabase(feedData: any, episodes: ParsedEpisod
               trackOrder: trackOrderValue,
               ...(v4vData && { v4vValue: v4vData }),
               ...(v4vRecipient && { v4vRecipient }),
+              ...(episode.chaptersUrl && { chaptersUrl: episode.chaptersUrl }),
               updatedAt: new Date()
             }
           });
@@ -461,7 +467,8 @@ export async function getEpisodesFromAPI(feedId: number): Promise<ParsedEpisode[
       duration: ep.duration?.toString() || '0',
       pubDate: new Date(ep.datePublished * 1000).toUTCString(),
       v4vValue: ep.value, // Include v4v data from API
-      episode: ep.episode || null // Include episode number for track ordering
+      episode: ep.episode || null, // Include episode number for track ordering
+      chaptersUrl: ep.chaptersUrl || undefined
     }));
   } catch (error) {
     console.error('❌ Error getting episodes from Podcast Index API:', error);

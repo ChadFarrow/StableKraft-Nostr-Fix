@@ -139,6 +139,7 @@ export interface ParsedItem {
   mediaType?: 'audio' | 'video';
   mimeType?: string;
   alternateEnclosures?: AlternateEnclosure[];
+  chaptersUrl?: string;
 }
 
 // Helper function to detect media type from MIME type or URL
@@ -1017,10 +1018,13 @@ export async function parseRSSFeed(feedUrl: string): Promise<ParsedFeed> {
           console.log('ℹ️ DEBUG: No V4V data found in item');
         }
         
-        // Parse time segments if present (for music segments in podcasts)
+        // Extract chapters URL for podcast chapter navigation
         if (item['podcast:chapters']) {
-          // This would need more complex parsing based on the chapters format
-          // For now, we'll leave it as a placeholder
+          const chaptersElement = item['podcast:chapters'];
+          const chapUrl = chaptersElement?.$?.url || chaptersElement?.url;
+          if (chapUrl && typeof chapUrl === 'string') {
+            parsedItem.chaptersUrl = chapUrl;
+          }
         }
         
         items.push(parsedItem);
