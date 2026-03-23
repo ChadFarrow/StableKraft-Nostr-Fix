@@ -141,6 +141,7 @@ export interface ParsedItem {
   alternateEnclosures?: AlternateEnclosure[];
   chaptersUrl?: string;
   chapters?: Array<{ title: string; startTime: number; endTime?: number; img?: string }>;
+  valueTimeSplits?: Array<{ startTime: number; duration: number; remotePercentage: number; remoteItem?: { feedGuid: string; itemGuid: string } }>;
 }
 
 export type ParsedChapter = { title: string; startTime: number; endTime?: number; img?: string };
@@ -1073,7 +1074,33 @@ export async function parseRSSFeed(feedUrl: string): Promise<ParsedFeed> {
             parsedItem.chaptersUrl = chapUrl;
           }
         }
-        
+
+        // Extract valueTimeSplits for chapter-level V4V
+        const valueElement = item['podcast:value'];
+        const vtsSource = valueElement?.['podcast:valueTimeSplit'] || item['podcast:valueTimeSplit'];
+        if (vtsSource) {
+          const splits = Array.isArray(vtsSource) ? vtsSource : [vtsSource];
+          const valueTimeSplits = splits
+            .map((split: any) => {
+              const startTime = parseFloat(split?.$?.startTime || split?.startTime || '0');
+              const duration = parseFloat(split?.$?.duration || split?.duration || '0');
+              const remotePercentage = parseFloat(split?.$?.remotePercentage || split?.remotePercentage || '100');
+              const remote = split['podcast:remoteItem'];
+              const remoteItem = remote ? {
+                feedGuid: remote?.$?.feedGuid || remote?.feedGuid || '',
+                itemGuid: remote?.$?.itemGuid || remote?.itemGuid || '',
+              } : undefined;
+              if (duration > 0) {
+                return { startTime, duration, remotePercentage, remoteItem };
+              }
+              return null;
+            })
+            .filter((s): s is NonNullable<typeof s> => s !== null);
+          if (valueTimeSplits.length > 0) {
+            parsedItem.valueTimeSplits = valueTimeSplits;
+          }
+        }
+
         items.push(parsedItem);
       }
       

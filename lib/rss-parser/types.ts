@@ -43,6 +43,8 @@ export interface RSSTrack {
   // Podcast chapters
   chaptersUrl?: string;
   chapters?: Array<{ title: string; startTime: number; endTime?: number; img?: string }>;
+  // Value time splits for chapter-level V4V
+  valueTimeSplits?: Array<{ startTime: number; duration: number; remotePercentage: number; remoteItem?: { feedGuid: string; itemGuid: string } }>;
   // RSS parser custom fields
   'podcast:valueRecipient'?: any;
   'podcast:value'?: any;

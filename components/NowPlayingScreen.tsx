@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAudio } from '@/contexts/AudioContext';
@@ -55,6 +55,20 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
   const progressRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
+
+  // Find the active valueTimeSplit based on current playback position
+  const activeVTS = useMemo(() => {
+    const track = currentPlayingAlbum?.tracks?.[currentTrackIndex];
+    const splits = track?.valueTimeSplits;
+    if (!splits || !Array.isArray(splits) || splits.length === 0) return null;
+    for (let i = splits.length - 1; i >= 0; i--) {
+      const s = splits[i];
+      if (currentTime >= s.startTime && currentTime < s.startTime + s.duration) {
+        return s;
+      }
+    }
+    return null;
+  }, [currentPlayingAlbum, currentTrackIndex, currentTime]);
 
   // Use isFullscreenMode from AudioContext if isOpen prop is not provided
   const shouldShow = isOpen !== undefined ? isOpen : isFullscreenMode;
@@ -645,19 +659,19 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
         <BoostButton
           trackId={currentTrack.id}
           feedId={currentPlayingAlbum.feedId || currentPlayingAlbum.id}
-          trackTitle={currentTrack.title}
+          trackTitle={activeVTS ? (chapters[currentChapterIndex]?.title || currentTrack.title) : currentTrack.title}
           artistName={currentPlayingAlbum.artist || 'Unknown Artist'}
           lightningAddress={getPrimaryRecipient(currentTrack) || getPrimaryRecipient(currentPlayingAlbum)}
           valueSplits={formatValueSplitsForBoost(currentTrack, currentPlayingAlbum.artist) || formatValueSplitsForBoost(currentPlayingAlbum, currentPlayingAlbum.artist) || []}
           autoOpen={true}
           onClose={() => setShowBoostModal(false)}
           feedUrl={currentPlayingAlbum.feedUrl || currentPlayingAlbum.link}
-          episodeGuid={currentTrack.v4vValue?.itemGuid || currentTrack.guid}
-          remoteFeedGuid={currentTrack.v4vValue?.feedGuid || currentPlayingAlbum.feedGuid}
+          episodeGuid={activeVTS?.remoteItem?.itemGuid || currentTrack.v4vValue?.itemGuid || currentTrack.guid}
+          remoteFeedGuid={activeVTS?.remoteItem?.feedGuid || currentTrack.v4vValue?.feedGuid || currentPlayingAlbum.feedGuid}
           albumName={(currentTrack as any).feedTitle || (currentTrack as any).albumTitle || currentPlayingAlbum.title}
           publisherGuid={(currentPlayingAlbum as any).publisher?.feedGuid}
           publisherUrl={(currentPlayingAlbum as any).publisher?.publisherUrl}
-          remoteStartTime={currentTrack.v4vValue?.remoteStartTime}
+          remoteStartTime={activeVTS ? activeVTS.startTime : currentTrack.v4vValue?.remoteStartTime}
         />
       )}
     </div>

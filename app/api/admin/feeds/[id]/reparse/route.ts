@@ -144,6 +144,9 @@ export async function POST(
             if (matchedItem.chapters) {
               updateData.chapters = matchedItem.chapters;
             }
+            if (matchedItem.valueTimeSplits) {
+              updateData.valueTimeSplits = matchedItem.valueTimeSplits;
+            }
           }
 
           updatePromises.push(
@@ -229,6 +232,7 @@ export async function POST(
             endTime: item.endTime,
             chaptersUrl: item.chaptersUrl,
             chapters: item.chapters || undefined,
+            valueTimeSplits: item.valueTimeSplits || undefined,
             trackOrder: order,
             updatedAt: new Date()
           };

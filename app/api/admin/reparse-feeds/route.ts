@@ -333,6 +333,9 @@ async function reparseSingleFeed(feed: {
           if (matchedItem.chapters) {
             updateData.chapters = matchedItem.chapters;
           }
+          if (matchedItem.valueTimeSplits) {
+            updateData.valueTimeSplits = matchedItem.valueTimeSplits;
+          }
           updateData.mediaType = detectTrackMediaType(matchedItem);
         }
 
@@ -415,6 +418,7 @@ async function reparseSingleFeed(feed: {
           endTime: item.endTime,
           chaptersUrl: item.chaptersUrl,
           chapters: item.chapters || undefined,
+          valueTimeSplits: item.valueTimeSplits || undefined,
           trackOrder: order,
           updatedAt: new Date()
         };

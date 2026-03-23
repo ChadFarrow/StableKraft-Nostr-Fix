@@ -692,7 +692,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
           mediaType: true,
           alternateEnclosures: true,
           chaptersUrl: true,
-          chapters: true
+          chapters: true,
+          valueTimeSplits: true
         }
       }
     };
@@ -1009,6 +1010,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         alternateEnclosures: track.alternateEnclosures,
         chaptersUrl: track.chaptersUrl || undefined,
         chapters: track.chapters || undefined,
+        valueTimeSplits: track.valueTimeSplits || undefined,
         publishedAt: track.publishedAt || null,
       }));
 
@@ -1171,6 +1173,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
                       alternateEnclosures: true,
                       chaptersUrl: true,
                       chapters: true,
+                      valueTimeSplits: true,
                       Feed: {
                         select: {
                           id: true,
@@ -1391,6 +1394,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         alternateEnclosures: track.alternateEnclosures,
         chaptersUrl: track.chaptersUrl || undefined,
         chapters: track.chapters || undefined,
+        valueTimeSplits: track.valueTimeSplits || undefined,
         }));
 
         const isPlaylist = tracks.length > 1 &&
