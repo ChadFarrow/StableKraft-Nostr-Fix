@@ -2825,24 +2825,34 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     playPreviousTrackRef.current = playPreviousTrack;
   }, [playPreviousTrack]);
 
-  // Fetch chapters when track changes and has chaptersUrl
+  // Load chapters when track changes — use pre-loaded data from DB, fallback to API fetch
   useEffect(() => {
     if (!currentPlayingAlbum) return;
     const track = currentPlayingAlbum.tracks[currentTrackIndex];
     if (!track) return;
 
-    const trackKey = `${track.chaptersUrl || ''}-${track.id || track.title}`;
+    const trackKey = `${track.chaptersUrl || track.id || ''}-${track.title}`;
 
-    // Only fetch if this is a different track's chapters
+    // Only process if this is a different track
     if (trackKey === chaptersTrackKeyRef.current) return;
     chaptersTrackKeyRef.current = trackKey;
 
+    // Use pre-loaded chapters from DB if available
+    if (track.chapters && Array.isArray(track.chapters) && track.chapters.length > 0) {
+      setChapters(track.chapters);
+      setCurrentChapterIndex(0);
+      console.log(`📖 Using ${track.chapters.length} pre-loaded chapters for: ${track.title}`);
+      return;
+    }
+
+    // No pre-loaded chapters and no URL — clear
     if (!track.chaptersUrl) {
       setChapters([]);
       setCurrentChapterIndex(-1);
       return;
     }
 
+    // Fallback: fetch chapters from API proxy
     const controller = new AbortController();
     fetch(`/api/chapters?url=${encodeURIComponent(track.chaptersUrl)}`, {
       signal: controller.signal,
@@ -2852,7 +2862,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         if (data?.chapters?.length > 0) {
           setChapters(data.chapters);
           setCurrentChapterIndex(0);
-          console.log(`📖 Loaded ${data.chapters.length} chapters for: ${track.title}`);
+          console.log(`📖 Fetched ${data.chapters.length} chapters for: ${track.title}`);
         } else {
           setChapters([]);
           setCurrentChapterIndex(-1);

@@ -439,7 +439,8 @@ export async function GET(request: Request) {
         // Media type fields for video filtering
         mediaType: track.mediaType || 'audio',
         alternateEnclosures: track.alternateEnclosures,
-        chaptersUrl: track.chaptersUrl || undefined
+        chaptersUrl: track.chaptersUrl || undefined,
+        chapters: track.chapters || undefined
       }));
       
       // Determine if this is a playlist based on track variety

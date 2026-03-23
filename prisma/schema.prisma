@@ -235,6 +235,7 @@ model Track {
   mediaType           String                @default("audio")
   mimeType            String?
   chaptersUrl         String?
+  chapters            Json?
   SystemPlaylistTrack SystemPlaylistTrack[]
   Feed                Feed                  @relation(fields: [feedId], references: [id], onDelete: Cascade)
 

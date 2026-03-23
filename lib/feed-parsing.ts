@@ -9,7 +9,7 @@ import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { ValueTagParser } from '@/lib/lightning/value-parser';
 import { isValidFeedUrl, normalizeUrl } from '@/lib/url-utils';
-import { calculateTrackOrder, parsePodcastGuidFromXML } from '@/lib/rss-parser-db';
+import { calculateTrackOrder, parsePodcastGuidFromXML, fetchChapters } from '@/lib/rss-parser-db';
 import { decodeHtmlEntities } from '@/lib/decode-entities';
 
 const PODCAST_INDEX_API_KEY = process.env.PODCAST_INDEX_API_KEY;
@@ -70,6 +70,7 @@ export interface ParsedEpisode {
   season?: number;
   v4vValue?: any;
   chaptersUrl?: string;
+  chapters?: Array<{ title: string; startTime: number; endTime?: number; img?: string }>;
 }
 
 export interface ParseFeedResult {
@@ -388,6 +389,7 @@ export async function importFeedToDatabase(feedData: any, episodes: ParsedEpisod
               ...(v4vData && { v4vValue: v4vData }),
               ...(v4vRecipient && { v4vRecipient }),
               ...(episode.chaptersUrl && { chaptersUrl: episode.chaptersUrl }),
+              ...(episode.chapters && { chapters: JSON.parse(JSON.stringify(episode.chapters)) }),
               updatedAt: new Date()
             }
           });
@@ -458,7 +460,7 @@ export async function getEpisodesFromAPI(feedId: number): Promise<ParsedEpisode[
     }
 
     // Convert Podcast Index episodes to our format with v4v data
-    return episodesData.items.map((ep: any) => ({
+    const episodes: ParsedEpisode[] = episodesData.items.map((ep: any) => ({
       title: ep.title,
       description: ep.description || '',
       guid: ep.guid,
@@ -470,6 +472,20 @@ export async function getEpisodesFromAPI(feedId: number): Promise<ParsedEpisode[
       episode: ep.episode || null, // Include episode number for track ordering
       chaptersUrl: ep.chaptersUrl || undefined
     }));
+
+    // Fetch chapters for episodes that have chaptersUrl
+    const withChapters = episodes.filter(ep => ep.chaptersUrl);
+    if (withChapters.length > 0) {
+      console.log(`📖 Fetching chapters for ${withChapters.length} episodes from PI API...`);
+      await Promise.allSettled(
+        withChapters.map(async (ep) => {
+          const chapters = await fetchChapters(ep.chaptersUrl!);
+          if (chapters) ep.chapters = chapters;
+        })
+      );
+    }
+
+    return episodes;
   } catch (error) {
     console.error('❌ Error getting episodes from Podcast Index API:', error);
     return null;
