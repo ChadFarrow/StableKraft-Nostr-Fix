@@ -1005,6 +1005,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         status: track.status || 'active',
         mediaType: track.mediaType || 'audio',
         alternateEnclosures: track.alternateEnclosures,
+        chaptersUrl: track.chaptersUrl || undefined,
+        chapters: track.chapters || undefined,
         publishedAt: track.publishedAt || null,
       }));
 
@@ -1382,7 +1384,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
         v4vValue: parseV4VValue(track.v4vValue),
         status: track.status || 'active',
         mediaType: track.mediaType || 'audio',
-        alternateEnclosures: track.alternateEnclosures
+        alternateEnclosures: track.alternateEnclosures,
+        chaptersUrl: track.chaptersUrl || undefined,
+        chapters: track.chapters || undefined,
         }));
 
         const isPlaylist = tracks.length > 1 &&
