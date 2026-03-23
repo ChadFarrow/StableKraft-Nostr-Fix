@@ -66,11 +66,15 @@ export class MusicTrackParser {
       const podRollFeeds = await PlaylistParser.parsePodcastRoll(channel, feedUrl);
       relatedFeeds.push(...podRollFeeds);
 
+      // Detect feed medium (music, musicL, podcast, etc.)
+      const feedMedium = ParserUtils.getTextContent(channel, 'podcast:medium') ||
+        ParserUtils.getAttributeValue(channel, 'podcast:medium') || '';
+
       // Parse each item (episode)
       const items = Array.isArray(channel.item) ? channel.item : [channel.item];
       for (const item of items) {
         if (item) {
-          const episodeTracks = await this.extractTracksFromEpisode(item, channelTitle, feedUrl);
+          const episodeTracks = await this.extractTracksFromEpisode(item, channelTitle, feedUrl, feedMedium);
           tracks.push(...episodeTracks);
         }
       }
@@ -110,7 +114,8 @@ export class MusicTrackParser {
   private static async extractTracksFromEpisode(
     item: any,
     channelTitle: string,
-    feedUrl: string
+    feedUrl: string,
+    feedMedium: string = ''
   ): Promise<MusicTrack[]> {
     const tracks: MusicTrack[] = [];
 
@@ -135,7 +140,8 @@ export class MusicTrackParser {
       episodeDate,
       channelTitle,
       feedUrl,
-      audioUrl
+      audioUrl,
+      feedMedium
     };
 
     // 1. Extract tracks from chapter data
@@ -214,32 +220,47 @@ export class MusicTrackParser {
       }
 
       const chaptersData: ChapterData = await response.json();
+      const isMusicFeed = ParserUtils.isMusicMediumFeed(context.feedMedium);
+      const chapters = chaptersData.chapters;
 
       // Extract music tracks from chapters
-      for (const chapter of chaptersData.chapters) {
-        // Check if this chapter represents a music track
-        if (ParserUtils.isMusicChapter(chapter)) {
-          const { artist, title } = ParserUtils.extractArtistAndTitle(chapter.title);
+      for (let i = 0; i < chapters.length; i++) {
+        const chapter = chapters[i];
 
-          const track: MusicTrack = {
-            id: ParserUtils.generateId(),
-            title: title,
-            artist: artist,
-            episodeId: context.episodeId,
-            episodeTitle: context.episodeTitle,
-            episodeDate: context.episodeDate,
-            startTime: chapter.startTime,
-            endTime: chapter.endTime || chapter.startTime + 300, // Default 5 minutes if no end time
-            duration: (chapter.endTime || chapter.startTime + 300) - chapter.startTime,
-            audioUrl: context.audioUrl,
-            source: 'chapter',
-            feedUrl: context.feedUrl,
-            discoveredAt: new Date(),
-            image: chapter.image
-          };
+        // Skip silent chapters (toc: false) per spec
+        if (chapter.toc === false) continue;
 
-          tracks.push(track);
-        }
+        // For music-medium feeds, treat all chapters as music tracks
+        // For other feeds, apply the music keyword/format filter
+        if (!isMusicFeed && !ParserUtils.isMusicChapter(chapter)) continue;
+
+        const { artist, title } = ParserUtils.extractArtistAndTitle(chapter.title);
+
+        // Chain endTime: use next chapter's startTime if no explicit endTime
+        const nextChapter = chapters[i + 1];
+        const endTime = chapter.endTime || (nextChapter ? nextChapter.startTime : chapter.startTime + 300);
+
+        // Support both spec field name (img) and legacy (image)
+        const chapterImage = chapter.img || chapter.image;
+
+        const track: MusicTrack = {
+          id: ParserUtils.generateId(),
+          title: title,
+          artist: artist,
+          episodeId: context.episodeId,
+          episodeTitle: context.episodeTitle,
+          episodeDate: context.episodeDate,
+          startTime: chapter.startTime,
+          endTime,
+          duration: endTime - chapter.startTime,
+          audioUrl: context.audioUrl,
+          source: 'chapter',
+          feedUrl: context.feedUrl,
+          discoveredAt: new Date(),
+          image: chapterImage
+        };
+
+        tracks.push(track);
       }
 
     } catch (error) {

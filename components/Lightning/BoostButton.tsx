@@ -34,6 +34,7 @@ interface BoostButtonProps {
   publisherGuid?: string; // Publisher's podcast:guid
   publisherUrl?: string; // URL to publisher page (will be generated if not provided)
   iconOnly?: boolean; // Show only the icon without text (for compact displays)
+  remoteStartTime?: number; // VTS remoteStartTime for accurate Helipad metadata
 }
 
 export function BoostButton({
@@ -53,6 +54,7 @@ export function BoostButton({
   publisherGuid,
   publisherUrl,
   iconOnly = false,
+  remoteStartTime,
 }: BoostButtonProps) {
   const [isClient, setIsClient] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -243,6 +245,9 @@ export function BoostButton({
     }
     if (msg) {
       metadata.message = msg;
+    }
+    if (remoteStartTime !== undefined && remoteStartTime > 0) {
+      metadata.ts = remoteStartTime;
     }
 
     return metadata;

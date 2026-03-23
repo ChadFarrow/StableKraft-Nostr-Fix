@@ -146,6 +146,7 @@ export async function GET(request: Request) {
             title: true,
             description: true,
             originalUrl: true,
+            type: true,
             artist: true,
             image: true,
             priority: true,
@@ -260,6 +261,7 @@ export async function GET(request: Request) {
     const albums = feeds.map((feed: FeedWithTracks) => ({
       id: feed.id,
       title: feed.title,
+      type: feed.type || 'album',
       artist: feed.artist || feed.title,
       description: feed.description || '',
       coverArt: feed.image || '',
@@ -413,6 +415,12 @@ export async function GET(request: Request) {
         case 'playlist':
           // Start with empty array for playlist filter - playlists will be added after this
           filteredAlbums = [];
+          break;
+        case 'podcasts':
+          // Filter feeds that are music podcasts (type = 'podcast' with music content)
+          filteredAlbums = deduplicatedAlbums.filter((album: any) =>
+            album.type === 'podcast' || album.type === 'music-podcast'
+          );
           break;
         case 'videos':
           // Filter albums that have at least one video track (either mediaType is video or has video in alternateEnclosures)

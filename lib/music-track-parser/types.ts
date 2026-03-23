@@ -19,6 +19,7 @@ export interface MusicTrack {
     customKey?: string;
     customValue?: string;
     remotePercentage?: number;
+    remoteStartTime?: number;
     feedGuid?: string;
     itemGuid?: string;
     resolvedTitle?: string;
@@ -54,7 +55,9 @@ export interface ChapterData {
     startTime: number;
     endTime?: number;
     url?: string;
+    img?: string;
     image?: string;
+    toc?: boolean;
   }>;
 }
 
@@ -89,4 +92,5 @@ export interface EpisodeContext {
   channelTitle: string;
   feedUrl: string;
   audioUrl?: string;
+  feedMedium?: string;
 }
