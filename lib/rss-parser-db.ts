@@ -141,7 +141,7 @@ export interface ParsedItem {
   alternateEnclosures?: AlternateEnclosure[];
   chaptersUrl?: string;
   chapters?: Array<{ title: string; startTime: number; endTime?: number; img?: string }>;
-  valueTimeSplits?: Array<{ startTime: number; duration: number; remotePercentage: number; remoteItem?: { feedGuid: string; itemGuid: string } }>;
+  valueTimeSplits?: Array<{ startTime: number; duration: number; remotePercentage: number; remoteItem?: { feedGuid: string; itemGuid: string; medium?: string } }>;
 }
 
 import { PodcastChapter, ValueTimeSplit } from '@/lib/podcast-types';
@@ -596,7 +596,7 @@ export function calculateTrackOrder(episode: number, season?: number): number {
 }
 
 // Helper function to parse V4V data for a specific item from XML
-export function parseItemV4VFromXML(xmlText: string, itemTitle: string): { recipient: string | null; value: any } {
+export function parseItemV4VFromXML(xmlText: string, itemTitle: string): { recipient: string | null; value: any; valueTimeSplits: Array<{ startTime: number; duration: number; remotePercentage: number; remoteItem?: { feedGuid: string; itemGuid: string; medium?: string } }> } {
   try {
     console.log(`🔍 DEBUG: Parsing V4V for item "${itemTitle}" from XML...`);
 
@@ -618,7 +618,7 @@ export function parseItemV4VFromXML(xmlText: string, itemTitle: string): { recip
 
     if (!itemContent) {
       console.log(`ℹ️ DEBUG: Item "${itemTitle}" not found in XML`);
-      return { recipient: null, value: null };
+      return { recipient: null, value: null, valueTimeSplits: [] };
     }
 
     console.log(`🔍 DEBUG: Found item content for "${itemTitle}" (${itemContent.length} chars)`);
@@ -629,7 +629,7 @@ export function parseItemV4VFromXML(xmlText: string, itemTitle: string): { recip
     
     if (!valueMatch) {
       console.log(`ℹ️ DEBUG: No podcast:value tags found in item "${itemTitle}"`);
-      return { recipient: null, value: null };
+      return { recipient: null, value: null, valueTimeSplits: [] };
     }
     
     console.log(`🔍 DEBUG: Found podcast:value tag in item "${itemTitle}":`, valueMatch[0]);
@@ -641,10 +641,40 @@ export function parseItemV4VFromXML(xmlText: string, itemTitle: string): { recip
     console.log('🔍 DEBUG: Type:', valueTypeMatch ? valueTypeMatch[1] : 'not found');
     console.log('🔍 DEBUG: Method:', valueMethodMatch ? valueMethodMatch[1] : 'not found');
 
+    // Capture VTS blocks BEFORE stripping them from valueContent
+    const vtsRegex = /<podcast:valueTimeSplit([^>]*)>([\s\S]*?)<\/podcast:valueTimeSplit>/g;
+    const valueTimeSplits: Array<{ startTime: number; duration: number; remotePercentage: number; remoteItem?: { feedGuid: string; itemGuid: string; medium?: string } }> = [];
+    let vtsMatch;
+    while ((vtsMatch = vtsRegex.exec(valueContent)) !== null) {
+      const attrs = vtsMatch[1];
+      const inner = vtsMatch[2];
+
+      const startTime = parseFloat(attrs.match(/startTime="([^"]*)"/)?.[1] || '0');
+      const duration = parseFloat(attrs.match(/duration="([^"]*)"/)?.[1] || '0');
+      const remotePercentage = parseFloat(attrs.match(/remotePercentage="([^"]*)"/)?.[1] || '100');
+
+      if (duration <= 0) continue;
+
+      const remoteMatch = /<podcast:remoteItem([^>]*)\/?>/i.exec(inner);
+      let remoteItem: { feedGuid: string; itemGuid: string; medium?: string } | undefined;
+      if (remoteMatch) {
+        const ra = remoteMatch[1];
+        const feedGuid = ra.match(/feedGuid="([^"]*)"/)?.[1] || '';
+        const itemGuid = ra.match(/itemGuid="([^"]*)"/)?.[1] || '';
+        const medium = ra.match(/medium="([^"]*)"/)?.[1];
+        remoteItem = { feedGuid, itemGuid };
+        if (medium) remoteItem.medium = medium;
+      }
+
+      valueTimeSplits.push({ startTime, duration, remotePercentage, remoteItem });
+    }
+
+    if (valueTimeSplits.length > 0) {
+      console.log(`🔍 DEBUG: Captured ${valueTimeSplits.length} valueTimeSplit blocks from XML`);
+    }
+
     // Remove podcast:valueTimeSplit blocks to avoid duplicating their recipients
-    // These are for time-based payment splits (e.g., live shows), not track-level payments
     valueContent = valueContent.replace(/<podcast:valueTimeSplit[^>]*>[\s\S]*?<\/podcast:valueTimeSplit>/g, '');
-    console.log('🔍 DEBUG: Removed valueTimeSplit blocks from value content');
 
     // Look for podcast:valueRecipient tags within the value (handle both self-closing and opening/closing tags with nested content)
     // Updated regex to properly match each recipient individually, handling nested <value> and <key> elements
@@ -716,15 +746,16 @@ export function parseItemV4VFromXML(xmlText: string, itemTitle: string): { recip
           type: valueTypeMatch ? valueTypeMatch[1] : 'lightning',
           method: valueMethodMatch ? valueMethodMatch[1] : 'keysend',
           recipients: nonFeeRecipients
-        }
+        },
+        valueTimeSplits
       };
     }
     
     console.log(`⚠️ DEBUG: No recipients found in podcast:value for item "${itemTitle}"`);
-    return { recipient: null, value: null };
+    return { recipient: null, value: null, valueTimeSplits };
   } catch (error) {
     console.error(`Error parsing V4V for item "${itemTitle}" from XML:`, error);
-    return { recipient: null, value: null };
+    return { recipient: null, value: null, valueTimeSplits: [] };
   }
 }
 
@@ -980,6 +1011,10 @@ export async function parseRSSFeed(feedUrl: string): Promise<ParsedFeed> {
         // First try to parse from the raw XML for this specific item
         const itemV4vData = parseItemV4VFromXML(xmlText, item.title || '');
         
+        if (itemV4vData.valueTimeSplits.length > 0) {
+          parsedItem.valueTimeSplits = itemV4vData.valueTimeSplits;
+        }
+
         if (itemV4vData.recipient) {
           parsedItem.v4vRecipient = itemV4vData.recipient;
           parsedItem.v4vValue = itemV4vData.value;
@@ -1090,10 +1125,10 @@ export async function parseRSSFeed(feedUrl: string): Promise<ParsedFeed> {
           }
         }
 
-        // Extract valueTimeSplits for chapter-level V4V
+        // Extract valueTimeSplits for chapter-level V4V (fallback if regex-based extraction didn't find any)
         const valueElement = item['podcast:value'];
         const vtsSource = valueElement?.['podcast:valueTimeSplit'] || item['podcast:valueTimeSplit'];
-        if (vtsSource) {
+        if (!parsedItem.valueTimeSplits && vtsSource) {
           const splits = Array.isArray(vtsSource) ? vtsSource : [vtsSource];
           const valueTimeSplits = splits
             .map((split: any) => {
@@ -1104,6 +1139,7 @@ export async function parseRSSFeed(feedUrl: string): Promise<ParsedFeed> {
               const remoteItem = remote ? {
                 feedGuid: remote?.$?.feedGuid || remote?.feedGuid || '',
                 itemGuid: remote?.$?.itemGuid || remote?.itemGuid || '',
+                ...(remote?.$?.medium || remote?.medium ? { medium: remote?.$?.medium || remote?.medium } : {}),
               } : undefined;
               if (duration > 0) {
                 return { startTime, duration, remotePercentage, remoteItem };

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { parseRSSFeedWithSegments, calculateTrackOrder, detectTrackMediaType } from '@/lib/rss-parser-db';
+import { parseRSSFeedWithSegments, calculateTrackOrder, detectTrackMediaType, applyParsedItemFields } from '@/lib/rss-parser-db';
 import { resolvePodcastIndexUrl } from '@/lib/podcast-index-api';
 import { normalizeUrl } from '@/lib/url-utils';
 
@@ -141,6 +141,9 @@ async function processRemoteItems(feedUrl: string, publisherFeedId: string): Pro
               itunesCategories: item.itunesCategories || [],
               v4vRecipient: item.v4vRecipient,
               v4vValue: item.v4vValue,
+              chaptersUrl: item.chaptersUrl,
+              chapters: item.chapters,
+              valueTimeSplits: item.valueTimeSplits,
               startTime: item.startTime,
               endTime: item.endTime,
               trackOrder: item.episode ? calculateTrackOrder(item.episode, item.season) : index + 1,
@@ -311,6 +314,9 @@ export async function POST(request: NextRequest) {
               itunesCategories: item.itunesCategories || [],
               v4vRecipient: item.v4vRecipient,
               v4vValue: item.v4vValue,
+              chaptersUrl: item.chaptersUrl,
+              chapters: item.chapters,
+              valueTimeSplits: item.valueTimeSplits,
               startTime: item.startTime,
               endTime: item.endTime,
               trackOrder: item.episode ? calculateTrackOrder(item.episode, item.season) : index + 1,
@@ -532,6 +538,9 @@ export async function POST(request: NextRequest) {
             updatedAt: new Date()
           };
 
+          // Apply chapters and VTS fields
+          applyParsedItemFields(updateData, matchedItem);
+
           if (matchedItem.v4vRecipient) {
             v4vUpdatedCount++;
           }
@@ -627,13 +636,16 @@ export async function POST(request: NextRequest) {
             itunesCategories: item.itunesCategories || [],
             v4vRecipient: item.v4vRecipient,
             v4vValue: item.v4vValue,
+            chaptersUrl: item.chaptersUrl,
+            chapters: item.chapters,
+            valueTimeSplits: item.valueTimeSplits,
             startTime: item.startTime,
             endTime: item.endTime,
             trackOrder: order,
             updatedAt: new Date()
           };
         });
-        
+
         await prisma.track.createMany({
           data: tracksData,
           skipDuplicates: true

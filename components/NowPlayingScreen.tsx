@@ -50,6 +50,11 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
   const [dominantColor, setDominantColor] = useState('#1A252F');
   const [contrastColors, setContrastColors] = useState({ backgroundColor: '#1A252F', textColor: '#ffffff' });
   const [showBoostModal, setShowBoostModal] = useState(false);
+  const [vtsV4vData, setVtsV4vData] = useState<{
+    lightningAddress: string | null;
+    valueSplits: Array<{ name: string; address: string; split: number; type: 'node' | 'lnaddress' }>;
+    artistName?: string;
+  } | null>(null);
   const [titleOverflows, setTitleOverflows] = useState(false);
 
   const progressRef = useRef<HTMLDivElement>(null);
@@ -69,6 +74,90 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
     }
     return null;
   }, [currentPlayingAlbum, currentTrackIndex, currentTime]);
+
+  // Reset VTS V4V data when track changes
+  useEffect(() => {
+    setVtsV4vData(null);
+  }, [currentTrackIndex]);
+
+  // Fetch remote track V4V data when a VTS segment with remoteItem is active
+  useEffect(() => {
+    if (!activeVTS?.remoteItem?.feedGuid || !activeVTS?.remoteItem?.itemGuid) {
+      setVtsV4vData(null);
+      return;
+    }
+
+    const { feedGuid, itemGuid } = activeVTS.remoteItem;
+    const remotePercentage = activeVTS.remotePercentage ?? 100;
+
+    const chapterTitle = chapters[currentChapterIndex]?.title || '';
+    const params = new URLSearchParams({ feedGuid, itemGuid });
+    if (chapterTitle) params.set('chapterTitle', chapterTitle);
+    fetch(`/api/lightning/value-splits?${params}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.data?.recipients?.length > 0) {
+          const remoteRecipients = data.data.recipients.filter((r: any) => !r.fee);
+
+          // Scale remote artist splits by remotePercentage
+          const totalRemoteSplits = remoteRecipients.reduce((sum: number, r: any) => sum + (r.split || 100), 0);
+          const scaledRemote = remoteRecipients.map((r: any) => ({
+            name: r.name || 'Unknown',
+            address: r.address,
+            split: Math.round(((r.split || 100) / totalRemoteSplits) * remotePercentage),
+            type: r.type || 'node' as 'node' | 'lnaddress',
+            isHost: false
+          }));
+
+          // If remotePercentage < 100, blend in the podcast host's (feed-level) recipients
+          let blended = scaledRemote;
+          if (remotePercentage < 100) {
+            const hostPercentage = 100 - remotePercentage;
+            // Use album/feed-level V4V, not track-level (track V4V is the remote artist's)
+            const hostSplits = formatValueSplitsForBoost(currentPlayingAlbum, currentPlayingAlbum?.artist)
+              || [];
+            const totalHostSplits = hostSplits.reduce((sum, r) => sum + r.split, 0);
+            if (totalHostSplits > 0) {
+              const scaledHost = hostSplits.map(r => ({
+                ...r,
+                split: Math.round((r.split / totalHostSplits) * hostPercentage),
+                isHost: true
+              }));
+              blended = [...scaledRemote, ...scaledHost];
+            }
+          }
+
+          // Deduplicate recipients with the same name (e.g., Podcastindex listed
+          // with both lnaddress and node pubkey) — merge splits, prefer lnaddress
+          const deduped: typeof blended = [];
+          const seen = new Map<string, number>(); // lowercase name -> index in deduped
+          for (const r of blended) {
+            const key = (r.name || '').toLowerCase();
+            const existing = seen.get(key);
+            if (existing !== undefined) {
+              deduped[existing].split += r.split;
+              // Prefer lnaddress over node
+              if (r.type === 'lnaddress' && deduped[existing].type !== 'lnaddress') {
+                deduped[existing].address = r.address;
+                deduped[existing].type = r.type;
+              }
+            } else {
+              seen.set(key, deduped.length);
+              deduped.push({ ...r });
+            }
+          }
+
+          setVtsV4vData({
+            lightningAddress: scaledRemote[0]?.address || null,
+            valueSplits: deduped,
+            artistName: data.artistName
+          });
+        } else {
+          setVtsV4vData(null);
+        }
+      })
+      .catch(() => setVtsV4vData(null));
+  }, [activeVTS?.remoteItem?.feedGuid, activeVTS?.remoteItem?.itemGuid, activeVTS?.remotePercentage, currentPlayingAlbum, currentTrackIndex]);
 
   // Use isFullscreenMode from AudioContext if isOpen prop is not provided
   const shouldShow = isOpen !== undefined ? isOpen : isFullscreenMode;
@@ -192,6 +281,13 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
     ? chapters[currentChapterIndex]?.img
     : undefined;
   const originalImageUrl = chapterImg || currentTrack?.image || currentPlayingAlbum?.coverArt || '';
+
+  // For VTS podcasts (playlists), favorite the individual song via remoteItem
+  // For regular tracks, favorite via currentTrack.id
+  const hasVTS = currentTrack?.valueTimeSplits && currentTrack.valueTimeSplits.length > 0;
+  const favoriteTrackId = hasVTS
+    ? activeVTS?.remoteItem?.itemGuid  // null if between VTS segments
+    : currentTrack?.id;
   const albumArt = originalImageUrl
     ? getProxiedImageUrl(originalImageUrl)
     : '/api/placeholder/400/400';
@@ -411,7 +507,7 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
             </button>
 
             {/* Favorite Button - Top-right corner overlay */}
-            {currentTrack?.id && (
+            {favoriteTrackId && (
               <div
                 className="absolute top-4 right-4 z-20"
                 onClick={(e) => {
@@ -428,7 +524,9 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
                   }}
                 >
                   <FavoriteButton
-                    trackId={currentTrack.id}
+                    key={favoriteTrackId}
+                    trackId={favoriteTrackId}
+                    feedGuidForImport={hasVTS ? activeVTS?.remoteItem?.feedGuid : undefined}
                     size={28}
                     className="text-white"
                   />
@@ -493,6 +591,19 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
                 backgroundColor: contrastColors.textColor
               }}
             />
+            {/* Chapter tick marks */}
+            {chapters.length > 1 && duration > 0 && chapters
+              .filter((_, i) => i > 0)
+              .map((chapter) => (
+                <div
+                  key={chapter.startTime}
+                  className="absolute top-1/2 -translate-y-1/2 w-0.5 h-2.5 rounded-full pointer-events-none"
+                  style={{
+                    left: `${(chapter.startTime / duration) * 100}%`,
+                    backgroundColor: `${contrastColors.textColor}60`,
+                  }}
+                />
+              ))}
             <div
               className="absolute w-3 h-3 rounded-full shadow-lg transform -translate-y-1/2 transition-all duration-100"
               style={{
@@ -660,9 +771,9 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
           trackId={currentTrack.id}
           feedId={currentPlayingAlbum.feedId || currentPlayingAlbum.id}
           trackTitle={activeVTS ? (chapters[currentChapterIndex]?.title || currentTrack.title) : currentTrack.title}
-          artistName={currentPlayingAlbum.artist || 'Unknown Artist'}
-          lightningAddress={getPrimaryRecipient(currentTrack) || getPrimaryRecipient(currentPlayingAlbum)}
-          valueSplits={formatValueSplitsForBoost(currentTrack, currentPlayingAlbum.artist) || formatValueSplitsForBoost(currentPlayingAlbum, currentPlayingAlbum.artist) || []}
+          artistName={vtsV4vData?.artistName || currentPlayingAlbum.artist || 'Unknown Artist'}
+          lightningAddress={vtsV4vData?.lightningAddress || getPrimaryRecipient(currentTrack) || getPrimaryRecipient(currentPlayingAlbum)}
+          valueSplits={vtsV4vData?.valueSplits || formatValueSplitsForBoost(currentTrack, currentPlayingAlbum.artist) || formatValueSplitsForBoost(currentPlayingAlbum, currentPlayingAlbum.artist) || []}
           autoOpen={true}
           onClose={() => setShowBoostModal(false)}
           feedUrl={currentPlayingAlbum.feedUrl || currentPlayingAlbum.link}

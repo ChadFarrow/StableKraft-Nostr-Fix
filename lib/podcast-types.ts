@@ -17,5 +17,6 @@ export interface ValueTimeSplit {
   remoteItem?: {
     feedGuid: string;
     itemGuid: string;
+    medium?: string;
   };
 }

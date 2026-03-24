@@ -22,6 +22,7 @@ interface BoostButtonProps {
     address: string;
     split: number;
     type: 'node' | 'lnaddress';
+    isHost?: boolean;
   }>;
   lightningAddress?: string; // Primary Lightning Address for this track/artist
   className?: string;
@@ -1142,34 +1143,52 @@ export function BoostButton({
                         // Pre-calculate split amounts using the same service that handles payments
                         const totalAmount = customAmount && parseInt(customAmount) > 0 ? parseInt(customAmount) : 0;
 
-                        // Sort splits by percentage FIRST (largest first), then calculate amounts
-                        // This ensures calculated amounts stay aligned with display order
-                        const sortedActiveValueSplits = [...activeValueSplits].sort((a, b) => b.split - a.split);
+                        // Sort splits: track recipients first, then host/show recipients
+                        // Within each group, sort by weight (largest first)
+                        const sortedActiveValueSplits = [...activeValueSplits].sort((a, b) => {
+                          const aHost = a.isHost ? 1 : 0;
+                          const bHost = b.isHost ? 1 : 0;
+                          if (aHost !== bHost) return aHost - bHost;
+                          return b.split - a.split;
+                        });
+                        const totalSplitWeight = sortedActiveValueSplits.reduce((sum, s) => sum + s.split, 0);
 
                         const sortedSplits = totalAmount > 0
                           ? ValueSplitsService.calculateSplitAmounts(
                               sortedActiveValueSplits.map(s => ({ ...s, fee: false })),
                               totalAmount
-                            ).map(calculated => ({
+                            ).map((calculated, i) => ({
                               name: calculated.recipient.name,
                               type: calculated.recipient.type,
                               address: calculated.recipient.address,
                               split: calculated.recipient.split,
-                              calculatedAmount: calculated.amount
+                              calculatedAmount: calculated.amount,
+                              isHost: sortedActiveValueSplits[i]?.isHost ?? false
                             }))
-                          : sortedActiveValueSplits.map(s => ({ ...s, calculatedAmount: 0 }));
+                          : sortedActiveValueSplits.map(s => ({ ...s, calculatedAmount: 0, isHost: s.isHost ?? false }));
+
+                        const hasGroups = sortedSplits.some(s => s.isHost) && sortedSplits.some(s => !s.isHost);
 
                         return (
                           <div className="flex flex-col gap-1">
                             {sortedSplits.map((split, index) => {
+                              // Show section header when transitioning from track to show splits
+                              const showTrackHeader = hasGroups && index === 0 && !split.isHost;
+                              const showHostHeader = hasGroups && split.isHost && (index === 0 || !sortedSplits[index - 1].isHost);
                               const amount = split.calculatedAmount;
                               // Use name|address key to match how statuses are stored
                               const statusKey = `${split.name || 'Unknown'}|${split.address}`;
                               const status = paymentStatuses.get(statusKey);
 
                             return (
+                              <React.Fragment key={index}>
+                              {showTrackHeader && (
+                                <div className="text-xs text-gray-500 uppercase tracking-wider mt-1 mb-0.5 px-1">Song</div>
+                              )}
+                              {showHostHeader && (
+                                <div className="text-xs text-gray-500 uppercase tracking-wider mt-2 mb-0.5 px-1">Show</div>
+                              )}
                               <div
-                                key={index}
                                 className="bg-gray-800 rounded-lg p-3 flex items-center justify-between gap-2 min-w-0"
                               >
                                 <div className="flex items-center gap-2 flex-1 min-w-0 overflow-hidden">
@@ -1227,15 +1246,16 @@ export function BoostButton({
                                 </div>
                                 <div className="text-right flex-shrink-0 whitespace-nowrap pl-2">
                                   <div className="text-white text-sm font-semibold">
-                                    {amount > 0 ? `${amount} sats` : `${split.split}%`}
+                                    {amount > 0 ? `${amount} sats` : `${totalSplitWeight > 0 ? Math.round((split.split / totalSplitWeight) * 100) : split.split}%`}
                                   </div>
                                   {amount > 0 && (
                                     <div className="text-xs text-gray-500">
-                                      {split.split}%
+                                      {totalSplitWeight > 0 ? Math.round((split.split / totalSplitWeight) * 100) : split.split}%
                                     </div>
                                   )}
                                 </div>
                               </div>
+                              </React.Fragment>
                             );
                           })}
                           {/* StableKraft Platform Fee */}
