@@ -15,13 +15,7 @@ import { ValueSplitsService } from '@/lib/lightning/value-splits';
 import { ValueRecipient } from '@/lib/lightning/value-parser';
 import { hasV4V as checkHasV4V, getV4VRecipients, getPrimaryRecipient } from '@/lib/v4v-utils';
 import { prefetchUpcomingTracks, prefetchAudio } from '@/lib/audio-prefetch';
-
-export interface PodcastChapter {
-  title: string;
-  startTime: number;
-  endTime?: number;
-  img?: string;
-}
+import { PodcastChapter } from '@/lib/podcast-types';
 
 interface AudioContextType {
   // Audio state

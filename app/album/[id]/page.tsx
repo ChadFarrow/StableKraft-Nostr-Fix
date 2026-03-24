@@ -248,8 +248,8 @@ export default async function AlbumDetailPage({ params }: { params: Promise<{ id
   }
 
   // Redirect podcast feeds to /podcast/ URL
-  const podcastSlugs = ['upbeats'];
-  if (podcastSlugs.includes(id.toLowerCase())) {
+  const { PODCAST_SLUGS } = await import('@/lib/podcast-feeds');
+  if (PODCAST_SLUGS.includes(id.toLowerCase())) {
     const { redirect } = await import('next/navigation');
     redirect(`/podcast/${id}`);
   }

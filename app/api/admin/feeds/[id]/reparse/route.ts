@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { parseRSSFeedWithSegments, calculateTrackOrder } from '@/lib/rss-parser-db';
+import { parseRSSFeedWithSegments, calculateTrackOrder, applyParsedItemFields } from '@/lib/rss-parser-db';
 
 /**
  * POST /api/admin/feeds/[id]/reparse
@@ -129,25 +129,9 @@ export async function POST(
             podcastCategories: parsedFeed.podcastCategories || []
           };
 
-          // Update v4v data and chapters from the parsed feed item
-          if (matchedItem) {
-            if (matchedItem.v4vRecipient) {
-              updateData.v4vRecipient = matchedItem.v4vRecipient;
-              v4vUpdatedCount++;
-            }
-            if (matchedItem.v4vValue) {
-              updateData.v4vValue = matchedItem.v4vValue;
-            }
-            if (matchedItem.chaptersUrl) {
-              updateData.chaptersUrl = matchedItem.chaptersUrl;
-            }
-            if (matchedItem.chapters) {
-              updateData.chapters = matchedItem.chapters;
-            }
-            if (matchedItem.valueTimeSplits) {
-              updateData.valueTimeSplits = matchedItem.valueTimeSplits;
-            }
-          }
+          // Update v4v data, chapters, and VTS from the parsed feed item
+          applyParsedItemFields(updateData, matchedItem);
+          if (matchedItem?.v4vRecipient) v4vUpdatedCount++;
 
           updatePromises.push(
             prisma.track.update({

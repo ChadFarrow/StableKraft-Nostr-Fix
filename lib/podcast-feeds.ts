@@ -10,3 +10,8 @@ export const PODCAST_FEED_IDS: string[] = [
 export const PODCAST_FEED_URLS: string[] = [
   'https://feeds.rssblue.com/upbeats', // Upbeats
 ];
+
+/** Slugs that should redirect from /album/ to /podcast/ */
+export const PODCAST_SLUGS: string[] = [
+  'upbeats',
+];

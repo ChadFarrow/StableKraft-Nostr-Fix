@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { parseRSSFeedWithSegments, calculateTrackOrder, ParsedItem, detectTrackMediaType } from '@/lib/rss-parser-db';
+import { parseRSSFeedWithSegments, calculateTrackOrder, ParsedItem, detectTrackMediaType, applyParsedItemFields } from '@/lib/rss-parser-db';
 
 /**
  * POST /api/admin/reparse-feeds
@@ -313,28 +313,14 @@ async function reparseSingleFeed(feed: {
           podcastCategories: parsedFeed.podcastCategories || []
         };
 
-        // Update v4v data and video metadata from the parsed feed item
+        // Update v4v data, chapters, VTS, and media metadata from the parsed feed item
+        applyParsedItemFields(updateData, matchedItem);
         if (matchedItem) {
-          if (matchedItem.v4vRecipient) {
-            updateData.v4vRecipient = matchedItem.v4vRecipient;
-          }
-          if (matchedItem.v4vValue) {
-            updateData.v4vValue = matchedItem.v4vValue;
-          }
           if (matchedItem.mimeType) {
             updateData.mimeType = matchedItem.mimeType;
           }
           if (matchedItem.alternateEnclosures?.length) {
             updateData.alternateEnclosures = JSON.parse(JSON.stringify(matchedItem.alternateEnclosures));
-          }
-          if (matchedItem.chaptersUrl) {
-            updateData.chaptersUrl = matchedItem.chaptersUrl;
-          }
-          if (matchedItem.chapters) {
-            updateData.chapters = matchedItem.chapters;
-          }
-          if (matchedItem.valueTimeSplits) {
-            updateData.valueTimeSplits = matchedItem.valueTimeSplits;
           }
           updateData.mediaType = detectTrackMediaType(matchedItem);
         }

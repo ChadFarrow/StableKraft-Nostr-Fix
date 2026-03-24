@@ -137,6 +137,61 @@ function isValidImageUrl(url: any): boolean {
   return trimmed !== '' && trimmed !== 'null' && trimmed !== 'undefined';
 }
 
+// Shared Prisma select fields for Track queries
+const TRACK_SELECT_FIELDS = {
+  id: true,
+  guid: true,
+  title: true,
+  subtitle: true,
+  description: true,
+  artist: true,
+  audioUrl: true,
+  duration: true,
+  image: true,
+  explicit: true,
+  itunesKeywords: true,
+  itunesDuration: true,
+  v4vRecipient: true,
+  v4vValue: true,
+  status: true,
+  trackOrder: true,
+  publishedAt: true,
+  createdAt: true,
+  mediaType: true,
+  alternateEnclosures: true,
+  chaptersUrl: true,
+  chapters: true,
+  valueTimeSplits: true,
+} as const;
+
+// Map a DB track to the API response format
+function mapTrackToResponse(track: any, fallbackImage: string | null, index: number, parseV4V: (v: any) => any) {
+  return {
+    id: track.id,
+    guid: track.guid,
+    title: track.title,
+    duration: track.duration
+      ? Math.floor(track.duration / 60) + ':' + String(track.duration % 60).padStart(2, '0')
+      : track.itunesDuration || '0:00',
+    url: track.audioUrl,
+    trackNumber: index + 1,
+    subtitle: track.subtitle || '',
+    summary: track.description || '',
+    image: isValidImageUrl(track.image) ? track.image : (isValidImageUrl(fallbackImage) ? fallbackImage : ''),
+    explicit: track.explicit || false,
+    keywords: track.itunesKeywords || [],
+    v4vRecipient: track.v4vRecipient,
+    v4vValue: parseV4V(track.v4vValue),
+    status: track.status || 'active',
+    mediaType: track.mediaType || 'audio',
+    alternateEnclosures: track.alternateEnclosures,
+    chaptersUrl: track.chaptersUrl || undefined,
+    chapters: track.chapters || undefined,
+    valueTimeSplits: track.valueTimeSplits || undefined,
+    publishedAt: track.publishedAt || null,
+  };
+}
+
 export async function GET(request: Request, { params }: { params: Promise<{ slug: string }> }) {
   try {
     const { slug } = await params;
@@ -670,31 +725,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
           { publishedAt: 'asc' as const },
           { createdAt: 'asc' as const }
         ],
-        select: {
-          id: true,
-          guid: true,
-          title: true,
-          subtitle: true,
-          description: true,
-          artist: true,
-          audioUrl: true,
-          duration: true,
-          image: true,
-          explicit: true,
-          itunesKeywords: true,
-          itunesDuration: true,
-          v4vRecipient: true,
-          v4vValue: true,
-          status: true,
-          trackOrder: true,
-          publishedAt: true,
-          createdAt: true,
-          mediaType: true,
-          alternateEnclosures: true,
-          chaptersUrl: true,
-          chapters: true,
-          valueTimeSplits: true
-        }
+        select: TRACK_SELECT_FIELDS
       }
     };
 
@@ -989,30 +1020,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
       }
 
       const tracks = deduplicatedTracks
-        .map((track: any, index: number) => ({
-        id: track.id,
-        guid: track.guid,
-        title: track.title,
-        duration: track.duration ?
-          Math.floor(track.duration / 60) + ':' + String(track.duration % 60).padStart(2, '0') :
-          track.itunesDuration || '0:00',
-        url: track.audioUrl,
-        trackNumber: index + 1,
-        subtitle: track.subtitle || '',
-        summary: track.description || '',
-        image: (isValidImageUrl(track.image) ? track.image : (isValidImageUrl(feed.image) ? feed.image : '')),
-        explicit: track.explicit || false,
-        keywords: track.itunesKeywords || [],
-        v4vRecipient: track.v4vRecipient,
-        v4vValue: parseV4VValue(track.v4vValue),
-        status: track.status || 'active',
-        mediaType: track.mediaType || 'audio',
-        alternateEnclosures: track.alternateEnclosures,
-        chaptersUrl: track.chaptersUrl || undefined,
-        chapters: track.chapters || undefined,
-        valueTimeSplits: track.valueTimeSplits || undefined,
-        publishedAt: track.publishedAt || null,
-      }));
+        .map((track: any, index: number) => mapTrackToResponse(track, feed.image, index, parseV4VValue));
 
       // Determine if this is a playlist based on track variety
       const isPlaylist = tracks.length > 1 &&
@@ -1154,26 +1162,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
                       status: 'active'
                     },
                     select: {
-                      id: true,
-                      guid: true,
-                      title: true,
-                      artist: true,
-                      audioUrl: true,
-                      duration: true,
-                      image: true,
-                      subtitle: true,
-                      description: true,
-                      explicit: true,
-                      itunesKeywords: true,
-                      itunesDuration: true,
-                      v4vRecipient: true,
-                      v4vValue: true,
-                      status: true,
-                      mediaType: true,
-                      alternateEnclosures: true,
-                      chaptersUrl: true,
-                      chapters: true,
-                      valueTimeSplits: true,
+                      ...TRACK_SELECT_FIELDS,
                       Feed: {
                         select: {
                           id: true,
@@ -1373,29 +1362,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ slug
             t.audioUrl === track.audioUrl && t.title === track.title
           ) === index;
         })
-        .map((track: any, index: number) => ({
-        id: track.id,
-        guid: track.guid,
-        title: track.title,
-        duration: track.duration ?
-          Math.floor(track.duration / 60) + ':' + String(track.duration % 60).padStart(2, '0') :
-          track.itunesDuration || '0:00',
-        url: track.audioUrl,
-        trackNumber: index + 1,
-        subtitle: track.subtitle || '',
-        summary: track.description || '',
-        image: (isValidImageUrl(track.image) ? track.image : (isValidImageUrl(feed.image) ? feed.image : '')),
-        explicit: track.explicit || false,
-        keywords: track.itunesKeywords || [],
-        v4vRecipient: track.v4vRecipient,
-        v4vValue: parseV4VValue(track.v4vValue),
-        status: track.status || 'active',
-        mediaType: track.mediaType || 'audio',
-        alternateEnclosures: track.alternateEnclosures,
-        chaptersUrl: track.chaptersUrl || undefined,
-        chapters: track.chapters || undefined,
-        valueTimeSplits: track.valueTimeSplits || undefined,
-        }));
+        .map((track: any, index: number) => mapTrackToResponse(track, feed.image, index, parseV4VValue));
 
         const isPlaylist = tracks.length > 1 &&
           new Set(tracks.map((t: any) => t.artist || feed.artist)).size > 1;

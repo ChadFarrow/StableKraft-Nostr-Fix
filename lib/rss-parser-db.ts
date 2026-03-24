@@ -144,7 +144,9 @@ export interface ParsedItem {
   valueTimeSplits?: Array<{ startTime: number; duration: number; remotePercentage: number; remoteItem?: { feedGuid: string; itemGuid: string } }>;
 }
 
-export type ParsedChapter = { title: string; startTime: number; endTime?: number; img?: string };
+import { PodcastChapter, ValueTimeSplit } from '@/lib/podcast-types';
+
+export type ParsedChapter = PodcastChapter;
 
 /**
  * Normalize raw chapters JSON data: filter toc:false, sort by startTime, chain endTimes.
@@ -188,6 +190,19 @@ export async function fetchChapters(
     console.warn(`⚠️ Failed to fetch chapters from ${chaptersUrl}:`, error instanceof Error ? error.message : error);
     return null;
   }
+}
+
+/**
+ * Apply v4v, chapter, and VTS fields from a parsed RSS item to a Prisma update object.
+ * Shared by single-feed and bulk reparse routes.
+ */
+export function applyParsedItemFields(updateData: any, matchedItem: ParsedItem | null): void {
+  if (!matchedItem) return;
+  if (matchedItem.v4vRecipient) updateData.v4vRecipient = matchedItem.v4vRecipient;
+  if (matchedItem.v4vValue) updateData.v4vValue = matchedItem.v4vValue;
+  if (matchedItem.chaptersUrl) updateData.chaptersUrl = matchedItem.chaptersUrl;
+  if (matchedItem.chapters) updateData.chapters = matchedItem.chapters;
+  if (matchedItem.valueTimeSplits) updateData.valueTimeSplits = matchedItem.valueTimeSplits;
 }
 
 // Helper function to detect media type from MIME type or URL

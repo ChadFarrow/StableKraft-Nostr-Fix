@@ -40,11 +40,10 @@ export interface RSSTrack {
   mediaType?: 'audio' | 'video';
   mimeType?: string;
   alternateEnclosures?: AlternateEnclosure[];
-  // Podcast chapters
+  // Podcast chapters and value time splits (types from lib/podcast-types.ts)
   chaptersUrl?: string;
-  chapters?: Array<{ title: string; startTime: number; endTime?: number; img?: string }>;
-  // Value time splits for chapter-level V4V
-  valueTimeSplits?: Array<{ startTime: number; duration: number; remotePercentage: number; remoteItem?: { feedGuid: string; itemGuid: string } }>;
+  chapters?: import('@/lib/podcast-types').PodcastChapter[];
+  valueTimeSplits?: import('@/lib/podcast-types').ValueTimeSplit[];
   // RSS parser custom fields
   'podcast:valueRecipient'?: any;
   'podcast:value'?: any;
