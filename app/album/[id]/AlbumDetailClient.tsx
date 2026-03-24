@@ -1260,8 +1260,8 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
                         </div>
                       )}
 
-                      {/* Boost Button - only show if v4v data exists (track or album level) */}
-                      {(checkHasV4V(track) || checkHasV4V(album)) && (
+                      {/* Boost Button - only show if v4v data exists (track, album, or valueTimeSplits level) */}
+                      {(checkHasV4V(track) || checkHasV4V(album) || (track.valueTimeSplits && track.valueTimeSplits.length > 0)) && (
                         <div onClick={(e) => e.stopPropagation()}>
                           <BoostButton
                             key={track.guid || track.url || `boost-${track.title}-${displayIndex}`}
@@ -1271,8 +1271,9 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
                             artistName={album.artist}
                             valueSplits={formatValueSplitsForBoost(track, album.artist) || formatValueSplitsForBoost(album, album.artist)}
                             lightningAddress={getPrimaryRecipient(track) || getPrimaryRecipient(album)}
-                            episodeGuid={track.v4vValue?.itemGuid || track.guid}
-                            remoteFeedGuid={track.v4vValue?.feedGuid || album.feedGuid}
+                            episodeGuid={track.v4vValue?.itemGuid || track.valueTimeSplits?.[0]?.remoteItem?.itemGuid || track.guid}
+                            remoteFeedGuid={track.v4vValue?.feedGuid || track.valueTimeSplits?.[0]?.remoteItem?.feedGuid || album.feedGuid}
+                            remoteStartTime={track.v4vValue?.remoteStartTime ?? track.valueTimeSplits?.[0]?.startTime}
                             feedUrl={album.feedUrl}
                             albumName={album.title}
                             publisherGuid={album.publisher?.feedGuid}
