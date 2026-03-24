@@ -55,6 +55,7 @@ export async function resolvePlaylistItems(
         Feed: {
           select: {
             id: true,
+            guid: true,
             title: true,
             artist: true,
             image: true
@@ -66,13 +67,31 @@ export async function resolvePlaylistItems(
     const queryTime = Date.now() - startTime;
     console.log(`📊 [${config.shortName}] Database query completed in ${queryTime}ms - found ${tracks.length}/${itemGuids.length} tracks`);
 
-    // Create a map for quick lookup by track GUID
-    const trackMap = new Map(tracks.map(track => [track.guid, track]));
+    // Group tracks by GUID - multiple tracks can share the same GUID when the same song
+    // appears in both its original album feed and a podcast show feed (e.g. UpBEATS).
+    // We must prefer the track from the feed specified in the remoteItem's feedGuid so that
+    // the correct value block (artist's, not the show's) is used.
+    const tracksByGuid = new Map<string, Array<typeof tracks[0]>>();
+    for (const track of tracks) {
+      if (!track.guid) continue;
+      const arr = tracksByGuid.get(track.guid);
+      if (arr) {
+        arr.push(track);
+      } else {
+        tracksByGuid.set(track.guid, [track]);
+      }
+    }
+
     const resolvedTracks: ResolvedTrack[] = [];
 
     // Single pass through remote items - only use database data
     for (const remoteItem of remoteItems) {
-      const track = trackMap.get(remoteItem.itemGuid);
+      const candidates = tracksByGuid.get(remoteItem.itemGuid);
+      // Prefer the track whose Feed.guid matches the remoteItem's feedGuid;
+      // fall back to the first candidate if no exact feed match is found.
+      const track = candidates && candidates.length > 0
+        ? (candidates.find(t => t.Feed?.guid === remoteItem.feedGuid) ?? candidates[0])
+        : undefined;
 
       if (track && track.Feed && track.audioUrl && track.guid) {
         const artistName = track.artist ||
