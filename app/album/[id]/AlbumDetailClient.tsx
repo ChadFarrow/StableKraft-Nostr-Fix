@@ -1271,9 +1271,9 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
                             artistName={album.artist}
                             valueSplits={formatValueSplitsForBoost(track, album.artist) || formatValueSplitsForBoost(album, album.artist)}
                             lightningAddress={getPrimaryRecipient(track) || getPrimaryRecipient(album)}
-                            episodeGuid={track.v4vValue?.itemGuid || track.valueTimeSplits?.[0]?.remoteItem?.itemGuid || track.guid}
-                            remoteFeedGuid={track.v4vValue?.feedGuid || track.valueTimeSplits?.[0]?.remoteItem?.feedGuid || album.feedGuid}
-                            remoteStartTime={track.v4vValue?.remoteStartTime ?? track.valueTimeSplits?.[0]?.startTime}
+                            episodeGuid={track.v4vValue?.itemGuid || track.valueTimeSplits?.find(v => v.remoteItem?.itemGuid)?.remoteItem?.itemGuid || track.guid}
+                            remoteFeedGuid={track.v4vValue?.feedGuid || track.valueTimeSplits?.find(v => v.remoteItem?.feedGuid)?.remoteItem?.feedGuid || album.feedGuid}
+                            remoteStartTime={track.v4vValue?.remoteStartTime ?? track.valueTimeSplits?.find(v => v.remoteItem)?.startTime}
                             feedUrl={album.feedUrl}
                             albumName={album.title}
                             publisherGuid={album.publisher?.feedGuid}
