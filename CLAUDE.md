@@ -138,6 +138,21 @@ LNURL payments use [BoostBox](https://tardbox.com) for Podcasting 2.0 boost meta
 
 **BoostBox → Helipad flow**: LNURL boost comment contains `rss::payment::boost https://tardbox.com/boost/<id> <message>`. Helipad sends HEAD to that URL, reads `x-rss-payment` header (URL-encoded JSON metadata). BoostBox serves both GET and HEAD on `/boost/:id`. Helipad's `metadata.rs` regex must include `tardbox.com` — upstream PR: [Podcastindex-org/helipad#148](https://github.com/Podcastindex-org/helipad/pull/148).
 
+### VTS (Value Time Splits) Playback (`components/NowPlayingScreen.tsx`)
+VTS podcasts embed `<podcast:valueTimeSplit>` segments that map time ranges to different tracks/artists. `NowPlayingScreen` resolves the active VTS segment based on current playback position and uses it for:
+
+- **Chapter tick marks** on the progress bar — thin white lines at each VTS/chapter boundary
+- **Per-song favoriting** — uses VTS `remoteItem` (feedGuid + itemGuid) to favorite the current segment's track, not the parent episode
+- **V4V blending** — VTS `remotePercentage` splits payment between song recipients and show-level recipients, deduped by Lightning address. `isHost` flag distinguishes show vs song recipients.
+- **GUID collision detection** — `chapterTitle` param sent to `/api/lightning/value-splits` validates DB matches against chapter context. If track title/artist don't appear in chapter title, the match is discarded and PI API fallback used.
+
+**VTS extraction** (`lib/rss-parser-db.ts`): `applyParsedItemFields` helper applies chapters, VTS, and other parsed fields to track upsert data. `refresh-by-url/route.ts` passes these fields through.
+
+**VTS remoteItem interface** (`lib/podcast-types.ts`): includes `feedGuid`, `itemGuid`, `medium` fields.
+
+### BoostButton V4V Display (`components/Lightning/BoostButton.tsx`)
+When VTS blending produces both song and show recipients, BoostButton shows **Song/Show section headers** with recipients sorted track-first. Percentages are normalized to sum to 100% within the displayed split list. `isHost` prop on value splits controls grouping.
+
 ### Helipad Metadata (`components/Lightning/BoostButton.tsx`)
 Built by `buildHelipadMetadata(amount, msg)`, BLIP-0010 spec. Single helper for all payment paths — do NOT duplicate. `name` field omitted from base; `value-splits.ts` sets it per-recipient.
 
