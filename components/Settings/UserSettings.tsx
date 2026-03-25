@@ -31,10 +31,6 @@ export default function UserSettings() {
     updateSettings({ autoBoostEnabled: !settings.autoBoostEnabled });
   };
 
-  const handleAutoBoostOnChapterToggle = () => {
-    updateSettings({ autoBoostOnChapter: !settings.autoBoostOnChapter });
-  };
-
   const handleAutoBoostAmountChange = (value: string) => {
     setAutoBoostAmount(value);
 
@@ -83,7 +79,7 @@ export default function UserSettings() {
       {/* Auto-Boost Section */}
       <div className="mt-6 pt-6 border-t border-gray-700">
         <h3 className="text-lg font-medium text-white mb-1">Auto-Boost</h3>
-        <p className="text-sm text-gray-400 mb-4">Automatically send a boost when each track ends</p>
+        <p className="text-sm text-gray-400 mb-4">Automatically send a boost when each track ends and on chapter transitions in VTS podcasts</p>
 
         <SettingsRow
           label="Enable Auto-Boost"
@@ -132,30 +128,6 @@ export default function UserSettings() {
               }`}
             />
             <span className="text-gray-400 text-sm">sats</span>
-          </div>
-        </SettingsRow>
-
-        <SettingsRow
-          label="Boost on Chapter Change"
-          description="Auto-boost each song when chapters change in VTS podcasts (e.g. Upbeats)"
-        >
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleAutoBoostOnChapterToggle}
-              disabled={!settings.autoBoostEnabled}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                settings.autoBoostEnabled && settings.autoBoostOnChapter ? 'bg-purple-600' : 'bg-gray-600'
-              } ${!settings.autoBoostEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  settings.autoBoostEnabled && settings.autoBoostOnChapter ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
-            </button>
-            <span className="text-sm text-gray-400">
-              {settings.autoBoostEnabled && settings.autoBoostOnChapter ? 'Enabled' : 'Disabled'}
-            </span>
           </div>
         </SettingsRow>
 

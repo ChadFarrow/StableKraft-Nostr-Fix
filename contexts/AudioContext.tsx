@@ -164,10 +164,10 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
 
   // Keep auto-boost settings in a ref so handleEnded always reads the latest values
   // (handleEnded is registered in a useEffect whose deps don't include settings)
-  const autoBoostSettingsRef = useRef({ enabled: settings.autoBoostEnabled, amount: settings.autoBoostAmount, onChapter: settings.autoBoostOnChapter });
+  const autoBoostSettingsRef = useRef({ enabled: settings.autoBoostEnabled, amount: settings.autoBoostAmount });
   useEffect(() => {
-    autoBoostSettingsRef.current = { enabled: settings.autoBoostEnabled, amount: settings.autoBoostAmount, onChapter: settings.autoBoostOnChapter };
-  }, [settings.autoBoostEnabled, settings.autoBoostAmount, settings.autoBoostOnChapter]);
+    autoBoostSettingsRef.current = { enabled: settings.autoBoostEnabled, amount: settings.autoBoostAmount };
+  }, [settings.autoBoostEnabled, settings.autoBoostAmount]);
 
   // Track previous VTS segment for chapter transition auto-boost
   const prevVtsSegmentRef = useRef<{ feedGuid: string; itemGuid: string } | null>(null);
@@ -533,8 +533,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
 
     // Detect segment change: previous segment existed and differs from current
     if (prev && activeSegment && (prev.feedGuid !== activeSegment.feedGuid || prev.itemGuid !== activeSegment.itemGuid)) {
-      const { enabled, amount, onChapter } = autoBoostSettingsRef.current;
-      if (enabled && onChapter) {
+      const { enabled, amount } = autoBoostSettingsRef.current;
+      if (enabled) {
         // Find chapter title for the outgoing segment (best-effort)
         const outgoingChapterTitle = chapters.find(ch => {
           const chEnd = ch.endTime ?? Infinity;
