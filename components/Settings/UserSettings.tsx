@@ -79,7 +79,7 @@ export default function UserSettings() {
       {/* Auto-Boost Section */}
       <div className="mt-6 pt-6 border-t border-gray-700">
         <h3 className="text-lg font-medium text-white mb-1">Auto-Boost</h3>
-        <p className="text-sm text-gray-400 mb-4">Automatically send a boost when each track ends</p>
+        <p className="text-sm text-gray-400 mb-4">Automatically send a boost when each track ends and on chapter transitions in VTS podcasts</p>
 
         <SettingsRow
           label="Enable Auto-Boost"

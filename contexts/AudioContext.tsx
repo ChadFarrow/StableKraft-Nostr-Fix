@@ -169,6 +169,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     autoBoostSettingsRef.current = { enabled: settings.autoBoostEnabled, amount: settings.autoBoostAmount };
   }, [settings.autoBoostEnabled, settings.autoBoostAmount]);
 
+  // Track previous VTS segment for chapter transition auto-boost
+  const prevVtsSegmentRef = useRef<{ feedGuid: string; itemGuid: string } | null>(null);
+
   // Helper function to publish NIP-38 status (debounced)
   const publishNip38StatusDebounced = useCallback((action: 'play') => {
     // Clear any pending timeout
@@ -381,6 +384,180 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   useEffect(() => {
     triggerAutoBoostRef.current = triggerAutoBoost;
   }, [triggerAutoBoost]);
+
+  // Auto-boost on VTS chapter/segment transition — fires when the active VTS segment
+  // changes, boosting the *outgoing* segment's artist via its remoteItem V4V data.
+  // This lets listeners support each song's artist as they play through a VTS podcast.
+  const triggerChapterAutoBoost = useCallback(async (
+    outgoingFeedGuid: string,
+    outgoingItemGuid: string,
+    album: RSSAlbum,
+    amount: number,
+    chapterTitle?: string
+  ) => {
+    // Prevent concurrent auto-boosts (shared with track-end auto-boost)
+    if (autoBoostProcessingRef.current) {
+      console.log('⚡ Chapter auto-boost skipped: another boost in progress');
+      return;
+    }
+
+    if (!isWalletConnected) {
+      console.log('⚡ Chapter auto-boost skipped: wallet not connected');
+      return;
+    }
+
+    autoBoostProcessingRef.current = true;
+
+    try {
+      // Fetch V4V data for the outgoing VTS segment's remoteItem
+      const params = new URLSearchParams({ feedGuid: outgoingFeedGuid, itemGuid: outgoingItemGuid });
+      if (chapterTitle) params.set('chapterTitle', chapterTitle);
+
+      const res = await fetch(`/api/lightning/value-splits?${params}`);
+      const data = await res.json();
+
+      if (!data.success || !data.data?.recipients?.length) {
+        console.log('⚡ Chapter auto-boost skipped: no V4V recipients for segment');
+        return;
+      }
+
+      const remoteRecipients = data.data.recipients.filter((r: any) => !r.fee);
+      if (remoteRecipients.length === 0) return;
+
+      const artistName = data.artistName || 'Unknown Artist';
+      const trackTitle = chapterTitle || 'Unknown Track';
+
+      console.log(`⚡ Chapter auto-boost starting: ${amount} sats for "${trackTitle}" by ${artistName}`);
+
+      // Build Helipad metadata
+      const helipadMetadata: any = {
+        podcast: album.artist || 'Unknown Artist',
+        episode: trackTitle,
+        action: 'auto',
+        app_name: 'StableKraft',
+        value_msat: amount * 1000,
+        value_msat_total: amount * 1000,
+        sender_name: settings.defaultBoostName ? `${settings.defaultBoostName} via StableKraft.app` : 'StableKraft.app user',
+        ts: Math.floor(Date.now() / 1000),
+        uuid: `auto-ch-${Date.now()}-${Math.floor(Math.random() * 999)}`,
+        remote_feed_guid: outgoingFeedGuid,
+        remote_item_guid: outgoingItemGuid,
+      };
+
+      if (album.feedUrl) {
+        helipadMetadata.url = album.feedUrl;
+        helipadMetadata.feed = album.feedUrl;
+      }
+      if (album.id) {
+        helipadMetadata.feedId = album.id;
+      }
+      if (album.title) {
+        helipadMetadata.album = album.title;
+      }
+      // episode_guid uses the outgoing segment's itemGuid (the actual song, not the parent episode)
+      helipadMetadata.episode_guid = outgoingItemGuid;
+
+      // Build recipients list
+      const recipients: ValueRecipient[] = remoteRecipients.map((r: any) => ({
+        name: r.name || 'Unknown',
+        type: r.type === 'lnaddress' ? 'lnaddress' : 'node',
+        address: r.address,
+        split: r.split || 100,
+      }));
+
+      const multiResult = await ValueSplitsService.sendMultiRecipientPayment(
+        recipients,
+        amount,
+        sendPayment,
+        sendKeysend,
+        undefined,
+        helipadMetadata,
+        undefined,
+        undefined,
+        supportsKeysend
+      );
+
+      if (multiResult.success || multiResult.isPartialSuccess) {
+        console.log(`✅ Chapter auto-boost successful: ${amount} sats for "${trackTitle}"`);
+
+        // Log to database
+        try {
+          await fetch('/api/lightning/log-boost', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              feedId: album.id,
+              amount,
+              message: '',
+              senderName: settings.defaultBoostName || 'StableKraft.app user',
+              preimage: multiResult.primaryPreimage,
+              type: 'auto',
+              recipient: recipients[0]?.address || 'value-splits'
+            })
+          });
+        } catch (logError) {
+          console.warn('⚠️ Failed to log chapter auto-boost:', logError);
+        }
+
+        toast.success(`Auto-boost: ${amount} sats for ${artistName} ⚡`);
+      } else {
+        console.warn(`⚠️ Chapter auto-boost failed: ${multiResult.errors.join(', ')}`);
+      }
+    } catch (error) {
+      console.error('❌ Chapter auto-boost error:', error);
+    } finally {
+      autoBoostProcessingRef.current = false;
+    }
+  }, [isWalletConnected, sendPayment, sendKeysend, supportsKeysend, settings.defaultBoostName]);
+
+  // Detect VTS segment transitions and trigger chapter auto-boost for the outgoing segment
+  useEffect(() => {
+    if (!currentPlayingAlbum || currentTrackIndex < 0) {
+      prevVtsSegmentRef.current = null;
+      return;
+    }
+
+    const track = currentPlayingAlbum.tracks[currentTrackIndex];
+    const splits = track?.valueTimeSplits;
+    if (!splits || !Array.isArray(splits) || splits.length === 0) {
+      prevVtsSegmentRef.current = null;
+      return;
+    }
+
+    // Find active VTS segment based on current playback position
+    let activeSegment: { feedGuid: string; itemGuid: string } | null = null;
+    for (let i = splits.length - 1; i >= 0; i--) {
+      const s = splits[i];
+      if (currentTime >= s.startTime && currentTime < s.startTime + s.duration && s.remoteItem?.feedGuid && s.remoteItem?.itemGuid) {
+        activeSegment = { feedGuid: s.remoteItem.feedGuid, itemGuid: s.remoteItem.itemGuid };
+        break;
+      }
+    }
+
+    const prev = prevVtsSegmentRef.current;
+
+    // Detect segment change: previous segment existed and differs from current
+    if (prev && activeSegment && (prev.feedGuid !== activeSegment.feedGuid || prev.itemGuid !== activeSegment.itemGuid)) {
+      const { enabled, amount } = autoBoostSettingsRef.current;
+      if (enabled) {
+        // Find chapter title for the outgoing segment (best-effort)
+        const outgoingChapterTitle = chapters.find(ch => {
+          const chEnd = ch.endTime ?? Infinity;
+          // Find the chapter whose time range contained the previous VTS segment
+          return splits.some(s =>
+            s.remoteItem?.feedGuid === prev.feedGuid &&
+            s.remoteItem?.itemGuid === prev.itemGuid &&
+            s.startTime >= ch.startTime && s.startTime < chEnd
+          );
+        })?.title;
+
+        // Fire and forget — don't block playback
+        triggerChapterAutoBoost(prev.feedGuid, prev.itemGuid, currentPlayingAlbum, amount || 50, outgoingChapterTitle);
+      }
+    }
+
+    prevVtsSegmentRef.current = activeSegment;
+  }, [currentTime, currentPlayingAlbum, currentTrackIndex, chapters, triggerChapterAutoBoost]);
 
   // Detect iOS devices - Web Audio interferes with background playback on iOS
   const isIOSDevice = useCallback(() => {

@@ -11,7 +11,7 @@ export interface UserSettings {
   defaultBoostName?: string;
 
   // Auto-boost settings
-  autoBoostEnabled: boolean;   // Send boost automatically when track ends
+  autoBoostEnabled: boolean;   // Send boost automatically when track ends and on chapter transitions
   autoBoostAmount: number;     // Amount in sats for auto-boosts
 
   // Future settings can be added here
