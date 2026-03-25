@@ -14,6 +14,7 @@ import FavoriteButton from '@/components/favorites/FavoriteButton';
 import { generateAlbumUrl } from '@/lib/url-utils';
 import { formatValueSplitsForBoost, getPrimaryRecipient } from '@/lib/v4v-utils';
 import UserMenu from '@/components/UserMenu';
+import { useUserSettings } from '@/hooks/useUserSettings';
 
 interface NowPlayingScreenProps {
   isOpen?: boolean;
@@ -44,6 +45,8 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
     chapters,
     currentChapterIndex,
   } = useAudio();
+
+  const { settings, updateSettings } = useUserSettings();
 
   const [isDragging, setIsDragging] = useState(false);
   const [seekTime, setSeekTime] = useState(0);
@@ -663,6 +666,20 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
             title="Share this track"
           >
             <Share2 className="w-5 h-5" />
+          </button>
+
+          {/* Auto-Boost Toggle - Bottom right, mirroring share button */}
+          <button
+            onClick={() => updateSettings({ autoBoostEnabled: !settings.autoBoostEnabled })}
+            className="absolute right-8 -bottom-8 p-2 rounded-full transition-all duration-200 hover:scale-110 active:scale-95 touch-manipulation flex items-center gap-1"
+            style={{
+              backgroundColor: settings.autoBoostEnabled ? '#FBBF2430' : `${contrastColors.textColor}15`,
+              color: settings.autoBoostEnabled ? '#FBBF24' : `${contrastColors.textColor}90`
+            }}
+            title={settings.autoBoostEnabled ? 'Disable auto-boost' : 'Enable auto-boost'}
+          >
+            <Zap className="w-4 h-4" fill={settings.autoBoostEnabled ? '#FBBF24' : 'none'} />
+            <span className="text-xs font-medium">Auto</span>
           </button>
 
           {/* Center Controls */}
