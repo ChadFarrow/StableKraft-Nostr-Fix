@@ -14,6 +14,7 @@ import FavoriteButton from '@/components/favorites/FavoriteButton';
 import { generateAlbumUrl } from '@/lib/url-utils';
 import { formatValueSplitsForBoost, getPrimaryRecipient } from '@/lib/v4v-utils';
 import UserMenu from '@/components/UserMenu';
+import { useUserSettings } from '@/hooks/useUserSettings';
 
 interface NowPlayingScreenProps {
   isOpen?: boolean;
@@ -44,6 +45,8 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
     chapters,
     currentChapterIndex,
   } = useAudio();
+
+  const { settings, updateSettings } = useUserSettings();
 
   const [isDragging, setIsDragging] = useState(false);
   const [seekTime, setSeekTime] = useState(0);
@@ -504,6 +507,26 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
               title="Send a boost"
             >
               <Zap className="w-6 h-6 pointer-events-none" fill="#000000" />
+            </button>
+
+            {/* Auto-Boost Toggle - Below boost button */}
+            <button
+              className="absolute top-[4.5rem] left-4 z-20 px-2 py-1 rounded-full transition-all duration-200 active:scale-95 pointer-events-auto touch-manipulation flex items-center gap-1"
+              style={{
+                backgroundColor: settings.autoBoostEnabled ? 'rgba(251, 191, 36, 0.9)' : 'rgba(0, 0, 0, 0.6)',
+                color: settings.autoBoostEnabled ? '#000000' : 'rgba(255, 255, 255, 0.7)',
+                backdropFilter: 'blur(10px)',
+                WebkitBackdropFilter: 'blur(10px)',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                border: settings.autoBoostEnabled ? 'none' : '1px solid rgba(255,255,255,0.15)',
+                fontSize: '11px',
+                fontWeight: 600,
+              }}
+              onClick={() => updateSettings({ autoBoostEnabled: !settings.autoBoostEnabled })}
+              title={settings.autoBoostEnabled ? 'Disable auto-boost' : 'Enable auto-boost'}
+            >
+              <Zap className="w-3 h-3" fill={settings.autoBoostEnabled ? '#000000' : 'none'} />
+              <span>Auto</span>
             </button>
 
             {/* Favorite Button - Top-right corner overlay */}
