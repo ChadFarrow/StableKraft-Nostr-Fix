@@ -13,6 +13,7 @@ export interface UserSettings {
   // Auto-boost settings
   autoBoostEnabled: boolean;   // Send boost automatically when track ends
   autoBoostAmount: number;     // Amount in sats for auto-boosts
+  autoBoostOnChapter: boolean; // Send boost on VTS chapter/segment transitions (podcasts)
 
   // Future settings can be added here
   // theme?: 'light' | 'dark' | 'auto';
@@ -32,6 +33,7 @@ const defaultSettings: UserSettings = {
   defaultBoostName: '', // Default boost name (empty, will use "StableKraft.app user" as fallback)
   autoBoostEnabled: false, // Default to disabled (opt-in)
   autoBoostAmount: 50, // Default auto-boost amount in sats
+  autoBoostOnChapter: false, // Default to disabled (opt-in)
 };
 
 const UserSettingsContext = createContext<UserSettingsContextType | undefined>(undefined);
