@@ -509,26 +509,6 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
               <Zap className="w-6 h-6 pointer-events-none" fill="#000000" />
             </button>
 
-            {/* Auto-Boost Toggle - Below boost button */}
-            <button
-              className="absolute top-[4.5rem] left-4 z-20 px-2 py-1 rounded-full transition-all duration-200 active:scale-95 pointer-events-auto touch-manipulation flex items-center gap-1"
-              style={{
-                backgroundColor: settings.autoBoostEnabled ? 'rgba(251, 191, 36, 0.9)' : 'rgba(0, 0, 0, 0.6)',
-                color: settings.autoBoostEnabled ? '#000000' : 'rgba(255, 255, 255, 0.7)',
-                backdropFilter: 'blur(10px)',
-                WebkitBackdropFilter: 'blur(10px)',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-                border: settings.autoBoostEnabled ? 'none' : '1px solid rgba(255,255,255,0.15)',
-                fontSize: '11px',
-                fontWeight: 600,
-              }}
-              onClick={() => updateSettings({ autoBoostEnabled: !settings.autoBoostEnabled })}
-              title={settings.autoBoostEnabled ? 'Disable auto-boost' : 'Enable auto-boost'}
-            >
-              <Zap className="w-3 h-3" fill={settings.autoBoostEnabled ? '#000000' : 'none'} />
-              <span>Auto</span>
-            </button>
-
             {/* Favorite Button - Top-right corner overlay */}
             {favoriteTrackId && (
               <div
@@ -686,6 +666,20 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
             title="Share this track"
           >
             <Share2 className="w-5 h-5" />
+          </button>
+
+          {/* Auto-Boost Toggle - Bottom right, mirroring share button */}
+          <button
+            onClick={() => updateSettings({ autoBoostEnabled: !settings.autoBoostEnabled })}
+            className="absolute right-8 -bottom-8 p-2 rounded-full transition-all duration-200 hover:scale-110 active:scale-95 touch-manipulation flex items-center gap-1"
+            style={{
+              backgroundColor: settings.autoBoostEnabled ? '#FBBF2430' : `${contrastColors.textColor}15`,
+              color: settings.autoBoostEnabled ? '#FBBF24' : `${contrastColors.textColor}90`
+            }}
+            title={settings.autoBoostEnabled ? 'Disable auto-boost' : 'Enable auto-boost'}
+          >
+            <Zap className="w-4 h-4" fill={settings.autoBoostEnabled ? '#FBBF24' : 'none'} />
+            <span className="text-xs font-medium">Auto</span>
           </button>
 
           {/* Center Controls */}
