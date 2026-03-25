@@ -472,8 +472,8 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
         </div>
 
         {/* Album Art or Video */}
-        <div className="flex items-start justify-center px-8 pt-12 flex-1 min-h-0">
-          <div className="relative w-full max-w-sm aspect-square max-h-full">
+        <div className="flex items-start justify-center px-8 pt-12">
+          <div className="relative w-full max-w-sm aspect-square">
             {isVideoMode ? (
               <div
                 ref={videoContainerRef}
@@ -723,56 +723,22 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
                 </span>
               )}
             </button>
-          </div>
 
-          {/* Secondary Controls Row - Share & Auto-Boost */}
-          <div className="flex items-center justify-between mt-4 px-2">
-            <button
-              onClick={async (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                try {
-                  const sourceAlbum = (currentTrack as any).feedTitle || (currentTrack as any).albumTitle || currentPlayingAlbum.title;
-                  const albumUrl = generateAlbumUrl(sourceAlbum);
-                  const trackParam = currentTrack.id ? `?track=${currentTrack.id}` : '';
-                  const shareUrl = `${window.location.origin}${albumUrl}${trackParam}`;
-
-                  if (navigator.share) {
-                    await navigator.share({
-                      title: currentTrack.title,
-                      text: `${currentTrack.title} by ${currentTrack.artist || currentPlayingAlbum.artist}`,
-                      url: shareUrl,
-                    });
-                  } else {
-                    await navigator.clipboard.writeText(shareUrl);
-                  }
-                } catch (error) {
-                  if ((error as Error).name !== 'AbortError') {
-                    toast.error('Failed to share');
-                  }
-                }
-              }}
-              className="p-2 rounded-full transition-all duration-200 hover:scale-110 active:scale-95 touch-manipulation"
-              style={{
-                backgroundColor: `${contrastColors.textColor}15`,
-                color: `${contrastColors.textColor}90`
-              }}
-              title="Share this track"
-            >
-              <Share2 className="w-5 h-5" />
-            </button>
-
+            {/* Auto-Boost Toggle */}
             <button
               onClick={() => updateSettings({ autoBoostEnabled: !settings.autoBoostEnabled })}
-              className="p-2 rounded-full transition-all duration-200 hover:scale-110 active:scale-95 touch-manipulation flex items-center gap-1"
+              className="p-2 rounded-full transition-all duration-200 active:scale-95 touch-manipulation"
               style={{
-                backgroundColor: settings.autoBoostEnabled ? '#FBBF2430' : `${contrastColors.textColor}15`,
-                color: settings.autoBoostEnabled ? '#FBBF24' : `${contrastColors.textColor}90`
+                backgroundColor: settings.autoBoostEnabled
+                  ? '#FBBF2430'
+                  : `${contrastColors.textColor}10`,
+                color: settings.autoBoostEnabled
+                  ? '#FBBF24'
+                  : `${contrastColors.textColor}60`
               }}
               title={settings.autoBoostEnabled ? 'Disable auto-boost' : 'Enable auto-boost'}
             >
-              <Zap className="w-4 h-4" fill={settings.autoBoostEnabled ? '#FBBF24' : 'none'} />
-              <span className="text-xs font-medium">Auto</span>
+              <Zap className="w-5 h-5" fill={settings.autoBoostEnabled ? '#FBBF24' : 'none'} />
             </button>
           </div>
         </div>
