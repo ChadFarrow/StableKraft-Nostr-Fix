@@ -602,7 +602,11 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
       }
     }
 
-    prevVtsSegmentRef.current = activeSegment;
+    // Only update prev ref when we have a valid segment — don't clear it during
+    // gaps between segments (e.g., brief moment between intro and first song)
+    if (activeSegment) {
+      prevVtsSegmentRef.current = activeSegment;
+    }
   }, [currentTime, currentPlayingAlbum, currentTrackIndex, chapters, triggerChapterAutoBoost]);
 
   // Foreground resume: detect missed VTS chapter transitions while backgrounded.
