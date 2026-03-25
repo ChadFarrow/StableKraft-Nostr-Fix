@@ -171,6 +171,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
 
   // Track previous VTS segment for chapter transition auto-boost
   const prevVtsSegmentRef = useRef<{ index: number; feedGuid?: string; itemGuid?: string; remotePercentage: number } | null>(null);
+  // Track which track the VTS detection is monitoring so we can reset on track change
+  const prevVtsTrackKeyRef = useRef<string>('');
 
   // Helper function to publish NIP-38 status (debounced)
   const publishNip38StatusDebounced = useCallback((action: 'play') => {
@@ -578,6 +580,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   useEffect(() => {
     if (!currentPlayingAlbum || currentTrackIndex < 0) {
       prevVtsSegmentRef.current = null;
+      prevVtsTrackKeyRef.current = '';
       return;
     }
 
@@ -585,7 +588,16 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     const splits = track?.valueTimeSplits;
     if (!splits || !Array.isArray(splits) || splits.length === 0) {
       prevVtsSegmentRef.current = null;
+      prevVtsTrackKeyRef.current = '';
       return;
+    }
+
+    // Reset VTS tracking when the track changes to prevent spurious boosts
+    // from stale segment data left over from the previous track/episode
+    const trackKey = `${currentPlayingAlbum.id || ''}-${currentTrackIndex}`;
+    if (trackKey !== prevVtsTrackKeyRef.current) {
+      prevVtsSegmentRef.current = null;
+      prevVtsTrackKeyRef.current = trackKey;
     }
 
     // Find active VTS segment based on current playback position (track ALL segments, not just those with remoteItem)
@@ -621,6 +633,31 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
           prev.feedGuid || '', prev.itemGuid || '',
           currentPlayingAlbum, amount || 50, prev.remotePercentage, outgoingChapterTitle
         );
+      }
+    }
+
+    // Detect when playback moves past the last VTS segment — boost the final chapter
+    // Without this, the last segment only gets the track-end autoboost (which uses
+    // show-level V4V data instead of the VTS-blended per-song data)
+    if (!activeSegment && prev) {
+      const lastSplit = splits[splits.length - 1];
+      const lastSplitEnd = lastSplit.startTime + lastSplit.duration;
+      if (currentTime >= lastSplitEnd) {
+        const { enabled, amount } = autoBoostSettingsRef.current;
+        if (enabled) {
+          const prevSplit = splits[prev.index];
+          const outgoingChapterTitle = chapters.find(ch => {
+            const chEnd = ch.endTime ?? Infinity;
+            return prevSplit && prevSplit.startTime >= ch.startTime && prevSplit.startTime < chEnd;
+          })?.title;
+
+          triggerChapterAutoBoost(
+            prev.feedGuid || '', prev.itemGuid || '',
+            currentPlayingAlbum, amount || 50, prev.remotePercentage, outgoingChapterTitle
+          );
+        }
+        // Clear prev so we don't re-trigger on subsequent timeupdate events
+        prevVtsSegmentRef.current = null;
       }
     }
 
@@ -671,15 +708,22 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         }
       }
 
-      if (currentIdx < 0 || currentIdx <= prevIdx) return;
+      // If currentIdx < 0, playback may have moved past all VTS segments while backgrounded
+      // In that case, boost all segments from prev to the end (inclusive)
+      const lastSplit = splits[splits.length - 1];
+      const lastSplitEnd = lastSplit.startTime + lastSplit.duration;
+      const pastAllSegments = currentIdx < 0 && now >= lastSplitEnd;
 
-      // Collect all segments between prev (inclusive) and current (exclusive)
-      // These are the segments the user listened through while backgrounded
-      const missedSegments = splits.slice(prevIdx, currentIdx);
+      if (!pastAllSegments && (currentIdx < 0 || currentIdx <= prevIdx)) return;
+
+      // Collect all segments between prev (inclusive) and current (exclusive),
+      // or all remaining segments if we're past the end
+      const endIdx = pastAllSegments ? splits.length : currentIdx;
+      const missedSegments = splits.slice(prevIdx, endIdx);
 
       if (missedSegments.length === 0) return;
 
-      console.log(`📱 Foreground resume: ${missedSegments.length} missed chapter auto-boost(s)`);
+      console.log(`📱 Foreground resume: ${missedSegments.length} missed chapter auto-boost(s)${pastAllSegments ? ' (past all segments)' : ''}`);
 
       // Boost each missed segment sequentially (fire and forget)
       const boostMissed = async () => {
@@ -701,14 +745,19 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
       };
       boostMissed();
 
-      // Update the prev ref to the current segment so the normal effect doesn't double-boost
-      const currentSplit = splits[currentIdx];
-      prevVtsSegmentRef.current = {
-        index: currentIdx,
-        feedGuid: currentSplit?.remoteItem?.feedGuid,
-        itemGuid: currentSplit?.remoteItem?.itemGuid,
-        remotePercentage: currentSplit?.remotePercentage ?? 100
-      };
+      if (pastAllSegments) {
+        // Clear prev so the normal VTS effect doesn't re-trigger
+        prevVtsSegmentRef.current = null;
+      } else {
+        // Update the prev ref to the current segment so the normal effect doesn't double-boost
+        const currentSplit = splits[currentIdx];
+        prevVtsSegmentRef.current = {
+          index: currentIdx,
+          feedGuid: currentSplit?.remoteItem?.feedGuid,
+          itemGuid: currentSplit?.remoteItem?.itemGuid,
+          remotePercentage: currentSplit?.remotePercentage ?? 100
+        };
+      }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityForChapterBoost);
@@ -1815,13 +1864,15 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         iosAdvanceTimerRef.current = null;
       }
 
-      // Auto-boost: always fire on track end, even if proactive timer already advanced
-      // This runs before the double-advance guard because auto-boost is per-ended-track,
-      // not per-advance. Read from ref to get latest settings (closure may be stale).
+      // Auto-boost: fire on track end for non-VTS tracks. VTS episodes use per-chapter
+      // autoboost (triggerChapterAutoBoost) instead — the last segment is boosted by the
+      // VTS detection effect when currentTime moves past it.
+      // Read from ref to get latest settings (closure may be stale).
       const { enabled: autoBoostOn, amount: autoBoostAmt } = autoBoostSettingsRef.current;
       if (!radioMode && autoBoostOn && currentPlayingAlbum && currentTrackIndex >= 0) {
         const track = currentPlayingAlbum.tracks[currentTrackIndex];
-        if (track && triggerAutoBoostRef.current) {
+        const hasVTS = track?.valueTimeSplits && Array.isArray(track.valueTimeSplits) && track.valueTimeSplits.length > 0;
+        if (track && !hasVTS && triggerAutoBoostRef.current) {
           // Fire and forget - don't await, don't block next track
           triggerAutoBoostRef.current(track, currentPlayingAlbum, autoBoostAmt || 50);
         }
@@ -1966,12 +2017,13 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
                   if (!trackEndProcessedRef.current) {
                     trackEndProcessedRef.current = true;
 
-                    // Trigger auto-boost for the track that just ended
-                    // (handleEnded may not fire if we swap the source before it triggers)
+                    // Trigger auto-boost for the track that just ended (non-VTS only;
+                    // VTS episodes use per-chapter autoboost via triggerChapterAutoBoost)
                     const { enabled: autoBoostOn, amount: autoBoostAmt } = autoBoostSettingsRef.current;
                     if (!radioMode && autoBoostOn && currentPlayingAlbum && currentTrackIndex >= 0) {
                       const endedTrack = currentPlayingAlbum.tracks[currentTrackIndex];
-                      if (endedTrack && triggerAutoBoostRef.current) {
+                      const endedTrackHasVTS = endedTrack?.valueTimeSplits && Array.isArray(endedTrack.valueTimeSplits) && endedTrack.valueTimeSplits.length > 0;
+                      if (endedTrack && !endedTrackHasVTS && triggerAutoBoostRef.current) {
                         triggerAutoBoostRef.current(endedTrack, currentPlayingAlbum, autoBoostAmt || 50);
                       }
                     }
