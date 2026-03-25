@@ -13,7 +13,7 @@ import { publishNowPlayingStatus, clearUserStatus } from '@/lib/nostr/nip38';
 import { useBitcoinConnect } from '@/components/Lightning/BitcoinConnectProvider';
 import { ValueSplitsService } from '@/lib/lightning/value-splits';
 import { ValueRecipient } from '@/lib/lightning/value-parser';
-import { hasV4V as checkHasV4V, getV4VRecipients, getPrimaryRecipient } from '@/lib/v4v-utils';
+import { hasV4V as checkHasV4V, getV4VRecipients, getPrimaryRecipient, formatValueSplitsForBoost } from '@/lib/v4v-utils';
 import { prefetchUpcomingTracks, prefetchAudio } from '@/lib/audio-prefetch';
 import { PodcastChapter } from '@/lib/podcast-types';
 
@@ -170,7 +170,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   }, [settings.autoBoostEnabled, settings.autoBoostAmount]);
 
   // Track previous VTS segment for chapter transition auto-boost
-  const prevVtsSegmentRef = useRef<{ feedGuid: string; itemGuid: string } | null>(null);
+  const prevVtsSegmentRef = useRef<{ feedGuid: string; itemGuid: string; remotePercentage: number } | null>(null);
 
   // Helper function to publish NIP-38 status (debounced)
   const publishNip38StatusDebounced = useCallback((action: 'play') => {
@@ -393,6 +393,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     outgoingItemGuid: string,
     album: RSSAlbum,
     amount: number,
+    remotePercentage: number,
     chapterTitle?: string
   ) => {
     // Prevent concurrent auto-boosts (shared with track-end auto-boost)
@@ -427,7 +428,51 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
       const artistName = data.artistName || 'Unknown Artist';
       const trackTitle = chapterTitle || 'Unknown Track';
 
-      console.log(`⚡ Chapter auto-boost starting: ${amount} sats for "${trackTitle}" by ${artistName}`);
+      console.log(`⚡ Chapter auto-boost starting: ${amount} sats for "${trackTitle}" by ${artistName} (remote ${remotePercentage}%)`);
+
+      // Scale remote artist splits by remotePercentage (matching NowPlayingScreen VTS blending)
+      const totalRemoteSplits = remoteRecipients.reduce((sum: number, r: any) => sum + (r.split || 100), 0);
+      const scaledRemote = remoteRecipients.map((r: any) => ({
+        name: r.name || 'Unknown',
+        address: r.address,
+        split: Math.round(((r.split || 100) / totalRemoteSplits) * remotePercentage),
+        type: (r.type || 'node') as 'node' | 'lnaddress',
+      }));
+
+      // If remotePercentage < 100, blend in the podcast host's (feed-level) recipients
+      let blended = scaledRemote;
+      if (remotePercentage < 100) {
+        const hostPercentage = 100 - remotePercentage;
+        const hostSplits = formatValueSplitsForBoost(album, album.artist) || [];
+        const totalHostSplits = hostSplits.reduce((sum, r) => sum + r.split, 0);
+        if (totalHostSplits > 0) {
+          const scaledHost = hostSplits.map(r => ({
+            name: r.name || 'Unknown',
+            address: r.address,
+            split: Math.round((r.split / totalHostSplits) * hostPercentage),
+            type: r.type as 'node' | 'lnaddress',
+          }));
+          blended = [...scaledRemote, ...scaledHost];
+        }
+      }
+
+      // Deduplicate recipients (e.g., Podcastindex listed with both lnaddress and node)
+      const deduped: typeof blended = [];
+      const seen = new Map<string, number>();
+      for (const r of blended) {
+        const key = (r.name || '').toLowerCase();
+        const existing = seen.get(key);
+        if (existing !== undefined) {
+          deduped[existing].split += r.split;
+          if (r.type === 'lnaddress' && deduped[existing].type !== 'lnaddress') {
+            deduped[existing].address = r.address;
+            deduped[existing].type = r.type;
+          }
+        } else {
+          seen.set(key, deduped.length);
+          deduped.push({ ...r });
+        }
+      }
 
       // Build Helipad metadata
       const helipadMetadata: any = {
@@ -454,16 +499,17 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
       if (album.title) {
         helipadMetadata.album = album.title;
       }
-      // episode_guid uses the outgoing segment's itemGuid (the actual song, not the parent episode)
       helipadMetadata.episode_guid = outgoingItemGuid;
 
-      // Build recipients list
-      const recipients: ValueRecipient[] = remoteRecipients.map((r: any) => ({
-        name: r.name || 'Unknown',
-        type: r.type === 'lnaddress' ? 'lnaddress' : 'node',
+      // Use blended + deduped recipients for the full split
+      const recipients: ValueRecipient[] = deduped.map(r => ({
+        name: r.name,
+        type: r.type,
         address: r.address,
-        split: r.split || 100,
+        split: r.split,
       }));
+
+      console.log(`⚡ Chapter auto-boost: sending to ${recipients.length} recipients (${recipients.map(r => `${r.name}: ${r.split}%`).join(', ')})`);
 
       const multiResult = await ValueSplitsService.sendMultiRecipientPayment(
         recipients,
@@ -525,11 +571,11 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     }
 
     // Find active VTS segment based on current playback position
-    let activeSegment: { feedGuid: string; itemGuid: string } | null = null;
+    let activeSegment: { feedGuid: string; itemGuid: string; remotePercentage: number } | null = null;
     for (let i = splits.length - 1; i >= 0; i--) {
       const s = splits[i];
       if (currentTime >= s.startTime && currentTime < s.startTime + s.duration && s.remoteItem?.feedGuid && s.remoteItem?.itemGuid) {
-        activeSegment = { feedGuid: s.remoteItem.feedGuid, itemGuid: s.remoteItem.itemGuid };
+        activeSegment = { feedGuid: s.remoteItem.feedGuid, itemGuid: s.remoteItem.itemGuid, remotePercentage: s.remotePercentage ?? 100 };
         break;
       }
     }
@@ -552,7 +598,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         })?.title;
 
         // Fire and forget — don't block playback
-        triggerChapterAutoBoost(prev.feedGuid, prev.itemGuid, currentPlayingAlbum, amount || 50, outgoingChapterTitle);
+        triggerChapterAutoBoost(prev.feedGuid, prev.itemGuid, currentPlayingAlbum, amount || 50, prev.remotePercentage, outgoingChapterTitle);
       }
     }
 
