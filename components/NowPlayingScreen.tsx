@@ -626,62 +626,7 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
         </div>
 
         {/* Controls */}
-        <div className="px-8 pb-4 relative">
-          {/* Share Button - Bottom left, floating */}
-          <button
-            onClick={async (e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              try {
-                // Use track's source album (feedTitle/albumTitle) for playlist tracks, fall back to album title
-                const sourceAlbum = (currentTrack as any).feedTitle || (currentTrack as any).albumTitle || currentPlayingAlbum.title;
-                const albumUrl = generateAlbumUrl(sourceAlbum);
-                // Include track parameter if track has an ID
-                const trackParam = currentTrack.id ? `?track=${currentTrack.id}` : '';
-                const shareUrl = `${window.location.origin}${albumUrl}${trackParam}`;
-
-                // Try native share first (mobile)
-                if (navigator.share) {
-                  await navigator.share({
-                    title: currentTrack.title,
-                    text: `${currentTrack.title} by ${currentTrack.artist || currentPlayingAlbum.artist}`,
-                    url: shareUrl,
-                  });
-                } else {
-                  // Fallback to clipboard
-                  await navigator.clipboard.writeText(shareUrl);
-                }
-              } catch (error) {
-                // User cancelled share or error
-                if ((error as Error).name !== 'AbortError') {
-                  toast.error('Failed to share');
-                }
-              }
-            }}
-            className="absolute left-8 -bottom-8 p-2 rounded-full transition-all duration-200 hover:scale-110 active:scale-95 touch-manipulation"
-            style={{
-              backgroundColor: `${contrastColors.textColor}15`,
-              color: `${contrastColors.textColor}90`
-            }}
-            title="Share this track"
-          >
-            <Share2 className="w-5 h-5" />
-          </button>
-
-          {/* Auto-Boost Toggle - Bottom right, mirroring share button */}
-          <button
-            onClick={() => updateSettings({ autoBoostEnabled: !settings.autoBoostEnabled })}
-            className="absolute right-8 -bottom-8 p-2 rounded-full transition-all duration-200 hover:scale-110 active:scale-95 touch-manipulation flex items-center gap-1"
-            style={{
-              backgroundColor: settings.autoBoostEnabled ? '#FBBF2430' : `${contrastColors.textColor}15`,
-              color: settings.autoBoostEnabled ? '#FBBF24' : `${contrastColors.textColor}90`
-            }}
-            title={settings.autoBoostEnabled ? 'Disable auto-boost' : 'Enable auto-boost'}
-          >
-            <Zap className="w-4 h-4" fill={settings.autoBoostEnabled ? '#FBBF24' : 'none'} />
-            <span className="text-xs font-medium">Auto</span>
-          </button>
-
+        <div className="px-8 pb-4">
           {/* Center Controls */}
           <div className="flex items-center justify-between w-full max-w-xs mx-auto">
             {/* Shuffle Button */}
@@ -777,6 +722,57 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
                   1
                 </span>
               )}
+            </button>
+          </div>
+
+          {/* Secondary Controls Row - Share & Auto-Boost */}
+          <div className="flex items-center justify-between mt-4 px-2">
+            <button
+              onClick={async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                try {
+                  const sourceAlbum = (currentTrack as any).feedTitle || (currentTrack as any).albumTitle || currentPlayingAlbum.title;
+                  const albumUrl = generateAlbumUrl(sourceAlbum);
+                  const trackParam = currentTrack.id ? `?track=${currentTrack.id}` : '';
+                  const shareUrl = `${window.location.origin}${albumUrl}${trackParam}`;
+
+                  if (navigator.share) {
+                    await navigator.share({
+                      title: currentTrack.title,
+                      text: `${currentTrack.title} by ${currentTrack.artist || currentPlayingAlbum.artist}`,
+                      url: shareUrl,
+                    });
+                  } else {
+                    await navigator.clipboard.writeText(shareUrl);
+                  }
+                } catch (error) {
+                  if ((error as Error).name !== 'AbortError') {
+                    toast.error('Failed to share');
+                  }
+                }
+              }}
+              className="p-2 rounded-full transition-all duration-200 hover:scale-110 active:scale-95 touch-manipulation"
+              style={{
+                backgroundColor: `${contrastColors.textColor}15`,
+                color: `${contrastColors.textColor}90`
+              }}
+              title="Share this track"
+            >
+              <Share2 className="w-5 h-5" />
+            </button>
+
+            <button
+              onClick={() => updateSettings({ autoBoostEnabled: !settings.autoBoostEnabled })}
+              className="p-2 rounded-full transition-all duration-200 hover:scale-110 active:scale-95 touch-manipulation flex items-center gap-1"
+              style={{
+                backgroundColor: settings.autoBoostEnabled ? '#FBBF2430' : `${contrastColors.textColor}15`,
+                color: settings.autoBoostEnabled ? '#FBBF24' : `${contrastColors.textColor}90`
+              }}
+              title={settings.autoBoostEnabled ? 'Disable auto-boost' : 'Enable auto-boost'}
+            >
+              <Zap className="w-4 h-4" fill={settings.autoBoostEnabled ? '#FBBF24' : 'none'} />
+              <span className="text-xs font-medium">Auto</span>
             </button>
           </div>
         </div>
