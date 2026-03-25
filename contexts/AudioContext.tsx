@@ -170,7 +170,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   }, [settings.autoBoostEnabled, settings.autoBoostAmount]);
 
   // Track previous VTS segment for chapter transition auto-boost
-  const prevVtsSegmentRef = useRef<{ feedGuid: string; itemGuid: string; remotePercentage: number } | null>(null);
+  const prevVtsSegmentRef = useRef<{ index: number; feedGuid?: string; itemGuid?: string; remotePercentage: number } | null>(null);
 
   // Helper function to publish NIP-38 status (debounced)
   const publishNip38StatusDebounced = useCallback((action: 'play') => {
@@ -410,51 +410,69 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     autoBoostProcessingRef.current = true;
 
     try {
-      // Fetch V4V data for the outgoing VTS segment's remoteItem
-      const params = new URLSearchParams({ feedGuid: outgoingFeedGuid, itemGuid: outgoingItemGuid });
-      if (chapterTitle) params.set('chapterTitle', chapterTitle);
-
-      const res = await fetch(`/api/lightning/value-splits?${params}`);
-      const data = await res.json();
-
-      if (!data.success || !data.data?.recipients?.length) {
-        console.log('⚡ Chapter auto-boost skipped: no V4V recipients for segment');
-        return;
-      }
-
-      const remoteRecipients = data.data.recipients.filter((r: any) => !r.fee);
-      if (remoteRecipients.length === 0) return;
-
-      const artistName = data.artistName || 'Unknown Artist';
+      const hasRemoteItem = outgoingFeedGuid && outgoingItemGuid;
       const trackTitle = chapterTitle || 'Unknown Track';
+      let artistName = album.artist || 'Unknown Artist';
 
-      console.log(`⚡ Chapter auto-boost starting: ${amount} sats for "${trackTitle}" by ${artistName} (remote ${remotePercentage}%)`);
+      let blended: Array<{ name: string; address: string; split: number; type: 'node' | 'lnaddress' }> = [];
 
-      // Scale remote artist splits by remotePercentage (matching NowPlayingScreen VTS blending)
-      const totalRemoteSplits = remoteRecipients.reduce((sum: number, r: any) => sum + (r.split || 100), 0);
-      const scaledRemote = remoteRecipients.map((r: any) => ({
-        name: r.name || 'Unknown',
-        address: r.address,
-        split: Math.round(((r.split || 100) / totalRemoteSplits) * remotePercentage),
-        type: (r.type || 'node') as 'node' | 'lnaddress',
-      }));
+      if (hasRemoteItem) {
+        // Song chapter: fetch V4V data for the remote artist
+        const params = new URLSearchParams({ feedGuid: outgoingFeedGuid, itemGuid: outgoingItemGuid });
+        if (chapterTitle) params.set('chapterTitle', chapterTitle);
 
-      // If remotePercentage < 100, blend in the podcast host's (feed-level) recipients
-      let blended: Array<{ name: string; address: string; split: number; type: 'node' | 'lnaddress' }> = scaledRemote;
-      if (remotePercentage < 100) {
-        const hostPercentage = 100 - remotePercentage;
-        const hostSplits = formatValueSplitsForBoost(album, album.artist) || [];
-        const totalHostSplits = hostSplits.reduce((sum, r) => sum + r.split, 0);
-        if (totalHostSplits > 0) {
-          const scaledHost = hostSplits.map(r => ({
+        const res = await fetch(`/api/lightning/value-splits?${params}`);
+        const data = await res.json();
+
+        if (data.success && data.data?.recipients?.length > 0) {
+          const remoteRecipients = data.data.recipients.filter((r: any) => !r.fee);
+          artistName = data.artistName || artistName;
+
+          // Scale remote artist splits by remotePercentage
+          const totalRemoteSplits = remoteRecipients.reduce((sum: number, r: any) => sum + (r.split || 100), 0);
+          const scaledRemote = remoteRecipients.map((r: any) => ({
             name: r.name || 'Unknown',
             address: r.address,
-            split: Math.round((r.split / totalHostSplits) * hostPercentage),
-            type: r.type as 'node' | 'lnaddress',
+            split: Math.round(((r.split || 100) / totalRemoteSplits) * remotePercentage),
+            type: (r.type || 'node') as 'node' | 'lnaddress',
           }));
-          blended = [...scaledRemote, ...scaledHost];
+
+          blended = scaledRemote;
+
+          // If remotePercentage < 100, blend in the podcast host's (feed-level) recipients
+          if (remotePercentage < 100) {
+            const hostPercentage = 100 - remotePercentage;
+            const hostSplits = formatValueSplitsForBoost(album, album.artist) || [];
+            const totalHostSplits = hostSplits.reduce((sum, r) => sum + r.split, 0);
+            if (totalHostSplits > 0) {
+              const scaledHost = hostSplits.map(r => ({
+                name: r.name || 'Unknown',
+                address: r.address,
+                split: Math.round((r.split / totalHostSplits) * hostPercentage),
+                type: r.type as 'node' | 'lnaddress',
+              }));
+              blended = [...scaledRemote, ...scaledHost];
+            }
+          }
         }
       }
+
+      // Non-song chapter or remote fetch returned nothing: use show-level recipients
+      if (blended.length === 0) {
+        const hostSplits = formatValueSplitsForBoost(album, album.artist) || [];
+        if (hostSplits.length === 0) {
+          console.log('⚡ Chapter auto-boost skipped: no V4V recipients for segment or show');
+          return;
+        }
+        blended = hostSplits.map(r => ({
+          name: r.name || 'Unknown',
+          address: r.address,
+          split: r.split,
+          type: r.type as 'node' | 'lnaddress',
+        }));
+      }
+
+      console.log(`⚡ Chapter auto-boost starting: ${amount} sats for "${trackTitle}"${hasRemoteItem ? ` by ${artistName} (remote ${remotePercentage}%)` : ' (show-level)'}`);
 
       // Deduplicate recipients (e.g., Podcastindex listed with both lnaddress and node)
       const deduped: typeof blended = [];
@@ -570,40 +588,44 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
       return;
     }
 
-    // Find active VTS segment based on current playback position
-    let activeSegment: { feedGuid: string; itemGuid: string; remotePercentage: number } | null = null;
+    // Find active VTS segment based on current playback position (track ALL segments, not just those with remoteItem)
+    let activeSegment: { index: number; feedGuid?: string; itemGuid?: string; remotePercentage: number } | null = null;
     for (let i = splits.length - 1; i >= 0; i--) {
       const s = splits[i];
-      if (currentTime >= s.startTime && currentTime < s.startTime + s.duration && s.remoteItem?.feedGuid && s.remoteItem?.itemGuid) {
-        activeSegment = { feedGuid: s.remoteItem.feedGuid, itemGuid: s.remoteItem.itemGuid, remotePercentage: s.remotePercentage ?? 100 };
+      if (currentTime >= s.startTime && currentTime < s.startTime + s.duration) {
+        activeSegment = {
+          index: i,
+          feedGuid: s.remoteItem?.feedGuid,
+          itemGuid: s.remoteItem?.itemGuid,
+          remotePercentage: s.remotePercentage ?? 100
+        };
         break;
       }
     }
 
     const prev = prevVtsSegmentRef.current;
 
-    // Detect segment change: previous segment existed and differs from current
-    if (prev && activeSegment && (prev.feedGuid !== activeSegment.feedGuid || prev.itemGuid !== activeSegment.itemGuid)) {
+    // Detect segment change by index (covers both song and non-song chapters)
+    if (prev && activeSegment && prev.index !== activeSegment.index) {
       const { enabled, amount } = autoBoostSettingsRef.current;
       if (enabled) {
         // Find chapter title for the outgoing segment (best-effort)
+        const prevSplit = splits[prev.index];
         const outgoingChapterTitle = chapters.find(ch => {
           const chEnd = ch.endTime ?? Infinity;
-          // Find the chapter whose time range contained the previous VTS segment
-          return splits.some(s =>
-            s.remoteItem?.feedGuid === prev.feedGuid &&
-            s.remoteItem?.itemGuid === prev.itemGuid &&
-            s.startTime >= ch.startTime && s.startTime < chEnd
-          );
+          return prevSplit && prevSplit.startTime >= ch.startTime && prevSplit.startTime < chEnd;
         })?.title;
 
         // Fire and forget — don't block playback
-        triggerChapterAutoBoost(prev.feedGuid, prev.itemGuid, currentPlayingAlbum, amount || 50, prev.remotePercentage, outgoingChapterTitle);
+        triggerChapterAutoBoost(
+          prev.feedGuid || '', prev.itemGuid || '',
+          currentPlayingAlbum, amount || 50, prev.remotePercentage, outgoingChapterTitle
+        );
       }
     }
 
     // Only update prev ref when we have a valid segment — don't clear it during
-    // gaps between segments (e.g., brief moment between intro and first song)
+    // gaps between segments
     if (activeSegment) {
       prevVtsSegmentRef.current = activeSegment;
     }
@@ -637,27 +659,23 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
       if (!currentElement) return;
       const now = currentElement.currentTime;
 
-      // Find the index of the previous segment and current segment in the splits array
-      const prevIdx = splits.findIndex(s =>
-        s.remoteItem?.feedGuid === prev.feedGuid && s.remoteItem?.itemGuid === prev.itemGuid
-      );
+      // Use index-based tracking to find missed segments
+      const prevIdx = prev.index;
       // Find current active segment
       let currentIdx = -1;
       for (let i = splits.length - 1; i >= 0; i--) {
         const s = splits[i];
-        if (now >= s.startTime && now < s.startTime + s.duration && s.remoteItem?.feedGuid && s.remoteItem?.itemGuid) {
+        if (now >= s.startTime && now < s.startTime + s.duration) {
           currentIdx = i;
           break;
         }
       }
 
-      if (prevIdx < 0 || currentIdx < 0 || currentIdx <= prevIdx) return;
+      if (currentIdx < 0 || currentIdx <= prevIdx) return;
 
-      // Collect all segments between prev (exclusive) and current (inclusive of segments that completed)
-      // We boost segments that the user listened through while backgrounded
-      const missedSegments = splits.slice(prevIdx, currentIdx).filter(s =>
-        s.remoteItem?.feedGuid && s.remoteItem?.itemGuid
-      );
+      // Collect all segments between prev (inclusive) and current (exclusive)
+      // These are the segments the user listened through while backgrounded
+      const missedSegments = splits.slice(prevIdx, currentIdx);
 
       if (missedSegments.length === 0) return;
 
@@ -666,15 +684,14 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
       // Boost each missed segment sequentially (fire and forget)
       const boostMissed = async () => {
         for (const segment of missedSegments) {
-          // Find chapter title for this segment
           const chapterTitle = chapters.find(ch => {
             const chEnd = ch.endTime ?? Infinity;
             return segment.startTime >= ch.startTime && segment.startTime < chEnd;
           })?.title;
 
           await triggerChapterAutoBoost(
-            segment.remoteItem!.feedGuid,
-            segment.remoteItem!.itemGuid,
+            segment.remoteItem?.feedGuid || '',
+            segment.remoteItem?.itemGuid || '',
             currentPlayingAlbum,
             amount || 50,
             segment.remotePercentage ?? 100,
@@ -686,13 +703,12 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
 
       // Update the prev ref to the current segment so the normal effect doesn't double-boost
       const currentSplit = splits[currentIdx];
-      if (currentSplit?.remoteItem) {
-        prevVtsSegmentRef.current = {
-          feedGuid: currentSplit.remoteItem.feedGuid,
-          itemGuid: currentSplit.remoteItem.itemGuid,
-          remotePercentage: currentSplit.remotePercentage ?? 100
-        };
-      }
+      prevVtsSegmentRef.current = {
+        index: currentIdx,
+        feedGuid: currentSplit?.remoteItem?.feedGuid,
+        itemGuid: currentSplit?.remoteItem?.itemGuid,
+        remotePercentage: currentSplit?.remotePercentage ?? 100
+      };
     };
 
     document.addEventListener('visibilitychange', handleVisibilityForChapterBoost);
