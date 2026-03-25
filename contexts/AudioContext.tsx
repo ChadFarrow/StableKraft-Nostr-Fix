@@ -605,6 +605,100 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     prevVtsSegmentRef.current = activeSegment;
   }, [currentTime, currentPlayingAlbum, currentTrackIndex, chapters, triggerChapterAutoBoost]);
 
+  // Foreground resume: detect missed VTS chapter transitions while backgrounded.
+  // iOS throttles JS when backgrounded, so currentTime updates stop and chapter
+  // transitions are missed. On return to foreground, find all skipped segments
+  // between the last known position and current playback position, and boost each.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleVisibilityForChapterBoost = () => {
+      if (document.visibilityState !== 'visible') return;
+
+      const { enabled, amount } = autoBoostSettingsRef.current;
+      if (!enabled) return;
+      if (!currentPlayingAlbum || currentTrackIndex < 0) return;
+
+      const track = currentPlayingAlbum.tracks[currentTrackIndex];
+      const splits = track?.valueTimeSplits;
+      if (!splits || !Array.isArray(splits) || splits.length === 0) return;
+
+      const prev = prevVtsSegmentRef.current;
+      if (!prev) return;
+
+      // Get actual current playback time from the audio/video element
+      const audio = audioRef.current;
+      const video = videoRef.current;
+      const currentElement = (video && !video.paused && !video.ended) ? video : audio;
+      if (!currentElement) return;
+      const now = currentElement.currentTime;
+
+      // Find the index of the previous segment and current segment in the splits array
+      const prevIdx = splits.findIndex(s =>
+        s.remoteItem?.feedGuid === prev.feedGuid && s.remoteItem?.itemGuid === prev.itemGuid
+      );
+      // Find current active segment
+      let currentIdx = -1;
+      for (let i = splits.length - 1; i >= 0; i--) {
+        const s = splits[i];
+        if (now >= s.startTime && now < s.startTime + s.duration && s.remoteItem?.feedGuid && s.remoteItem?.itemGuid) {
+          currentIdx = i;
+          break;
+        }
+      }
+
+      if (prevIdx < 0 || currentIdx < 0 || currentIdx <= prevIdx) return;
+
+      // Collect all segments between prev (exclusive) and current (inclusive of segments that completed)
+      // We boost segments that the user listened through while backgrounded
+      const missedSegments = splits.slice(prevIdx, currentIdx).filter(s =>
+        s.remoteItem?.feedGuid && s.remoteItem?.itemGuid
+      );
+
+      if (missedSegments.length === 0) return;
+
+      console.log(`📱 Foreground resume: ${missedSegments.length} missed chapter auto-boost(s)`);
+
+      // Boost each missed segment sequentially (fire and forget)
+      const boostMissed = async () => {
+        for (const segment of missedSegments) {
+          // Find chapter title for this segment
+          const chapterTitle = chapters.find(ch => {
+            const chEnd = ch.endTime ?? Infinity;
+            return segment.startTime >= ch.startTime && segment.startTime < chEnd;
+          })?.title;
+
+          await triggerChapterAutoBoost(
+            segment.remoteItem!.feedGuid,
+            segment.remoteItem!.itemGuid,
+            currentPlayingAlbum,
+            amount || 50,
+            segment.remotePercentage ?? 100,
+            chapterTitle
+          );
+        }
+      };
+      boostMissed();
+
+      // Update the prev ref to the current segment so the normal effect doesn't double-boost
+      const currentSplit = splits[currentIdx];
+      if (currentSplit?.remoteItem) {
+        prevVtsSegmentRef.current = {
+          feedGuid: currentSplit.remoteItem.feedGuid,
+          itemGuid: currentSplit.remoteItem.itemGuid,
+          remotePercentage: currentSplit.remotePercentage ?? 100
+        };
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityForChapterBoost);
+    window.addEventListener('pageshow', handleVisibilityForChapterBoost);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityForChapterBoost);
+      window.removeEventListener('pageshow', handleVisibilityForChapterBoost);
+    };
+  }, [currentPlayingAlbum, currentTrackIndex, chapters, triggerChapterAutoBoost]);
+
   // Detect iOS devices - Web Audio interferes with background playback on iOS
   const isIOSDevice = useCallback(() => {
     if (typeof navigator === 'undefined') return false;
