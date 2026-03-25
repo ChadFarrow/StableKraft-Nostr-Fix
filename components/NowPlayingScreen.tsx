@@ -472,8 +472,8 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
         </div>
 
         {/* Album Art or Video */}
-        <div className="flex items-start justify-center px-8 pt-12">
-          <div className="relative w-full max-w-sm aspect-square">
+        <div className="flex items-start justify-center px-8 pt-12 flex-1 min-h-0">
+          <div className="relative w-full max-w-sm aspect-square max-h-full">
             {isVideoMode ? (
               <div
                 ref={videoContainerRef}
