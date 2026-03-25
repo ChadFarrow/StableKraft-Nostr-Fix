@@ -448,9 +448,14 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         helipadMetadata.url = album.feedUrl;
         helipadMetadata.feed = album.feedUrl;
       }
+      if (album.id) {
+        helipadMetadata.feedId = album.id;
+      }
       if (album.title) {
         helipadMetadata.album = album.title;
       }
+      // episode_guid uses the outgoing segment's itemGuid (the actual song, not the parent episode)
+      helipadMetadata.episode_guid = outgoingItemGuid;
 
       // Build recipients list
       const recipients: ValueRecipient[] = remoteRecipients.map((r: any) => ({
