@@ -391,7 +391,7 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-hidden" style={{ height: '100dvh', minHeight: '100vh' }}>
+    <div className="fixed top-0 left-0 right-0 z-50 overflow-hidden" style={{ height: '100dvh', minHeight: '100vh' }}>
       {/* Solid Color Background - ITDV Style with good contrast */}
       <div
         className="absolute inset-0 transition-all duration-1000 pointer-events-none"
