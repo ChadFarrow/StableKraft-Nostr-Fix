@@ -440,7 +440,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
       }));
 
       // If remotePercentage < 100, blend in the podcast host's (feed-level) recipients
-      let blended = scaledRemote;
+      let blended: Array<{ name: string; address: string; split: number; type: 'node' | 'lnaddress' }> = scaledRemote;
       if (remotePercentage < 100) {
         const hostPercentage = 100 - remotePercentage;
         const hostSplits = formatValueSplitsForBoost(album, album.artist) || [];
