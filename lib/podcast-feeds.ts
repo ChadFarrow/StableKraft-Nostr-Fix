@@ -8,7 +8,7 @@ export const PODCAST_FEED_IDS: string[] = [
 ];
 
 export const PODCAST_FEED_URLS: string[] = [
-  'https://feeds.rssblue.com/upbeats', // Upbeats
+  'https://serve.podhome.fm/rss/3aebb7a8-5942-5ee7-a148-8bdc14f1f3d4', // Upbeats
 ];
 
 /** Slugs that should redirect from /album/ to /podcast/ */
