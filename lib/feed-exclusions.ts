@@ -24,7 +24,7 @@ export const BLACKLISTED_FEED_URLS = [
   'https://mmmusic-project.ams3.cdn.digitaloceanspaces.com/Mutton_Mead__Music/feed.xml',  // MMM source podcast
   'https://feed.homegrownhits.xyz/feed.xml',  // HGH source podcast
   'https://sirlibre.com/lightning-thrashes-rss.xml',  // LT source podcast
-  'https://feeds.rssblue.com/upbeats',  // Upbeats source podcast
+  'https://serve.podhome.fm/rss/3aebb7a8-5942-5ee7-a148-8bdc14f1f3d4',  // Upbeats source podcast
   'https://itsamood.org/itsamoodrss.xml',  // IAM source podcast
   'https://www.doerfelverse.com/feeds/intothedoerfelverse.xml',  // ITDV source podcast
 ];
