@@ -426,28 +426,23 @@ export function parseV4VFromXML(xmlText: string): { recipient: string | null; va
         name: nameMatch ? nameMatch[1] : null,
         address: addressMatch ? addressMatch[1] : null,
         type: typeMatch ? typeMatch[1] : 'node',
-        split: splitMatch ? splitMatch[1] : '100',
-        fee: feeMatch ? feeMatch[1] : null,
+        split: splitMatch ? parseInt(splitMatch[1], 10) || 100 : 100,
+        fee: feeMatch ? feeMatch[1] === 'true' : false,
         customKey: customKey || null,
         customValue: customValue || null
       };
-      
+
       console.log('🔍 DEBUG: Parsed recipient:', recipient);
       recipients.push(recipient);
     }
-    
+
     if (recipients.length > 0) {
       // Filter out fee recipients (Podcastindex.org fee injection)
-      const nonFeeRecipients = recipients.filter(r => r.fee !== 'true');
+      const nonFeeRecipients = recipients.filter(r => !r.fee);
 
       // Use the recipient with the highest split percentage (usually the artist/main recipient)
-      // Convert splits to numbers for comparison
-      const recipientsWithNumericSplits = nonFeeRecipients.map(r => ({
-        ...r,
-        splitNum: parseInt(r.split) || 0
-      }));
-      recipientsWithNumericSplits.sort((a, b) => b.splitNum - a.splitNum);
-      const primaryRecipient = recipientsWithNumericSplits[0];
+      const sorted = [...nonFeeRecipients].sort((a, b) => (b.split || 0) - (a.split || 0));
+      const primaryRecipient = sorted[0];
 
       console.log('✅ DEBUG: Selected primary recipient:', primaryRecipient);
       console.log('✅ DEBUG: Filtered out fee recipients, remaining:', nonFeeRecipients.length);
@@ -754,28 +749,23 @@ export function parseItemV4VFromXML(xmlText: string, itemTitle: string): { recip
         name: nameMatch ? nameMatch[1] : null,
         address: addressMatch ? addressMatch[1] : null,
         type: recipientTypeMatch ? recipientTypeMatch[1] : 'node',
-        split: splitMatch ? splitMatch[1] : '100',
-        fee: feeMatch ? feeMatch[1] : null,
+        split: splitMatch ? parseInt(splitMatch[1], 10) || 100 : 100,
+        fee: feeMatch ? feeMatch[1] === 'true' : false,
         customKey: customKey || null,
         customValue: customValue || null
       };
-      
+
       console.log('🔍 DEBUG: Parsed recipient:', recipient);
       recipients.push(recipient);
     }
-    
+
     if (recipients.length > 0) {
       // Filter out fee recipients (Podcastindex.org fee injection)
-      const nonFeeRecipients = recipients.filter(r => r.fee !== 'true');
+      const nonFeeRecipients = recipients.filter(r => !r.fee);
 
       // Use the recipient with the highest split percentage (usually the artist/main recipient)
-      // Convert splits to numbers for comparison
-      const recipientsWithNumericSplits = nonFeeRecipients.map(r => ({
-        ...r,
-        splitNum: parseInt(r.split) || 0
-      }));
-      recipientsWithNumericSplits.sort((a, b) => b.splitNum - a.splitNum);
-      const primaryRecipient = recipientsWithNumericSplits[0];
+      const sorted = [...nonFeeRecipients].sort((a, b) => (b.split || 0) - (a.split || 0));
+      const primaryRecipient = sorted[0];
 
       console.log('✅ DEBUG: Selected primary recipient:', primaryRecipient);
       console.log('✅ DEBUG: Filtered out fee recipients, remaining:', nonFeeRecipients.length);
@@ -1094,34 +1084,34 @@ export async function parseRSSFeed(feedUrl: string): Promise<ParsedFeed> {
                     .filter(r => {
                       const rData = r.$ || r;
                       // Filter out fee recipients (Podcastindex.org fee injection)
-                      return rData.fee !== 'true';
+                      return rData.fee !== 'true' && rData.fee !== true;
                     })
                     .map(r => {
                       const rData = r.$ || r;
                       // Handle nested <key> and <value> elements (some feeds use these instead of attributes)
                       let customKey = rData.customKey;
                       let customValue = rData.customValue;
-                      
+
                       // Check for nested <key> element
                       if (!customKey && r.key) {
-                        customKey = typeof r.key === 'string' 
-                          ? r.key 
+                        customKey = typeof r.key === 'string'
+                          ? r.key
                           : r.key._text || r.key['#text'] || r.key;
                       }
-                      
+
                       // Check for nested <value> element
                       if (!customValue && r.value) {
                         customValue = typeof r.value === 'string'
                           ? r.value
                           : r.value._text || r.value['#text'] || r.value;
                       }
-                      
+
                       return {
                         name: rData.name,
                         address: rData.address,
                         type: rData.type || 'node',
-                        split: rData.split || '100',
-                        fee: rData.fee,
+                        split: parseInt(rData.split, 10) || 100,
+                        fee: rData.fee === 'true' || rData.fee === true,
                         customKey: customKey || undefined,
                         customValue: customValue || undefined
                       };
@@ -1266,7 +1256,7 @@ export async function parseRSSFeed(feedUrl: string): Promise<ParsedFeed> {
                   .filter(r => {
                     const rData = r.$ || r;
                     // Filter out fee recipients (Podcastindex.org fee injection)
-                    return rData.fee !== 'true';
+                    return rData.fee !== 'true' && rData.fee !== true;
                   })
                   .map(r => {
                     const rData = r.$ || r;
@@ -1274,8 +1264,8 @@ export async function parseRSSFeed(feedUrl: string): Promise<ParsedFeed> {
                       name: rData.name,
                       address: rData.address,
                       type: rData.type || 'node',
-                      split: rData.split || '100',
-                      fee: rData.fee
+                      split: parseInt(rData.split, 10) || 100,
+                      fee: rData.fee === 'true' || rData.fee === true
                     };
                   })
               };
