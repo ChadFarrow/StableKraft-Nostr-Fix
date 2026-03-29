@@ -13,13 +13,8 @@ export async function POST() {
     const mistyped = await prisma.feed.findMany({
       where: {
         type: 'podcast',
-        NOT: {
-          OR: [
-            { id: { in: PODCAST_FEED_IDS } },
-            { guid: { in: PODCAST_FEED_IDS } },
-            { originalUrl: { in: PODCAST_FEED_URLS } },
-          ]
-        }
+        id: { notIn: PODCAST_FEED_IDS },
+        originalUrl: { notIn: PODCAST_FEED_URLS },
       },
       select: { id: true, title: true, originalUrl: true }
     });
