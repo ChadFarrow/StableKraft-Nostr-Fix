@@ -37,7 +37,7 @@ Playlists use `<podcast:remoteItem>` with `feedGuid` + `itemGuid`. On `?refresh`
 
 **Feed deduplication pattern**: multi-check dedup (normalized URL, raw URL, feedGuid as ID, feedGuid as GUID column, feedGuid-in-URL substring, then secondary `podcastGuid` check). New feeds get slug-based IDs via `generateAlbumSlug`. When modifying feed import code, follow this pattern — weak dedup causes duplicate entries.
 
-**Type filter gotcha**: Wavlake feeds often get `type: 'podcast'`. All DB queries for album/music content must include `'podcast'` in the type filter: `type: { in: ['album', 'music', 'podcast'] }`.
+**Podcast type detection**: Non-Wavlake feeds with `<podcast:medium>podcast</podcast:medium>` auto-detect as `type: 'podcast'` on import. Wavlake feeds are excluded from this (they use `medium=podcast` for music). Feeds with `type: 'podcast'` auto-appear under the Podcasts filter and are excluded from the album grid. If mistyped feeds appear, run `POST /api/admin/fix-podcast-types`.
 
 **PI API status gotcha**: `normalizeFeedResponse` in `lib/podcast-index-api.ts` must accept both `status: 'true'` (string) and `status: true` (boolean). Use `data.status !== 'true' && data.status !== true` for rejection checks.
 
@@ -49,15 +49,17 @@ Central exclusion config: `BLACKLISTED_FEED_IDS`, `BLACKLISTED_FEED_URLS`. Helpe
 ### Admin Feed Management (`/admin`)
 Single input handles both add and reparse. Auto-detects type from URL (`-pubfeed` = publisher). **Fixing duplicates**: delete all copies first (`DELETE /api/feeds?id=<feedId>`), then re-add. Initial import (`POST /api/feeds`) saves all parsed fields including chapters, VTS, and V4V via `applyParsedItemFields()` — no reparse needed.
 
-### Adding Music Podcasts (like Upbeats)
-1. Import feed via `/admin` page (paste RSS URL)
-2. Add feed ID/URL/slug to `lib/podcast-feeds.ts` (`PODCAST_FEED_IDS`, `PODCAST_FEED_URLS`, `PODCAST_SLUGS`)
-3. Add feed ID/URL to `lib/feed-exclusions.ts` (prevents showing in album grid)
-4. Deploy — `/podcast/[id]` dynamic route handles display automatically, episodes sort newest-first
+### Adding Music Podcasts (like Upbeats, Two For Tunestr)
+Import feed via `/admin` page (paste RSS URL). Non-Wavlake feeds with `<podcast:medium>podcast</podcast:medium>` automatically get `type: 'podcast'`, appear under the Podcasts filter, hide from the album grid, and are searchable — no config file edits needed. `/podcast/[id]` dynamic route handles display, episodes sort newest-first.
+
+**Slug redirects**: If the auto-generated feed ID differs from the desired URL slug (e.g., `silvie-two-for-tunestr` vs `two-for-tunestr`), add mappings to `PODCAST_SLUG_TO_FEED_ID` and `PODCAST_CANONICAL_SLUGS` in `lib/podcast-feeds.ts`.
+
+**After import**: Reparse the feed from the admin page to ensure chapters and VTS are populated (the initial import may miss them if the chapters proxy is down).
 
 ### Search
 - PostgreSQL trigram `similarity()`, flat 0.3 threshold. Do NOT lower below 0.3 — causes false positives.
 - Artist search groups by `LOWER(artist)`. Exact mode: `?fuzzy=false`
+- Podcasts searchable by title/artist/description (queries `type: 'podcast'` feeds)
 
 ### Publisher Pages (`app/publisher/[id]/page.tsx`)
 Matched by: title slug, artist slug, or URL path. Multi-feed support with per-platform sections. Album resolution: (1) GUIDs/URLs from publisher feed XMLs → (2) `publisherId`-linked albums → (3) artist name matching. Do NOT re-add platform filters — hides legitimate cross-platform albums.
@@ -115,7 +117,9 @@ LNURL payments use [BoostBox](https://tardbox.com) for Podcasting 2.0 boost meta
 ### VTS (Value Time Splits) Playback (`components/NowPlayingScreen.tsx`)
 VTS podcasts embed `<podcast:valueTimeSplit>` segments that map time ranges to different tracks/artists. Features: chapter tick marks on progress bar, per-song favoriting via `remoteItem`, V4V blending (`remotePercentage` splits between song and show recipients, deduped by address, `isHost` flag for grouping). GUID collision detection via `chapterTitle` param to `/api/lightning/value-splits`. When VTS blending produces both song and show recipients, BoostButton shows **Song/Show section headers** sorted track-first.
 
-**VTS extraction** (`lib/rss-parser-db.ts`): `applyParsedItemFields` applies chapters, VTS, and other parsed fields to track data. **VTS remoteItem interface** (`lib/podcast-types.ts`): `feedGuid`, `itemGuid`, `medium`.
+**VTS extraction** (`lib/rss-parser-db.ts`): `applyParsedItemFields` applies chapters, VTS, and other parsed fields to track data. **VTS remoteItem interface** (`lib/podcast-types.ts`): `feedGuid`, `itemGuid`, `medium`. **XML entity gotcha**: `parseItemV4VFromXML` matches titles against raw XML — titles with `&` (encoded as `&amp;`) need both decoded and XML-encoded matching.
+
+**Chapters fallback**: `fetchChapters()` fetches from `podcast:chapters` URL. If the `reflex.livewire.io` proxy returns 400, it extracts the direct URL from the proxy path (format: `.../chapters/https://actual-url.json`) and retries.
 
 ### AutoBoost (`contexts/AudioContext.tsx`)
 Two paths gated by `autoBoostEnabled` setting and `autoBoostProcessingRef` mutex:
