@@ -647,13 +647,17 @@ export function parseItemV4VFromXML(xmlText: string, itemTitle: string): { recip
     console.log(`🔍 DEBUG: Found ${items.length} items in XML`);
 
     // Find the item with the matching title
+    // Try both decoded title and XML-encoded version (& -> &amp;, etc.)
+    const xmlEncodedTitle = itemTitle.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     const escapedTitle = itemTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const titleRegex = new RegExp(`<title>${escapedTitle}</title>`, 'i');
+    const escapedXmlTitle = xmlEncodedTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const titleRegex = new RegExp(`<title>(<!\\[CDATA\\[)?${escapedTitle}(\\]\\]>)?</title>`, 'i');
+    const xmlTitleRegex = new RegExp(`<title>(<!\\[CDATA\\[)?${escapedXmlTitle}(\\]\\]>)?</title>`, 'i');
 
-    const itemContent = items.find(item => titleRegex.test(item));
+    const itemContent = items.find(item => titleRegex.test(item) || xmlTitleRegex.test(item));
 
     if (!itemContent) {
-      console.log(`ℹ️ DEBUG: Item "${itemTitle}" not found in XML`);
+      console.log(`ℹ️ DEBUG: Item "${itemTitle}" not found in XML (tried both decoded and XML-encoded)`);
       return { recipient: null, value: null, valueTimeSplits: [] };
     }
 
