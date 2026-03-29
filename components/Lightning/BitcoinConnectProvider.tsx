@@ -353,8 +353,12 @@ export function BitcoinConnectProvider({ children }: { children: React.ReactNode
         const hasKeysendMethod = !!provider.keysend;
 
         // Infer keysend capability from provider type instead of probing with a real payment
-        // (probing triggers a payment popup in wallets like Alby extension)
-        const keysendActuallySupported = hasKeysendMethod && type !== 'unknown';
+        // (probing triggers a payment popup in wallets like Alby extension).
+        // Only trust keysend for wallet types known to support pay_keysend.
+        // Generic NWC wallets (Primal, etc.) expose a keysend method via the
+        // Bitcoin Connect WebLN shim, but the relay may not implement the command.
+        const keysendActuallySupported = hasKeysendMethod &&
+          (type === 'alby' || type === 'alby-hub' || type === 'extension' || type === 'coinos');
         setKeysendSupported(keysendActuallySupported);
 
         // Fetch Coinos profile for avatar and username
@@ -713,6 +717,9 @@ export function BitcoinConnectProvider({ children }: { children: React.ReactNode
       } else if (errorMessage.includes('user rejected') || errorMessage.includes('user cancelled')) {
         return { error: 'Payment cancelled by user' };
       } else if (errorMessage.includes('command not implemented') || errorMessage.includes('not implemented yet')) {
+        // Runtime self-correction: disable keysend so we don't keep retrying
+        console.log('⚠️ Keysend not implemented by wallet relay, disabling keysend support');
+        setKeysendSupported(false);
         return {
           error: 'Your wallet doesn\'t support keysend payments. This artist only accepts keysend. Try Alby or Coinos.'
         };

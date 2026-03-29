@@ -61,7 +61,7 @@ jobs:
         echo ""
         echo "📋 Step 2b: Reparsing podcast feeds for new episodes..."
 
-        PODCAST_FEEDS=("3aebb7a8-5942-5ee7-a148-8bdc14f1f3d4")  # UpBeats
+        PODCAST_FEEDS=("3aebb7a8-5942-5ee7-a148-8bdc14f1f3d4" "two-for-tunestr-silvie")  # UpBeats, Two For Tunestr
 
         for FEED_ID in "${PODCAST_FEEDS[@]}"; do
           echo "  🔄 Reparsing podcast feed $FEED_ID..."
@@ -77,6 +77,23 @@ jobs:
           fi
           sleep 2
         done
+
+        # Step 2c: Fix stale VTS data (empty remoteItem GUIDs from pre-entity-fix parsing)
+        echo ""
+        echo "📋 Step 2c: Fixing stale VTS data..."
+
+        VTS_FIX_RESPONSE=$(curl -s -X POST -w "\n%{http_code}" "${BASE_URL}/api/admin/fix-stale-vts")
+        HTTP_CODE=$(echo "$VTS_FIX_RESPONSE" | tail -n1)
+        RESPONSE_BODY=$(echo "$VTS_FIX_RESPONSE" | sed '$d')
+
+        if [ "$HTTP_CODE" -eq 200 ]; then
+          FEEDS_FIXED=$(echo "$RESPONSE_BODY" | jq -r '.feedsFixed // 0' 2>/dev/null || echo "?")
+          TRACKS_UPDATED=$(echo "$RESPONSE_BODY" | jq -r '.tracksUpdated // 0' 2>/dev/null || echo "?")
+          DURATION=$(echo "$RESPONSE_BODY" | jq -r '.duration // "?"' 2>/dev/null || echo "?")
+          echo "✅ Stale VTS fix: ${FEEDS_FIXED} feeds, ${TRACKS_UPDATED} tracks updated (${DURATION})"
+        else
+          echo "⚠️ Stale VTS fix had issues (HTTP $HTTP_CODE) - non-critical"
+        fi
 
         # Step 3: Refresh playlists with full v4v parsing
         echo ""

@@ -161,6 +161,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   // Auto-boost support
   const { isConnected: isWalletConnected, sendPayment, sendKeysend, supportsKeysend } = useBitcoinConnect();
   const autoBoostProcessingRef = useRef(false);
+  const autoBoostKeysendWarningShownRef = useRef(false);
 
   // Keep auto-boost settings in a ref so handleEnded always reads the latest values
   // (handleEnded is registered in a useEffect whose deps don't include settings)
@@ -168,6 +169,11 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   useEffect(() => {
     autoBoostSettingsRef.current = { enabled: settings.autoBoostEnabled, amount: settings.autoBoostAmount };
   }, [settings.autoBoostEnabled, settings.autoBoostAmount]);
+
+  // Reset keysend warning when wallet keysend support changes (e.g. reconnect)
+  useEffect(() => {
+    autoBoostKeysendWarningShownRef.current = false;
+  }, [supportsKeysend]);
 
   // Track previous VTS segment for chapter transition auto-boost
   const prevVtsSegmentRef = useRef<{ index: number; feedGuid?: string; itemGuid?: string; remotePercentage: number } | null>(null);
@@ -616,8 +622,21 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
 
         toast.success(`Auto-boost: ${amount} sats for ${artistName} ⚡`);
       } else {
-        console.warn(`⚠️ Chapter auto-boost failed: ${multiResult.errors.join(', ')}`);
-        toast.error('Auto-boost failed');
+        const errors = multiResult.errors.join(', ');
+        console.warn(`⚠️ Chapter auto-boost failed: ${errors}`);
+
+        const isKeysendUnsupported = errors.includes('Keysend not supported') ||
+          errors.includes("doesn't support keysend") ||
+          errors.includes('not implemented');
+
+        if (isKeysendUnsupported) {
+          if (!autoBoostKeysendWarningShownRef.current) {
+            toast.error("Auto-boost unavailable: wallet doesn't support keysend");
+            autoBoostKeysendWarningShownRef.current = true;
+          }
+        } else {
+          toast.error('Auto-boost failed');
+        }
       }
     } catch (error) {
       console.error('❌ Chapter auto-boost error:', error);
