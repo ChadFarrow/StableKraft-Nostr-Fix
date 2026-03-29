@@ -1551,7 +1551,15 @@ export default function AdminPanel() {
                           {new Date(feed.createdAt).toLocaleDateString()} {new Date(feed.createdAt).toLocaleTimeString()}
                         </span>
                       </div>
-                      <div className="mt-2">
+                      <div className="mt-2 space-y-1">
+                        <a
+                          href={feed.type === 'publisher' ? `/publisher/${feed.id}` : `/album/${feed.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-emerald-400 hover:text-emerald-300 block transition-colors"
+                        >
+                          stablekraft.app/{feed.type === 'publisher' ? 'publisher' : 'album'}/{feed.id}
+                        </a>
                         <a
                           href={feed.originalUrl}
                           target="_blank"
@@ -1743,9 +1751,9 @@ export default function AdminPanel() {
                         </div>
                       )}
                       {importResult.feed?.v4vRecipient && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="text-gray-400">⚡ Lightning:</span>
-                          <span className="text-green-400 font-mono text-xs">{importResult.feed.v4vRecipient}</span>
+                        <div className="flex items-center gap-2 text-sm min-w-0">
+                          <span className="text-gray-400 flex-shrink-0">⚡ Lightning:</span>
+                          <span className="text-green-400 font-mono text-xs truncate" title={importResult.feed.v4vRecipient}>{importResult.feed.v4vRecipient}</span>
                         </div>
                       )}
                       {importResult.feed?.v4vValue?.recipients && (
@@ -1753,7 +1761,7 @@ export default function AdminPanel() {
                           <p className="text-xs text-gray-400 mb-1">Payment splits:</p>
                           <div className="space-y-1">
                             {importResult.feed.v4vValue.recipients.map((recipient: any, idx: number) => (
-                              <div key={idx} className="text-xs text-gray-300 font-mono">
+                              <div key={idx} className="text-xs text-gray-300 font-mono break-all">
                                 {recipient.name} ({recipient.split}%) - {recipient.address}
                               </div>
                             ))}
