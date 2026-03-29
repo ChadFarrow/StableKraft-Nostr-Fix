@@ -16,7 +16,7 @@ export interface V4VRecipient {
   address: string;
   type?: 'node' | 'lnaddress';
   split?: number;
-  fee?: boolean;
+  fee?: boolean | string | null;
 }
 
 export interface V4VValue {
@@ -98,7 +98,7 @@ export function getV4VRecipients(item: V4VItem | null | undefined): V4VRecipient
   const recipients = v4v.recipients || v4v.destinations || [];
 
   return recipients
-    .filter((r: V4VRecipient) => !r.fee)
+    .filter((r: V4VRecipient) => r.fee !== true && r.fee !== 'true')
     .map((r: V4VRecipient) => ({
       name: r.name || 'Unknown',
       address: r.address || '',

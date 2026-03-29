@@ -607,10 +607,12 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              trackId: `${album.id}-ch-${chapterTitle || 'unknown'}`,
               feedId: album.id,
+              trackTitle: chapterTitle || trackTitle,
+              artistName,
               amount,
               message: '',
-              senderName: settings.defaultBoostName || 'StableKraft.app user',
               preimage: multiResult.primaryPreimage,
               type: 'auto',
               recipient: recipients[0]?.address || 'value-splits'
