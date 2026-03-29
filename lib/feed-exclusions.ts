@@ -14,6 +14,7 @@ export const BLACKLISTED_FEED_IDS = [
   '3aebb7a8-5942-5ee7-a148-8bdc14f1f3d4', // Upbeats source podcast
   '469b403f-db2d-574c-9db9-96dbb3f6561c', // IAM source podcast
   'album-1769878598351-2xjjso3ew',       // ITDV source podcast
+  'silvie-two-for-tunestr',              // Two For Tunestr podcast
 ];
 
 // Feed URLs that should never be imported
@@ -27,6 +28,7 @@ export const BLACKLISTED_FEED_URLS = [
   'https://serve.podhome.fm/rss/3aebb7a8-5942-5ee7-a148-8bdc14f1f3d4',  // Upbeats source podcast
   'https://itsamood.org/itsamoodrss.xml',  // IAM source podcast
   'https://www.doerfelverse.com/feeds/intothedoerfelverse.xml',  // ITDV source podcast
+  'https://serve.podhome.fm/rss/fafd2bfc-98ac-5010-9fcb-7403abfd420a',  // Two For Tunestr podcast
 ];
 
 const normalizedBlacklistedUrls = BLACKLISTED_FEED_URLS.map(normalizeUrl);

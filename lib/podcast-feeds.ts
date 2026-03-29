@@ -5,13 +5,16 @@
  */
 export const PODCAST_FEED_IDS: string[] = [
   '3aebb7a8-5942-5ee7-a148-8bdc14f1f3d4', // Upbeats
+  'silvie-two-for-tunestr',                // Two For Tunestr
 ];
 
 export const PODCAST_FEED_URLS: string[] = [
   'https://serve.podhome.fm/rss/3aebb7a8-5942-5ee7-a148-8bdc14f1f3d4', // Upbeats
+  'https://serve.podhome.fm/rss/fafd2bfc-98ac-5010-9fcb-7403abfd420a', // Two For Tunestr
 ];
 
 /** Slugs that should redirect from /album/ to /podcast/ */
 export const PODCAST_SLUGS: string[] = [
   'upbeats',
+  'silvie-two-for-tunestr', // Two For Tunestr
 ];
