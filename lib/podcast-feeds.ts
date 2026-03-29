@@ -18,3 +18,8 @@ export const PODCAST_SLUGS: string[] = [
   'upbeats',
   'silvie-two-for-tunestr', // Two For Tunestr
 ];
+
+/** Map alternate slugs to canonical podcast feed IDs */
+export const PODCAST_SLUG_REDIRECTS: Record<string, string> = {
+  'two-for-tunestr': 'silvie-two-for-tunestr',
+};
