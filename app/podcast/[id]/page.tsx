@@ -10,6 +10,8 @@ export async function generateMetadata({
   searchParams: Promise<{ track?: string }>
 }): Promise<Metadata> {
   const { id } = await params;
+  const { PODCAST_SLUG_TO_FEED_ID } = await import('@/lib/podcast-feeds');
+  const feedId = PODCAST_SLUG_TO_FEED_ID[id] || id;
 
   let podcastTitle: string;
   try {
@@ -27,7 +29,7 @@ export async function generateMetadata({
     : (process.env.NEXT_PUBLIC_BASE_URL || 'https://stablekraft.app');
 
   try {
-    const response = await fetch(`${baseUrl}/api/albums/${encodeURIComponent(id)}`, {
+    const response = await fetch(`${baseUrl}/api/albums/${encodeURIComponent(feedId)}`, {
       next: { revalidate: 3600 }
     });
 
@@ -73,6 +75,16 @@ export async function generateMetadata({
 export default async function PodcastDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
+  // Redirect DB feed IDs to canonical slugs (e.g., silvie-two-for-tunestr -> two-for-tunestr)
+  const { PODCAST_CANONICAL_SLUGS, PODCAST_SLUG_TO_FEED_ID } = await import('@/lib/podcast-feeds');
+  if (PODCAST_CANONICAL_SLUGS[id]) {
+    const { redirect } = await import('next/navigation');
+    redirect(`/podcast/${PODCAST_CANONICAL_SLUGS[id]}`);
+  }
+
+  // Resolve slug to DB feed ID if different
+  const feedId = PODCAST_SLUG_TO_FEED_ID[id] || id;
+
   let podcastTitle: string;
   try {
     podcastTitle = decodeURIComponent(id);
@@ -83,7 +95,7 @@ export default async function PodcastDetailPage({ params }: { params: Promise<{ 
 
   return (
     <AppLayout>
-      <AlbumDetailClient albumTitle={podcastTitle} albumId={id} initialAlbum={null} />
+      <AlbumDetailClient albumTitle={podcastTitle} albumId={feedId} initialAlbum={null} />
     </AppLayout>
   );
 }

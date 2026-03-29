@@ -183,7 +183,23 @@ export async function fetchChapters(
       headers: { 'User-Agent': 'StableKraft/1.0' },
       signal: AbortSignal.timeout(10000),
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      // If reflex proxy fails, try extracting the direct URL from the proxy path
+      // Format: https://reflex.livewire.io/chapters/.../chapters/https://actual-url.json
+      const directUrlMatch = chaptersUrl.match(/\/chapters\/(https?:\/\/.+)$/);
+      if (directUrlMatch) {
+        console.log(`🔄 Reflex proxy failed, trying direct chapters URL`);
+        const directResponse = await fetch(directUrlMatch[1], {
+          headers: { 'User-Agent': 'StableKraft/1.0' },
+          signal: AbortSignal.timeout(10000),
+        });
+        if (directResponse.ok) {
+          const data = await directResponse.json();
+          return parseChaptersJSON(data);
+        }
+      }
+      return null;
+    }
 
     const data = await response.json();
     return parseChaptersJSON(data);

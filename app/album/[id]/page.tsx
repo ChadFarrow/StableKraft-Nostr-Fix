@@ -248,15 +248,13 @@ export default async function AlbumDetailPage({ params }: { params: Promise<{ id
   }
 
   // Redirect podcast feeds to /podcast/ URL
-  const { PODCAST_SLUGS, PODCAST_SLUG_REDIRECTS } = await import('@/lib/podcast-feeds');
+  const { PODCAST_SLUGS, PODCAST_CANONICAL_SLUGS } = await import('@/lib/podcast-feeds');
   const lowerSlug = id.toLowerCase();
   if (PODCAST_SLUGS.includes(lowerSlug)) {
     const { redirect } = await import('next/navigation');
-    redirect(`/podcast/${id}`);
-  }
-  if (PODCAST_SLUG_REDIRECTS[lowerSlug]) {
-    const { redirect } = await import('next/navigation');
-    redirect(`/podcast/${PODCAST_SLUG_REDIRECTS[lowerSlug]}`);
+    // Use canonical slug if available
+    const canonicalSlug = PODCAST_CANONICAL_SLUGS[lowerSlug] || lowerSlug;
+    redirect(`/podcast/${canonicalSlug}`);
   }
 
   // Handle both URL-encoded and slug formats
