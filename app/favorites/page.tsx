@@ -768,6 +768,9 @@ function FavoritesPageContent() {
           id: track.id,
           trackNumber: index + 1,
           artist: track.artist || track.Feed?.artist || undefined,
+          v4vRecipient: track.v4vRecipient || track.Feed?.v4vRecipient || undefined,
+          v4vValue: track.v4vValue || track.Feed?.v4vValue || undefined,
+          guid: track.guid || undefined,
         })),
       link: '',
       feedUrl: ''
@@ -807,9 +810,16 @@ function FavoritesPageContent() {
           duration: track.duration ? `${Math.floor(track.duration / 60)}:${String(track.duration % 60).padStart(2, '0')}` : '0:00',
           image: track.image || track.Feed?.image || '',
           id: track.id,
+          v4vRecipient: track.v4vRecipient || track.Feed?.v4vRecipient || undefined,
+          v4vValue: track.v4vValue || track.Feed?.v4vValue || undefined,
+          guid: track.guid || undefined,
         }],
         link: '',
-        feedUrl: ''
+        feedUrl: track.Feed?.originalUrl || '',
+        feedId: track.Feed?.id,
+        feedGuid: (track.Feed as any)?.guid || undefined,
+        v4vRecipient: track.Feed?.v4vRecipient || track.v4vRecipient || undefined,
+        v4vValue: track.Feed?.v4vValue || track.v4vValue || undefined,
       };
 
       const success = await globalPlayAlbum(singleTrackAlbum, 0);
