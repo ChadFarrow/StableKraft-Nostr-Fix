@@ -293,13 +293,12 @@ export default function MusicTrackDetail({
             <div className="mt-4 pt-3 border-t border-green-500/20">
               <BoostButton
                 trackId={track.id}
-                feedId={track.feedUrl}
+                feedUrl={track.feedUrl}
                 trackTitle={track.title}
                 artistName={track.artist}
                 remoteFeedGuid={track.valueForValue?.feedGuid}
                 episodeGuid={track.valueForValue?.itemGuid}
                 lightningAddress={track.valueForValue?.lightningAddress}
-                albumName={track.episodeTitle}
                 className="w-full"
               />
             </div>
