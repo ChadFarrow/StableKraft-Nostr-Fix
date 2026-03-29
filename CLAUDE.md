@@ -150,6 +150,20 @@ VTS podcasts embed `<podcast:valueTimeSplit>` segments that map time ranges to d
 
 **VTS remoteItem interface** (`lib/podcast-types.ts`): includes `feedGuid`, `itemGuid`, `medium` fields.
 
+### AutoBoost (`contexts/AudioContext.tsx`)
+Two auto-boost paths, gated by `autoBoostEnabled` setting and `autoBoostProcessingRef` mutex:
+
+- **`triggerAutoBoost`** — fires on track end for non-VTS tracks. Falls back from track-level to album-level V4V data.
+- **`triggerChapterAutoBoost`** — fires on VTS segment transitions. Fetches remote artist V4V via `/api/lightning/value-splits`, scales by `remotePercentage`, blends in show-host recipients for the remainder. Non-music chapters (no `remoteItem`) use show-level V4V only. If `album.v4vValue` is empty, fetches show-level data from the API via `feedGuid`.
+
+**VTS gap tracking** (`inVtsGapRef`): VTS episodes have gaps between music segments (talk/intro/outro chapters). When playback exits a music segment into a gap, the music segment is boosted and the gap is recorded. When playback re-enters a music segment, the outgoing talk chapter is boosted with show-level V4V. On track end in a gap, `handleEnded` boosts the outgoing talk chapter.
+
+**iOS foreground recovery**: `visibilitychange`/`pageshow` handlers detect missed VTS transitions while backgrounded and sequentially boost all skipped segments.
+
+**Track-end VTS skip**: `handleEnded` skips `triggerAutoBoost` for VTS tracks (per-chapter boost handles each segment). Exception: VTS tracks ending in a gap — `handleEnded` boosts the final talk chapter via `triggerChapterAutoBoostRef`.
+
+**Manual seek suppression** (`isManualSeekRef`): Autoboost only fires on natural playback transitions. Manual seeks (chapter skip buttons, progress bar, lockscreen seek) set `isManualSeekRef` which suppresses the boost but still updates VTS tracking refs so the next natural transition works correctly.
+
 ### BoostButton V4V Display (`components/Lightning/BoostButton.tsx`)
 When VTS blending produces both song and show recipients, BoostButton shows **Song/Show section headers** with recipients sorted track-first. Percentages are normalized to sum to 100% within the displayed split list. `isHost` prop on value splits controls grouping.
 

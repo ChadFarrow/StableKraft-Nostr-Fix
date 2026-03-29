@@ -61,19 +61,24 @@ export default function PublisherDetailClient({ publisherId, initialData }: Publ
         ? album.tracks.map((track: any) => {
             const formatDuration = (dur: string | number | null | undefined): string => {
               if (!dur) return '0:00';
+              const formatSecs = (totalSecs: number): string => {
+                const h = Math.floor(totalSecs / 3600);
+                const m = Math.floor((totalSecs % 3600) / 60);
+                const s = Math.floor(totalSecs % 60);
+                if (h > 0) {
+                  return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+                }
+                return `${m}:${s.toString().padStart(2, '0')}`;
+              };
               if (typeof dur === 'number') {
-                const mins = Math.floor(dur / 60);
-                const secs = Math.floor(dur % 60);
-                return `${mins}:${secs.toString().padStart(2, '0')}`;
+                return formatSecs(dur);
               }
               if (typeof dur === 'string' && dur.includes(':')) {
                 return dur;
               }
               const num = parseFloat(String(dur));
               if (!isNaN(num)) {
-                const mins = Math.floor(num / 60);
-                const secs = Math.floor(num % 60);
-                return `${mins}:${secs.toString().padStart(2, '0')}`;
+                return formatSecs(num);
               }
               return '0:00';
             };

@@ -173,6 +173,10 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   const prevVtsSegmentRef = useRef<{ index: number; feedGuid?: string; itemGuid?: string; remotePercentage: number } | null>(null);
   // Track which track the VTS detection is monitoring so we can reset on track change
   const prevVtsTrackKeyRef = useRef<string>('');
+  // Track when playback is in a gap between VTS segments (for boosting talk chapters)
+  const inVtsGapRef = useRef<{ enteredAt: number } | null>(null);
+  // Suppress autoboost on manual seeks/chapter skips (only natural playback triggers boosts)
+  const isManualSeekRef = useRef(false);
 
   // Helper function to publish NIP-38 status (debounced)
   const publishNip38StatusDebounced = useCallback((action: 'play') => {
@@ -373,9 +377,11 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         toast.success(`Auto-boost: ${amount} sats ⚡`);
       } else {
         console.warn(`⚠️ Auto-boost failed: ${result?.error || 'Unknown error'}`);
+        toast.error('Auto-boost failed');
       }
     } catch (error) {
       console.error('❌ Auto-boost error:', error);
+      toast.error('Auto-boost failed');
     } finally {
       autoBoostProcessingRef.current = false;
     }
@@ -444,7 +450,29 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
           // If remotePercentage < 100, blend in the podcast host's (feed-level) recipients
           if (remotePercentage < 100) {
             const hostPercentage = 100 - remotePercentage;
-            const hostSplits = formatValueSplitsForBoost(album, album.artist) || [];
+            let hostSplits = formatValueSplitsForBoost(album, album.artist) || [];
+
+            // If album object doesn't have V4V data, fetch from API
+            if (hostSplits.length === 0 && album.feedGuid) {
+              try {
+                const feedParams = new URLSearchParams({ feedGuid: album.feedGuid });
+                const feedRes = await fetch(`/api/lightning/value-splits?${feedParams}`);
+                const feedData = await feedRes.json();
+                if (feedData.success && feedData.data?.recipients?.length > 0) {
+                  hostSplits = feedData.data.recipients
+                    .filter((r: any) => !r.fee)
+                    .map((r: any) => ({
+                      name: r.name || album.artist || 'Unknown',
+                      address: r.address,
+                      split: parseInt(r.split) || 100,
+                      type: (r.type || 'node') as 'node' | 'lnaddress',
+                    }));
+                }
+              } catch (fetchError) {
+                console.warn('⚠️ Failed to fetch host V4V for chapter blending:', fetchError);
+              }
+            }
+
             const totalHostSplits = hostSplits.reduce((sum, r) => sum + r.split, 0);
             if (totalHostSplits > 0) {
               const scaledHost = hostSplits.map(r => ({
@@ -461,7 +489,28 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
 
       // Non-song chapter or remote fetch returned nothing: use show-level recipients
       if (blended.length === 0) {
-        const hostSplits = formatValueSplitsForBoost(album, album.artist) || [];
+        let hostSplits = formatValueSplitsForBoost(album, album.artist) || [];
+
+        // If album object doesn't have V4V data loaded, fetch from API using the feed's own GUID
+        if (hostSplits.length === 0 && album.feedGuid) {
+          try {
+            const feedParams = new URLSearchParams({ feedGuid: album.feedGuid });
+            const feedRes = await fetch(`/api/lightning/value-splits?${feedParams}`);
+            const feedData = await feedRes.json();
+            if (feedData.success && feedData.data?.recipients?.length > 0) {
+              const feedRecipients = feedData.data.recipients.filter((r: any) => !r.fee);
+              hostSplits = feedRecipients.map((r: any) => ({
+                name: r.name || album.artist || 'Unknown',
+                address: r.address,
+                split: parseInt(r.split) || 100,
+                type: (r.type || 'node') as 'node' | 'lnaddress',
+              }));
+            }
+          } catch (fetchError) {
+            console.warn('⚠️ Failed to fetch show-level V4V for chapter auto-boost:', fetchError);
+          }
+        }
+
         if (hostSplits.length === 0) {
           console.log('⚡ Chapter auto-boost skipped: no V4V recipients for segment or show');
           return;
@@ -568,19 +617,28 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         toast.success(`Auto-boost: ${amount} sats for ${artistName} ⚡`);
       } else {
         console.warn(`⚠️ Chapter auto-boost failed: ${multiResult.errors.join(', ')}`);
+        toast.error('Auto-boost failed');
       }
     } catch (error) {
       console.error('❌ Chapter auto-boost error:', error);
+      toast.error('Auto-boost failed');
     } finally {
       autoBoostProcessingRef.current = false;
     }
   }, [isWalletConnected, sendPayment, sendKeysend, supportsKeysend, settings.defaultBoostName]);
+
+  // Store chapter auto-boost function in ref for use in event handlers (handleEnded)
+  const triggerChapterAutoBoostRef = useRef(triggerChapterAutoBoost);
+  useEffect(() => {
+    triggerChapterAutoBoostRef.current = triggerChapterAutoBoost;
+  }, [triggerChapterAutoBoost]);
 
   // Detect VTS segment transitions and trigger chapter auto-boost for the outgoing segment
   useEffect(() => {
     if (!currentPlayingAlbum || currentTrackIndex < 0) {
       prevVtsSegmentRef.current = null;
       prevVtsTrackKeyRef.current = '';
+      inVtsGapRef.current = null;
       return;
     }
 
@@ -589,6 +647,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     if (!splits || !Array.isArray(splits) || splits.length === 0) {
       prevVtsSegmentRef.current = null;
       prevVtsTrackKeyRef.current = '';
+      inVtsGapRef.current = null;
       return;
     }
 
@@ -598,6 +657,13 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     if (trackKey !== prevVtsTrackKeyRef.current) {
       prevVtsSegmentRef.current = null;
       prevVtsTrackKeyRef.current = trackKey;
+      // If playback starts before the first VTS segment, mark as initial gap
+      // so the pre-music chapter (e.g., Intro) gets boosted when the first segment begins
+      if (splits.length > 0 && currentTime < splits[0].startTime) {
+        inVtsGapRef.current = { enteredAt: currentTime };
+      } else {
+        inVtsGapRef.current = null;
+      }
     }
 
     // Find active VTS segment based on current playback position (track ALL segments, not just those with remoteItem)
@@ -617,32 +683,16 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
 
     const prev = prevVtsSegmentRef.current;
 
-    // Detect segment change by index (covers both song and non-song chapters)
-    if (prev && activeSegment && prev.index !== activeSegment.index) {
-      const { enabled, amount } = autoBoostSettingsRef.current;
-      if (enabled) {
-        // Find chapter title for the outgoing segment (best-effort)
-        const prevSplit = splits[prev.index];
-        const outgoingChapterTitle = chapters.find(ch => {
-          const chEnd = ch.endTime ?? Infinity;
-          return prevSplit && prevSplit.startTime >= ch.startTime && prevSplit.startTime < chEnd;
-        })?.title;
-
-        // Fire and forget — don't block playback
-        triggerChapterAutoBoost(
-          prev.feedGuid || '', prev.itemGuid || '',
-          currentPlayingAlbum, amount || 50, prev.remotePercentage, outgoingChapterTitle
-        );
-      }
+    // Suppress autoboost on manual seeks (chapter skip, progress bar, etc.)
+    // but still update tracking refs so the next natural transition works correctly
+    const isManualSeek = isManualSeekRef.current;
+    if (isManualSeek) {
+      isManualSeekRef.current = false;
     }
 
-    // Detect when playback moves past the last VTS segment — boost the final chapter
-    // Without this, the last segment only gets the track-end autoboost (which uses
-    // show-level V4V data instead of the VTS-blended per-song data)
-    if (!activeSegment && prev) {
-      const lastSplit = splits[splits.length - 1];
-      const lastSplitEnd = lastSplit.startTime + lastSplit.duration;
-      if (currentTime >= lastSplitEnd) {
+    // Detect segment change by index (covers both song and non-song chapters)
+    if (prev && activeSegment && prev.index !== activeSegment.index) {
+      if (!isManualSeek) {
         const { enabled, amount } = autoBoostSettingsRef.current;
         if (enabled) {
           const prevSplit = splits[prev.index];
@@ -651,14 +701,64 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
             return prevSplit && prevSplit.startTime >= ch.startTime && prevSplit.startTime < chEnd;
           })?.title;
 
+          // Fire and forget — don't block playback
           triggerChapterAutoBoost(
             prev.feedGuid || '', prev.itemGuid || '',
             currentPlayingAlbum, amount || 50, prev.remotePercentage, outgoingChapterTitle
           );
         }
-        // Clear prev so we don't re-trigger on subsequent timeupdate events
-        prevVtsSegmentRef.current = null;
       }
+    }
+
+    // Detect when playback exits a VTS segment into a gap (between segments or past the last one).
+    // Boost the outgoing music segment and mark that we're in a gap.
+    if (!activeSegment && prev) {
+      const prevSplit = splits[prev.index];
+      const prevSplitEnd = prevSplit.startTime + prevSplit.duration;
+      if (currentTime >= prevSplitEnd) {
+        if (!isManualSeek) {
+          const { enabled, amount } = autoBoostSettingsRef.current;
+          if (enabled) {
+            const outgoingChapterTitle = chapters.find(ch => {
+              const chEnd = ch.endTime ?? Infinity;
+              return prevSplit && prevSplit.startTime >= ch.startTime && prevSplit.startTime < chEnd;
+            })?.title;
+
+            triggerChapterAutoBoost(
+              prev.feedGuid || '', prev.itemGuid || '',
+              currentPlayingAlbum, amount || 50, prev.remotePercentage, outgoingChapterTitle
+            );
+          }
+        }
+        // Always update tracking refs regardless of manual seek
+        prevVtsSegmentRef.current = null;
+        inVtsGapRef.current = { enteredAt: currentTime };
+      }
+    }
+
+    // Detect when playback re-enters a VTS segment from a gap — boost the outgoing talk chapter
+    if (activeSegment && !prev && inVtsGapRef.current) {
+      if (!isManualSeek) {
+        const { enabled, amount } = autoBoostSettingsRef.current;
+        if (enabled) {
+          const gapTime = inVtsGapRef.current.enteredAt;
+          const outgoingChapterTitle = chapters.find(ch => {
+            const chEnd = ch.endTime ?? Infinity;
+            return gapTime >= ch.startTime && gapTime < chEnd;
+          })?.title;
+
+          // Talk chapters have no remoteItem — send 100% to show host
+          triggerChapterAutoBoost(
+            '', '', currentPlayingAlbum, amount || 50, 0, outgoingChapterTitle
+          );
+        }
+      }
+      inVtsGapRef.current = null;
+    }
+
+    // Clear gap tracking when entering a segment (not from a gap)
+    if (activeSegment && prev) {
+      inVtsGapRef.current = null;
     }
 
     // Only update prev ref when we have a valid segment — don't clear it during
@@ -1864,17 +1964,25 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         iosAdvanceTimerRef.current = null;
       }
 
-      // Auto-boost: fire on track end for non-VTS tracks. VTS episodes use per-chapter
-      // autoboost (triggerChapterAutoBoost) instead — the last segment is boosted by the
-      // VTS detection effect when currentTime moves past it.
-      // Read from ref to get latest settings (closure may be stale).
+      // Auto-boost on track end. Read from ref to get latest settings (closure may be stale).
       const { enabled: autoBoostOn, amount: autoBoostAmt } = autoBoostSettingsRef.current;
       if (!radioMode && autoBoostOn && currentPlayingAlbum && currentTrackIndex >= 0) {
         const track = currentPlayingAlbum.tracks[currentTrackIndex];
         const hasVTS = track?.valueTimeSplits && Array.isArray(track.valueTimeSplits) && track.valueTimeSplits.length > 0;
         if (track && !hasVTS && triggerAutoBoostRef.current) {
-          // Fire and forget - don't await, don't block next track
+          // Non-VTS track: boost the track directly
           triggerAutoBoostRef.current(track, currentPlayingAlbum, autoBoostAmt || 50);
+        } else if (track && hasVTS && inVtsGapRef.current && triggerChapterAutoBoostRef.current) {
+          // VTS track ending in a talk gap: boost the outgoing talk chapter (show-level V4V)
+          const gapTime = inVtsGapRef.current.enteredAt;
+          const outgoingChapterTitle = chapters.find(ch => {
+            const chEnd = ch.endTime ?? Infinity;
+            return gapTime >= ch.startTime && gapTime < chEnd;
+          })?.title;
+          triggerChapterAutoBoostRef.current(
+            '', '', currentPlayingAlbum, autoBoostAmt || 50, 0, outgoingChapterTitle
+          );
+          inVtsGapRef.current = null;
         }
       }
 
@@ -2017,14 +2125,23 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
                   if (!trackEndProcessedRef.current) {
                     trackEndProcessedRef.current = true;
 
-                    // Trigger auto-boost for the track that just ended (non-VTS only;
-                    // VTS episodes use per-chapter autoboost via triggerChapterAutoBoost)
+                    // Trigger auto-boost for the track that just ended
                     const { enabled: autoBoostOn, amount: autoBoostAmt } = autoBoostSettingsRef.current;
                     if (!radioMode && autoBoostOn && currentPlayingAlbum && currentTrackIndex >= 0) {
                       const endedTrack = currentPlayingAlbum.tracks[currentTrackIndex];
                       const endedTrackHasVTS = endedTrack?.valueTimeSplits && Array.isArray(endedTrack.valueTimeSplits) && endedTrack.valueTimeSplits.length > 0;
                       if (endedTrack && !endedTrackHasVTS && triggerAutoBoostRef.current) {
                         triggerAutoBoostRef.current(endedTrack, currentPlayingAlbum, autoBoostAmt || 50);
+                      } else if (endedTrack && endedTrackHasVTS && inVtsGapRef.current && triggerChapterAutoBoostRef.current) {
+                        const gapTime = inVtsGapRef.current.enteredAt;
+                        const outgoingChapterTitle = chapters.find(ch => {
+                          const chEnd = ch.endTime ?? Infinity;
+                          return gapTime >= ch.startTime && gapTime < chEnd;
+                        })?.title;
+                        triggerChapterAutoBoostRef.current(
+                          '', '', currentPlayingAlbum, autoBoostAmt || 50, 0, outgoingChapterTitle
+                        );
+                        inVtsGapRef.current = null;
                       }
                     }
 
@@ -2929,6 +3046,8 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   const seek = (time: number) => {
     const currentElement = isVideoMode ? videoRef.current : audioRef.current;
     if (currentElement && duration) {
+      // Mark as manual seek so VTS detection doesn't trigger autoboost
+      isManualSeekRef.current = true;
       // Validate time value
       const validTime = Math.max(0, Math.min(time, duration));
       

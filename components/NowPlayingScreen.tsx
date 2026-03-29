@@ -90,13 +90,14 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
       return;
     }
 
+    const controller = new AbortController();
     const { feedGuid, itemGuid } = activeVTS.remoteItem;
     const remotePercentage = activeVTS.remotePercentage ?? 100;
 
     const chapterTitle = chapters[currentChapterIndex]?.title || '';
     const params = new URLSearchParams({ feedGuid, itemGuid });
     if (chapterTitle) params.set('chapterTitle', chapterTitle);
-    fetch(`/api/lightning/value-splits?${params}`)
+    fetch(`/api/lightning/value-splits?${params}`, { signal: controller.signal })
       .then(res => res.json())
       .then(data => {
         if (data.success && data.data?.recipients?.length > 0) {
@@ -159,7 +160,11 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
           setVtsV4vData(null);
         }
       })
-      .catch(() => setVtsV4vData(null));
+      .catch((err) => {
+        if (err.name !== 'AbortError') setVtsV4vData(null);
+      });
+
+    return () => controller.abort();
   }, [activeVTS?.remoteItem?.feedGuid, activeVTS?.remoteItem?.itemGuid, activeVTS?.remotePercentage, currentPlayingAlbum, currentTrackIndex]);
 
   // Use isFullscreenMode from AudioContext if isOpen prop is not provided
@@ -379,8 +384,12 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
   };
 
   const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
+    if (hours > 0) {
+      return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
@@ -724,22 +733,6 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
               )}
             </button>
 
-            {/* Auto-Boost Toggle */}
-            <button
-              onClick={() => updateSettings({ autoBoostEnabled: !settings.autoBoostEnabled })}
-              className="p-2 rounded-full transition-all duration-200 active:scale-95 touch-manipulation"
-              style={{
-                backgroundColor: settings.autoBoostEnabled
-                  ? '#FBBF2430'
-                  : `${contrastColors.textColor}10`,
-                color: settings.autoBoostEnabled
-                  ? '#FBBF24'
-                  : `${contrastColors.textColor}60`
-              }}
-              title={settings.autoBoostEnabled ? 'Disable auto-boost' : 'Enable auto-boost'}
-            >
-              <Zap className="w-5 h-5" fill={settings.autoBoostEnabled ? '#FBBF24' : 'none'} />
-            </button>
           </div>
         </div>
       </div>

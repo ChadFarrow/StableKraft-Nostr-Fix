@@ -268,56 +268,60 @@ export default function AlbumDetailClient({ albumTitle, albumId, initialAlbum, e
     }
   };
 
+  const formatSecondsToDisplay = (totalSeconds: number): string => {
+    const hours = Math.floor(totalSeconds / 3600);
+    const mins = Math.floor((totalSeconds % 3600) / 60);
+    const secs = Math.floor(totalSeconds % 60);
+    if (hours > 0) {
+      return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const formatDuration = (duration: string): string => {
     if (!duration || duration.trim() === '') return '0:00';
-    
+
     const durationStr = duration.trim();
-    
+
     // Handle edge cases first
     if (durationStr === 'NaN' || durationStr === 'undefined' || durationStr === 'null') {
       return '0:00';
     }
-    
-    // If already formatted with colon, validate and return
+
+    // If already formatted with colon, validate and convert to display format
     if (durationStr.includes(':')) {
       const parts = durationStr.split(':');
       if (parts.length === 2) {
         const mins = parseInt(parts[0]);
         const secs = parseInt(parts[1]);
         if (!isNaN(mins) && !isNaN(secs) && mins >= 0 && mins < 1440 && secs >= 0 && secs < 60) {
-          return durationStr;
+          return formatSecondsToDisplay(mins * 60 + secs);
         }
       } else if (parts.length === 3) {
         const hours = parseInt(parts[0]);
         const mins = parseInt(parts[1]);
         const secs = parseInt(parts[2]);
-        if (!isNaN(hours) && !isNaN(mins) && !isNaN(secs) && 
+        if (!isNaN(hours) && !isNaN(mins) && !isNaN(secs) &&
             hours >= 0 && hours < 24 && mins >= 0 && mins < 60 && secs >= 0 && secs < 60) {
-          const totalMinutes = hours * 60 + mins;
-          return `${totalMinutes}:${secs.toString().padStart(2, '0')}`;
+          return formatSecondsToDisplay(hours * 3600 + mins * 60 + secs);
         }
       }
       // Invalid colon format, fall through to seconds parsing
     }
-    
-    // If it's just seconds, convert to MM:SS format
+
+    // If it's just seconds, convert to display format
     const seconds = parseInt(durationStr);
     if (!isNaN(seconds) && seconds >= 0 && seconds < 86400) { // Max 24 hours
-      const mins = Math.floor(seconds / 60);
-      const secs = seconds % 60;
-      return `${mins}:${secs.toString().padStart(2, '0')}`;
+      return formatSecondsToDisplay(seconds);
     }
-    
+
     // If all else fails, return default
     return '0:00';
   };
 
   const formatTime = (time: number): string => {
     if (isNaN(time) || time < 0) return '0:00';
-    
-    const mins = Math.floor(time / 60);
-    const secs = Math.floor(time % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+    return formatSecondsToDisplay(time);
   };
 
   const calculateTotalDuration = (tracks: any[]): string => {

@@ -1,12 +1,16 @@
 /**
- * Format seconds into MM:SS format
+ * Format seconds into MM:SS or H:MM:SS format
  */
 export const formatTime = (seconds: number): string => {
   if (isNaN(seconds) || seconds < 0 || seconds > 86400) return '0:00'; // Max 24 hours
-  
-  const minutes = Math.floor(seconds / 60);
+
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
   const remainingSeconds = Math.floor(seconds % 60);
-  
+
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+  }
   return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
 };
 
