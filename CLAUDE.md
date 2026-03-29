@@ -28,24 +28,18 @@ git push origin main # Deploy to production (Railway auto-deploys from git)
 - **stablekraft-app** (this repo) - Consumes and displays playlists
 
 ### Daily Workflow (`.github/workflows/refresh-playlists.yml`)
-Runs at 4 AM EST: clears cache -> reparses feeds -> refreshes playlists -> parses publishers -> imports missing albums from publisher feeds (Step 5b via PI API)
+Runs at 4 AM EST: clears cache -> reparses feeds -> refreshes playlists -> parses publishers -> imports missing albums from publisher feeds (Step 5b via PI API). The `PLAYLISTS` array must include ALL playlist IDs — missing ones won't get nightly processing.
 
 ## Key Behaviors
 
 ### Playlist Resolution
-Playlists use `<podcast:remoteItem>` with `feedGuid` + `itemGuid`. On `?refresh`: discover missing Feed records via PI API → parse new feeds → discover/link publisher feeds → resolve tracks. Resolution rate ~80-90%.
-
-**Feed discovery on refresh** (`lib/playlist/handler.ts`): always runs `processPlaylistFeedDiscovery` for all feedGuids, not just unresolved tracks. Tracks can resolve via Track GUIDs even when parent Feed records don't exist as browsable albums — discovery must check Feed existence independently.
-
-**Publisher discovery** (`lib/feed-discovery.ts`): checks album XML for publisher tags (`parsePublisherFeedFromXML`), falls back to PI API search by artist name. Deduplicates PI API calls per-artist.
-
-**Publisher album import** (`POST /api/admin/publishers/import-albums`): uses PI API `/search/byterm` + `/episodes/byfeedid`. No direct Wavlake XML fetching (avoids 429s). Deduplicates per-artist.
+Playlists use `<podcast:remoteItem>` with `feedGuid` + `itemGuid`. On `?refresh`: discover feeds via PI API → parse → discover publishers → resolve tracks. Resolution rate ~80-90%.
 
 **Feed deduplication pattern**: multi-check dedup (normalized URL, raw URL, feedGuid as ID, feedGuid as GUID column, feedGuid-in-URL substring, then secondary `podcastGuid` check). New feeds get slug-based IDs via `generateAlbumSlug`. When modifying feed import code, follow this pattern — weak dedup causes duplicate entries.
 
 **Type filter gotcha**: Wavlake feeds often get `type: 'podcast'`. All DB queries for album/music content must include `'podcast'` in the type filter: `type: { in: ['album', 'music', 'podcast'] }`.
 
-**PI API status gotcha**: `normalizeFeedResponse` in `lib/podcast-index-api.ts` must accept both `status: 'true'` (string) and `status: true` (boolean) — the PI API returns either. Use `data.status !== 'true' && data.status !== true` for rejection checks. The `=== 'true'` checks elsewhere are safe (boolean `true` is truthy in `&&` chains).
+**PI API status gotcha**: `normalizeFeedResponse` in `lib/podcast-index-api.ts` must accept both `status: 'true'` (string) and `status: true` (boolean). Use `data.status !== 'true' && data.status !== true` for rejection checks.
 
 **Podroll exclusion**: `process-remote-items/route.ts` strips `<podcast:podroll>` sections before extracting `<podcast:remoteItem>` tags. Without this, podroll-referenced feeds get imported as albums.
 
@@ -72,30 +66,13 @@ Matched by: title slug, artist slug, or URL path. Multi-feed support with per-pl
 Tracks over 2 hours filtered as non-music (silent, no warnings)
 
 ### NIP-46 Remote Signer (Amber / Primal)
-Key files: `lib/nostr/nip46-client.ts`, `components/Nostr/hooks/useNip46Connection.ts`. iOS Safari kills WebSocket connections after ~30s backgrounded; reconnects on `visibilitychange` (iOS 15s threshold, others 60s). **Primal is the best iOS signer** — auto-signs with Full trust, responds <1s.
+Key files: `lib/nostr/nip46-client.ts`, `components/Nostr/hooks/useNip46Connection.ts`. iOS Safari kills WebSocket connections after ~30s backgrounded; reconnects on `visibilitychange`. **Primal is the best iOS signer** — auto-signs with Full trust, responds <1s. Performance optimizations (adaptive rate limiting, pre-decrypted content, smart subscription filters, keypair cache) are gated behind `localStorage.setItem('nip46_debug', 'true')` for debug logging.
 
-Performance optimizations in `nip46-client.ts`:
-- **Debug logging** gated behind `localStorage.setItem('nip46_debug', 'true')` — zero `console.log` in production, `console.error`/`console.warn` preserved
-- **Adaptive rate limiting** (500ms–2000ms) based on actual signer response times instead of fixed 2s
-- **Pre-decrypted content** passed to `handleRelayEvent` to avoid double NIP-44 decryption
-- **Smart subscription filters** with `authors: [signerPubkey]` when known, broad filter only during QR scan
-- **Subscription delays** reduced to 500ms (non-bunker) / 1s (bunker), was 2s
-- **Lightweight reconnection** checks `getConnectedRelays()` before full teardown
-- **Orphaned request cleanup** every 60s removes requests older than 120s
-- **Keypair cache** (`lastSuccessfulKeyPairIndex`) avoids linear search through historical keypairs
-
-### iOS PWA Background Audio
-Three-layer strategy in `contexts/AudioContext.tsx`:
-1. **Preload** at 15s before end — hidden `Audio` element + `prefetchAudio()` warm cache
-2. **Proactive timer** at 5s before end — `setTimeout` fires ~200ms after expected end
-3. **Visibility change safety net** — `playNextTrack` on foreground if audio ended
-
-`trackEndProcessedRef` prevents double-advance. **Critical**: do not auto-resume if user explicitly paused — check both "was playing" and "user paused" state.
+### iOS PWA Background Audio (`contexts/AudioContext.tsx`)
+Three-layer strategy: (1) preload at 15s before end, (2) proactive timer at 5s before end, (3) visibility change safety net. `trackEndProcessedRef` prevents double-advance. **Critical**: do not auto-resume if user explicitly paused.
 
 ### Sorting
-`/api/albums-fast` accepts `sort` param (`added-desc`, `added-asc`, `year-desc`, `year-asc`, `name-asc`, `name-desc`, `tracks-desc`, `tracks-asc`). Sort applied before pagination. **Do NOT send `sort=name-asc` as default** — it bypasses format grouping (Albums → EPs → Singles).
-
-Date fields: `Feed.oldestItemPubdate` = album release date, `Feed.createdAt` = when added to site. Backfill: `POST /api/admin/backfill-oldest-pubdate`.
+`/api/albums-fast` accepts `sort` param (`added-desc`, `added-asc`, `year-desc`, `year-asc`, `name-asc`, `name-desc`, `tracks-desc`, `tracks-asc`). **Do NOT send `sort=name-asc` as default** — it bypasses format grouping (Albums → EPs → Singles). Date fields: `Feed.oldestItemPubdate` = release date, `Feed.createdAt` = when added.
 
 ### Adding New Playlists
 Files to modify (9 total):
@@ -105,23 +82,17 @@ Files to modify (9 total):
 4. `lib/playlist-track-counts.ts` - `FALLBACK_COUNTS` and `PLAYLIST_URLS`
 5. `app/api/playlists-fast/route.ts` - Playlist summary
 6. `app/page.tsx` - Fallback `Promise.allSettled` array
-7. `app/playlist/[id]/page.tsx` - Dedicated page
+7. `app/playlist/[id]/page.tsx` - Dedicated page (`PlaylistTemplateCompact`)
 8. `app/favorites/page.tsx` - `playlistTitles`, `playlistImageFallbacks`, `playlistSlugOverrides`
 9. `.github/workflows/refresh-playlists.yml` - Add to `PLAYLISTS` array
 
-Populate: `curl https://stablekraft.app/api/playlist/[id]?refresh` — this discovers missing Feed records, parses them, discovers publishers, and resolves tracks.
-
-### Playlist Page UI
-All pages use `PlaylistTemplateCompact`. Back button → `/?filter=playlist`. Grouped view: `EpisodeSection.tsx`. Track rows: `bg-black/50` over `bg-black/75` panel.
+Populate: `curl https://stablekraft.app/api/playlist/[id]?refresh`
 
 ### Nostr Publish Queue & Relay Management
 Favoriting saves to DB immediately, queues Nostr publish (500ms debounce). **Always call `disconnectAll()`** after publishing or WebSocket connections leak. Key files: `lib/nostr/publish-queue.ts`, `lib/nostr/relay.ts`.
 
 ### Favorites Page (`/favorites`)
-Optimistic unfavorite, auto-sync on page load. **Playlist favorites gotcha**: `isPlaylist()` and `playlistImageFallbacks` must use **lowercased feedId**, not the human name. `playlistSlugOverrides` handles ID-to-slug mismatches.
-
-### Nostr Playlist Publishing
-Kind 34139 addressable event (`d` tag = `stablekraft-favorites`). Re-publishing replaces previous version. Key files: `lib/nostr/playlist-events.ts`, `components/favorites/PublishPlaylistButton.tsx`.
+Optimistic unfavorite, auto-sync on page load. **Playlist favorites gotcha**: `isPlaylist()` and `playlistImageFallbacks` must use **lowercased feedId**, not the human name. `playlistSlugOverrides` handles ID-to-slug mismatches. Nostr playlist publishing: Kind 34139 addressable event (`d` tag = `stablekraft-favorites`).
 
 ### Favorite Publishers Resolution (`app/api/favorites/albums/route.ts`)
 Three feedId formats: synthetic artist IDs (`artist-adam-curry`), feed GUIDs, feed IDs. Image chain: DB → PI API → album feed image by artist name.
@@ -132,54 +103,26 @@ Uses `window.history.length`. Do NOT use `document.referrer` — doesn't update 
 ### Lightning Wallet Detection
 Keysend inferred from provider type (`hasKeysendMethod && type !== 'unknown'`). Do NOT probe with real keysend — triggers payment popup. Alby extension detection: `detectWalletProviderType()` in `lib/lightning/wallet-detection.ts`.
 
-### BoostBox Integration (`lib/lightning/boostbox.ts`)
-LNURL payments use [BoostBox](https://tardbox.com) for Podcasting 2.0 boost metadata. Keysend unaffected (uses Helipad TLV). Graceful degradation if unreachable. Client-only — always uses `/api/lightning/boostbox` proxy (API key via `BOOSTBOX_API_KEY` env var). Feature flag: `LIGHTNING_CONFIG.features.boostbox`.
+### BoostBox & Helipad (`lib/lightning/boostbox.ts`)
+LNURL payments use [BoostBox](https://tardbox.com) for Podcasting 2.0 boost metadata. Keysend unaffected (uses Helipad TLV). Client-only — always uses `/api/lightning/boostbox` proxy (API key via `BOOSTBOX_API_KEY` env var). Value splits try keysend first; BoostBox called only for LNURL fallback. Fountain.fm addresses skip keysend by design (`isFountain` check).
 
-- Source: https://github.com/ChadFarrow/boostbox
-- `requestInvoice()` truncates comments exceeding `commentAllowed` limit — preserves BoostBox URL at start
+**Feed.guid gotcha**: `feed_guid` in BoostBox comes from `Feed.guid` in DB. If null, reparse the feed.
 
-**BoostBox vs keysend**: Value splits try keysend first. BoostBox called only for LNURL fallback. Fountain.fm addresses skip keysend by design (`isFountain` check).
-
-**Feed.guid gotcha**: `feed_guid` in BoostBox comes from `Feed.guid` in DB. If null, reparse the feed. Written during import from `<podcast:guid>` tag.
-
-**BoostBox → Helipad flow**: LNURL boost comment contains `rss::payment::boost https://tardbox.com/boost/<id> <message>`. Helipad sends HEAD to that URL, reads `x-rss-payment` header (URL-encoded JSON metadata). BoostBox serves both GET and HEAD on `/boost/:id`. Helipad's `metadata.rs` regex must include `tardbox.com` — upstream PR: [Podcastindex-org/helipad#148](https://github.com/Podcastindex-org/helipad/pull/148).
-
-### VTS (Value Time Splits) Playback (`components/NowPlayingScreen.tsx`)
-VTS podcasts embed `<podcast:valueTimeSplit>` segments that map time ranges to different tracks/artists. `NowPlayingScreen` resolves the active VTS segment based on current playback position and uses it for:
-
-- **Chapter tick marks** on the progress bar — thin white lines at each VTS/chapter boundary
-- **Per-song favoriting** — uses VTS `remoteItem` (feedGuid + itemGuid) to favorite the current segment's track, not the parent episode
-- **V4V blending** — VTS `remotePercentage` splits payment between song recipients and show-level recipients, deduped by Lightning address. `isHost` flag distinguishes show vs song recipients.
-- **GUID collision detection** — `chapterTitle` param sent to `/api/lightning/value-splits` validates DB matches against chapter context. If track title/artist don't appear in chapter title, the match is discarded and PI API fallback used.
-
-**VTS extraction** (`lib/rss-parser-db.ts`): `applyParsedItemFields` helper applies chapters, VTS, and other parsed fields to track upsert data. `refresh-by-url/route.ts` passes these fields through.
-
-**VTS remoteItem interface** (`lib/podcast-types.ts`): includes `feedGuid`, `itemGuid`, `medium` fields.
-
-### AutoBoost (`contexts/AudioContext.tsx`)
-Two auto-boost paths, gated by `autoBoostEnabled` setting and `autoBoostProcessingRef` mutex:
-
-- **`triggerAutoBoost`** — fires on track end for non-VTS tracks. Falls back from track-level to album-level V4V data.
-- **`triggerChapterAutoBoost`** — fires on VTS segment transitions. Fetches remote artist V4V via `/api/lightning/value-splits`, scales by `remotePercentage`, blends in show-host recipients for the remainder. Non-music chapters (no `remoteItem`) use show-level V4V only. If `album.v4vValue` is empty, fetches show-level data from the API via `feedGuid`.
-
-**VTS gap tracking** (`inVtsGapRef`): VTS episodes have gaps between music segments (talk/intro/outro chapters). When playback exits a music segment into a gap, the music segment is boosted and the gap is recorded. When playback re-enters a music segment, the outgoing talk chapter is boosted with show-level V4V. On track end in a gap, `handleEnded` boosts the outgoing talk chapter.
-
-**iOS foreground recovery**: `visibilitychange`/`pageshow` handlers detect missed VTS transitions while backgrounded and sequentially boost all skipped segments.
-
-**Track-end VTS skip**: `handleEnded` skips `triggerAutoBoost` for VTS tracks (per-chapter boost handles each segment). Exception: VTS tracks ending in a gap — `handleEnded` boosts the final talk chapter via `triggerChapterAutoBoostRef`.
-
-**Manual seek suppression** (`isManualSeekRef`): Autoboost only fires on natural playback transitions. Manual seeks (chapter skip buttons, progress bar, lockscreen seek) set `isManualSeekRef` which suppresses the boost but still updates VTS tracking refs so the next natural transition works correctly.
-
-### BoostButton V4V Display (`components/Lightning/BoostButton.tsx`)
-When VTS blending produces both song and show recipients, BoostButton shows **Song/Show section headers** with recipients sorted track-first. Percentages are normalized to sum to 100% within the displayed split list. `isHost` prop on value splits controls grouping.
-
-### Helipad Metadata (`components/Lightning/BoostButton.tsx`)
-Built by `buildHelipadMetadata(amount, msg)`, BLIP-0010 spec. Single helper for all payment paths — do NOT duplicate. `name` field omitted from base; `value-splits.ts` sets it per-recipient.
+**Helipad metadata**: built by `buildHelipadMetadata(amount, msg)` in `BoostButton.tsx`, BLIP-0010 spec. Single helper for all payment paths — do NOT duplicate. `name` field omitted from base; `value-splits.ts` sets it per-recipient.
 
 **BoostButton props**: `feedUrl`, `remoteFeedGuid` (must be real GUID, never feed slug/ID), `albumName`, `publisherGuid`, `episodeGuid` (omit for album-level). Do NOT fall back to `feedId` for `remoteFeedGuid` — it's a slug, not a GUID.
 
-### Episode/Play Count Markers
-`<podcast:txt purpose="episode">` or `<podcast:txt purpose="playcount">` in XML. Parser decodes XML entities (`&apos;` `&quot;` `&amp;` etc.) via `decodeXmlEntities()` in `lib/playlist/parser.ts`. Original titles stored in `SystemPlaylistTrack.episodeTitle` column — do NOT reverse-engineer titles from episode IDs (lossy). Refresh: `curl https://stablekraft.app/api/playlist/[id]?refresh`
+### VTS (Value Time Splits) Playback (`components/NowPlayingScreen.tsx`)
+VTS podcasts embed `<podcast:valueTimeSplit>` segments that map time ranges to different tracks/artists. Features: chapter tick marks on progress bar, per-song favoriting via `remoteItem`, V4V blending (`remotePercentage` splits between song and show recipients, deduped by address, `isHost` flag for grouping). GUID collision detection via `chapterTitle` param to `/api/lightning/value-splits`. When VTS blending produces both song and show recipients, BoostButton shows **Song/Show section headers** sorted track-first.
 
-### Daily Workflow Playlists
-The `PLAYLISTS` array in `.github/workflows/refresh-playlists.yml` must include ALL playlist IDs. Missing playlists won't get nightly feed discovery, reparsing, or publisher imports.
+**VTS extraction** (`lib/rss-parser-db.ts`): `applyParsedItemFields` applies chapters, VTS, and other parsed fields to track data. **VTS remoteItem interface** (`lib/podcast-types.ts`): `feedGuid`, `itemGuid`, `medium`.
+
+### AutoBoost (`contexts/AudioContext.tsx`)
+Two paths gated by `autoBoostEnabled` setting and `autoBoostProcessingRef` mutex:
+- **`triggerAutoBoost`** — track end for non-VTS tracks. Falls back from track-level to album-level V4V.
+- **`triggerChapterAutoBoost`** — VTS segment transitions. Fetches remote V4V, scales by `remotePercentage`, blends show-host recipients. Non-music chapters use show-level V4V only. API fallback via `feedGuid` if `album.v4vValue` is empty.
+
+**Gap tracking** (`inVtsGapRef`): boosts music segments on gap entry, talk chapters on gap exit. Pre-VTS gaps (intro) tracked on track start. Track-end in a gap boosts via `triggerChapterAutoBoostRef` in `handleEnded`. **Manual seek suppression** (`isManualSeekRef`): chapter skips/progress bar don't trigger autoboost, only natural playback. **iOS foreground recovery**: `visibilitychange`/`pageshow` detect and boost missed segments.
+
+### Episode/Play Count Markers
+`<podcast:txt purpose="episode">` or `<podcast:txt purpose="playcount">` in XML. Parser decodes XML entities via `decodeXmlEntities()` in `lib/playlist/parser.ts`. Original titles stored in `SystemPlaylistTrack.episodeTitle` — do NOT reverse-engineer from episode IDs (lossy). Refresh: `curl https://stablekraft.app/api/playlist/[id]?refresh`
