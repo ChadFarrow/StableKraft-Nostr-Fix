@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { parseRSSFeedWithSegments, calculateTrackOrder, applyParsedItemFields } from '@/lib/rss-parser-db';
+import { parseRSSFeedWithSegments, calculateTrackOrder, applyParsedItemFields, detectTrackMediaType } from '@/lib/rss-parser-db';
 
 /**
  * POST /api/admin/feeds/[id]/reparse
@@ -199,6 +199,9 @@ export async function POST(
             description: item.description,
             artist: item.artist,
             audioUrl: item.audioUrl,
+            mediaType: detectTrackMediaType(item),
+            mimeType: item.mimeType,
+            alternateEnclosures: item.alternateEnclosures ? JSON.parse(JSON.stringify(item.alternateEnclosures)) : undefined,
             duration: item.duration,
             explicit: item.explicit,
             image: item.image,

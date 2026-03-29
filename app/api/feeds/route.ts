@@ -219,6 +219,9 @@ async function importMissingAlbums(
             v4vValue: track.v4vValue,
             startTime: track.startTime,
             endTime: track.endTime,
+            chaptersUrl: track.chaptersUrl,
+            chapters: track.chapters || undefined,
+            valueTimeSplits: track.valueTimeSplits || undefined,
             trackOrder: track.episode ? calculateTrackOrder(track.episode, track.season) : index + 1,
             updatedAt: new Date()
         }));
@@ -627,6 +630,9 @@ export async function POST(request: NextRequest) {
                     v4vValue: item.v4vValue,
                     startTime: item.startTime,
                     endTime: item.endTime,
+                    chaptersUrl: item.chaptersUrl,
+                    chapters: item.chapters || undefined,
+                    valueTimeSplits: item.valueTimeSplits || undefined,
                     updatedAt: new Date()
                   }
                 });
