@@ -367,12 +367,11 @@ function BaseMusicTrackCard({
               <div onClick={(e) => e.stopPropagation()}>
                 <BoostButton
                   trackId={track.id}
-                  feedId={track.feedUrl}
+                  feedUrl={track.feedUrl}
                   trackTitle={track.title}
                   artistName={track.artist}
                   remoteFeedGuid={track.valueForValue?.feedGuid}
                   episodeGuid={track.valueForValue?.itemGuid}
-                  albumName={track.episodeTitle}
                   className="text-sm"
                 />
               </div>

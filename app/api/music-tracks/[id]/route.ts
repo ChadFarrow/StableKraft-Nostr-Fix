@@ -75,7 +75,14 @@ export async function GET(
         itemGuid: (track.v4vValue as any).itemGuid || null
       } : null,
       discoveredAt: track.createdAt,
-      lastUpdated: track.updatedAt
+      lastUpdated: track.updatedAt,
+      Feed: {
+        id: track.Feed.id,
+        title: track.Feed.title,
+        artist: track.Feed.artist,
+        image: track.Feed.image,
+        guid: track.Feed.guid,
+      }
     };
 
     logger.info('Successfully fetched track', { 
