@@ -5,6 +5,7 @@ import { parseSearchQuery, buildTsQuery, normalizeQuery, buildFieldFilters } fro
 import { fuzzySearchTracks, fuzzySearchAlbums, fuzzySearchArtists, calculateThreshold } from '@/lib/fuzzy-search';
 import { searchPlaylists, getPlaylistUrls, getAllPlaylistIds } from '@/lib/playlist/configs';
 import { getBlacklistedFeedIds, BLACKLISTED_FEED_URLS } from '@/lib/feed-exclusions';
+import { PODCAST_FEED_IDS, PODCAST_FEED_URLS } from '@/lib/podcast-feeds';
 
 const prisma = new PrismaClient();
 
@@ -86,7 +87,8 @@ export async function GET(request: NextRequest) {
       tracks: [],
       albums: [],
       artists: [],
-      playlists: []
+      playlists: [],
+      podcasts: []
     };
 
     // Search tracks
@@ -359,12 +361,52 @@ export async function GET(request: NextRequest) {
       }));
     }
 
+    // Search podcasts (curated podcast feeds)
+    if (type === 'all' || type === 'podcasts') {
+      const podcastFeeds = await prisma.feed.findMany({
+        where: {
+          OR: [
+            { id: { in: PODCAST_FEED_IDS } },
+            { guid: { in: PODCAST_FEED_IDS } },
+            { originalUrl: { in: PODCAST_FEED_URLS } },
+          ],
+          AND: [
+            { status: 'active' },
+            {
+              OR: [
+                { title: { contains: query, mode: 'insensitive' } },
+                { artist: { contains: query, mode: 'insensitive' } },
+                { description: { contains: query, mode: 'insensitive' } }
+              ]
+            }
+          ]
+        },
+        include: {
+          _count: { select: { Track: true } }
+        },
+        take: limit
+      });
+
+      results.podcasts = podcastFeeds.map(feed => ({
+        id: feed.id,
+        title: feed.title,
+        artist: feed.artist,
+        description: feed.description,
+        coverArt: feed.image,
+        type: 'podcast',
+        totalTracks: feed._count.Track,
+        feedUrl: feed.originalUrl,
+        feedGuid: feed.guid || feed.id
+      }));
+    }
+
     // Calculate total results
     const totalResults =
       results.tracks.length +
       results.albums.length +
       results.artists.length +
-      results.playlists.length;
+      results.playlists.length +
+      results.podcasts.length;
 
     // Check query timeout
     const queryTime = Date.now() - startTime;
@@ -415,7 +457,8 @@ export async function GET(request: NextRequest) {
         tracks: [],
         albums: [],
         artists: [],
-        playlists: []
+        playlists: [],
+        podcasts: []
       }
     }, { status: 500 });
   }

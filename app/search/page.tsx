@@ -48,6 +48,15 @@ interface SearchResults {
     totalTracks: number;
     feedGuid: string;
   }>;
+  podcasts: Array<{
+    id: string;
+    title: string;
+    artist: string;
+    description?: string;
+    coverArt?: string;
+    totalTracks: number;
+    feedUrl: string;
+  }>;
 }
 
 function SearchContent() {
@@ -57,7 +66,7 @@ function SearchContent() {
   const [results, setResults] = useState<SearchResults | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'all' | 'tracks' | 'albums' | 'playlists' | 'publishers'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'tracks' | 'albums' | 'playlists' | 'publishers' | 'podcasts'>('all');
   const { playAlbum } = useAudio();
 
   useEffect(() => {
@@ -93,13 +102,14 @@ function SearchContent() {
   };
 
   const totalResults = results
-    ? (results.tracks?.length || 0) + (results.albums?.length || 0) + (results.playlists?.length || 0) + (results.artists?.length || 0)
+    ? (results.tracks?.length || 0) + (results.albums?.length || 0) + (results.playlists?.length || 0) + (results.artists?.length || 0) + (results.podcasts?.length || 0)
     : 0;
 
   const filteredTracks = activeTab === 'all' || activeTab === 'tracks' ? results?.tracks || [] : [];
   const filteredAlbums = activeTab === 'all' || activeTab === 'albums' ? results?.albums || [] : [];
   const filteredPlaylists = activeTab === 'all' || activeTab === 'playlists' ? results?.playlists || [] : [];
   const filteredArtists = activeTab === 'all' || activeTab === 'publishers' ? results?.artists || [] : [];
+  const filteredPodcasts = activeTab === 'all' || activeTab === 'podcasts' ? results?.podcasts || [] : [];
 
   return (
     <div className="min-h-screen text-white bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
@@ -166,7 +176,8 @@ function SearchContent() {
                   { value: 'tracks', label: 'Tracks', count: results.tracks?.length || 0 },
                   { value: 'albums', label: 'Albums', count: results.albums?.length || 0 },
                   { value: 'playlists', label: 'Playlists', count: results.playlists?.length || 0 },
-                  { value: 'publishers', label: 'Publishers', count: results.artists?.length || 0 }
+                  { value: 'publishers', label: 'Publishers', count: results.artists?.length || 0 },
+                  { value: 'podcasts', label: 'Podcasts', count: results.podcasts?.length || 0 }
                 ].map((tab) => (
                   <button
                     key={tab.value}
@@ -280,6 +291,41 @@ function SearchContent() {
                           {playlist.name}
                         </h3>
                         <p className="text-xs text-gray-400 truncate">{playlist.shortName}</p>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Podcasts Section */}
+              {filteredPodcasts.length > 0 && (
+                <div className="mb-8">
+                  <h2 className="text-xl font-bold mb-4 text-white">Podcasts</h2>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                    {filteredPodcasts.map((podcast: any) => (
+                      <Link
+                        key={podcast.id}
+                        href={`/podcast/${podcast.id}`}
+                        className="group bg-white/5 backdrop-blur-sm rounded-xl p-4 hover:bg-white/10 transition-all duration-200 border border-white/10 hover:border-white/20"
+                      >
+                        <div className="aspect-square rounded-lg overflow-hidden mb-3 bg-gray-800">
+                          <Image
+                            src={getAlbumArtworkUrl(podcast.coverArt || '', 'medium')}
+                            alt={podcast.title}
+                            width={200}
+                            height={200}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.src = getPlaceholderImageUrl('medium');
+                            }}
+                          />
+                        </div>
+                        <h3 className="font-semibold text-sm mb-1 text-white truncate group-hover:text-stablekraft-teal transition-colors">
+                          {podcast.title}
+                        </h3>
+                        <p className="text-xs text-gray-400 truncate">{podcast.artist}</p>
+                        <p className="text-xs text-gray-500 mt-1">{podcast.totalTracks} episodes</p>
                       </Link>
                     ))}
                   </div>
