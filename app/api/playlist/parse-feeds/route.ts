@@ -74,7 +74,19 @@ export async function POST(request: Request) {
               ...ep,
               image: ep.image || feedData.image || ''
             }));
-            parseResult = { episodes: episodesWithImage, xmlText: '' };
+            // Fetch RSS XML for feed-level V4V data (PI API has episode V4V but not channel-level)
+            let xmlText = '';
+            if (feedUrl) {
+              try {
+                const rssResponse = await fetch(feedUrl, { signal: AbortSignal.timeout(10000) });
+                if (rssResponse.ok) {
+                  xmlText = await rssResponse.text();
+                }
+              } catch (xmlError) {
+                console.warn(`⚠️ Could not fetch RSS XML for V4V: ${feedUrl}`);
+              }
+            }
+            parseResult = { episodes: episodesWithImage, xmlText };
           }
         }
 

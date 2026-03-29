@@ -529,7 +529,20 @@ export async function parseFeedByGuid(feedGuid: string): Promise<ImportFeedResul
       const episodes = await getEpisodesFromAPI(feedData.id);
       if (episodes && episodes.length > 0) {
         console.log(`✅ Got ${episodes.length} episodes from Podcast Index API`);
-        parseResult = { episodes, xmlText: '' };
+        // Fetch RSS XML for feed-level V4V data (PI API has episode V4V but not channel-level)
+        let xmlText = '';
+        const rssUrl = feedData?.url || existingFeed.originalUrl;
+        if (rssUrl) {
+          try {
+            const rssResponse = await fetch(rssUrl, { signal: AbortSignal.timeout(10000) });
+            if (rssResponse.ok) {
+              xmlText = await rssResponse.text();
+            }
+          } catch (xmlError) {
+            console.warn(`⚠️ Could not fetch RSS XML for V4V: ${rssUrl}`);
+          }
+        }
+        parseResult = { episodes, xmlText };
       }
     }
 
