@@ -383,14 +383,13 @@ export async function GET(request: Request) {
       return Array.from(seen.values());
     })();
 
-    // Filter out playlist feeds, blacklisted feeds, and podcast feeds from album grid
+    // Filter out playlist feeds and blacklisted feeds
     const playlistUrls = getPlaylistUrls();
     const playlistIds = getAllPlaylistIds();
     const blacklistedIds = getBlacklistedFeedIds();
     const nonPlaylistAlbums = deduplicatedAlbums.filter(album =>
       !playlistIds.includes(album.id) &&
       !blacklistedIds.includes(album.id) &&
-      album.type !== 'podcast' &&
       (!album.feedUrl || !playlistUrls.includes(album.feedUrl)) &&
       (!album.feedUrl || !BLACKLISTED_FEED_URLS.includes(album.feedUrl))
     );
@@ -419,12 +418,11 @@ export async function GET(request: Request) {
           filteredAlbums = [];
           break;
         case 'podcasts': {
-          // Show all podcast-type feeds plus any curated podcast feeds
+          // Curated podcast feeds — these are normally blacklisted from album view,
+          // so we query them directly from DB by ID or URL
           const podcastFeeds = await prisma.feed.findMany({
             where: {
-              status: 'active',
               OR: [
-                { type: 'podcast' },
                 { id: { in: PODCAST_FEED_IDS } },
                 { guid: { in: PODCAST_FEED_IDS } },
                 { originalUrl: { in: PODCAST_FEED_URLS } },

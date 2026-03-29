@@ -372,8 +372,10 @@ export async function POST(request: NextRequest) {
       const parsedFeed = await parseRSSFeedWithSegments(resolvedUrl);
 
       // Override type based on podcast:medium from RSS if the frontend sent default 'album'
+      // Skip for Wavlake feeds — they use medium=podcast for music content
       let resolvedType = type;
-      if (parsedFeed.medium === 'podcast' && type === 'album') {
+      const isWavlakeFeed = resolvedUrl.includes('wavlake.com/feed');
+      if (parsedFeed.medium === 'podcast' && type === 'album' && !isWavlakeFeed) {
         resolvedType = 'podcast';
         console.log('🎙️ Detected podcast:medium=podcast, setting type to podcast');
       }
