@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { parseRSSFeedWithSegments, calculateTrackOrder, detectTrackMediaType } from '@/lib/rss-parser-db';
+import { parseRSSFeedWithSegments, calculateTrackOrder, detectTrackMediaType, applyParsedItemFields } from '@/lib/rss-parser-db';
 import { findPublisherFeed } from '@/lib/publisher-detector';
 import { generateAlbumSlug, isValidFeedUrl, normalizeUrl, normalizeArtistName } from '@/lib/url-utils';
 import { resolvePodcastIndexUrl } from '@/lib/podcast-index-api';
@@ -429,36 +429,41 @@ export async function POST(request: NextRequest) {
       
       // Create tracks in database
       if (parsedFeed.items.length > 0) {
-        const tracksData = parsedFeed.items.map((item, index) => ({
-          id: `${feed.id}-${item.guid || `track-${index}-${Date.now()}`}`,
-          feedId: feed.id,
-          guid: item.guid,
-          title: item.title,
-          subtitle: item.subtitle,
-          description: item.description,
-          artist: item.artist,
-          audioUrl: item.audioUrl,
-          mediaType: detectTrackMediaType(item),
-          mimeType: item.mimeType,
-          alternateEnclosures: item.alternateEnclosures ? JSON.parse(JSON.stringify(item.alternateEnclosures)) : undefined,
-          duration: item.duration,
-          explicit: item.explicit,
-          image: item.image,
-          publishedAt: item.publishedAt,
-          itunesAuthor: item.itunesAuthor,
-          itunesSummary: item.itunesSummary,
-          itunesImage: item.itunesImage,
-          itunesDuration: item.itunesDuration,
-          itunesKeywords: item.itunesKeywords || [],
-          itunesCategories: item.itunesCategories || [],
-          podcastCategories: parsedFeed.podcastCategories || [],
-          v4vRecipient: item.v4vRecipient,
-          v4vValue: item.v4vValue,
-          startTime: item.startTime,
-          endTime: item.endTime,
-          trackOrder: item.episode ? calculateTrackOrder(item.episode, item.season) : index + 1,
-          updatedAt: new Date()
-        }));
+        const tracksData = parsedFeed.items.map((item, index) => {
+          const trackData: any = {
+            id: `${feed.id}-${item.guid || `track-${index}-${Date.now()}`}`,
+            feedId: feed.id,
+            guid: item.guid,
+            title: item.title,
+            subtitle: item.subtitle,
+            description: item.description,
+            artist: item.artist,
+            audioUrl: item.audioUrl,
+            mediaType: detectTrackMediaType(item),
+            mimeType: item.mimeType,
+            alternateEnclosures: item.alternateEnclosures ? JSON.parse(JSON.stringify(item.alternateEnclosures)) : undefined,
+            duration: item.duration,
+            explicit: item.explicit,
+            image: item.image,
+            publishedAt: item.publishedAt,
+            itunesAuthor: item.itunesAuthor,
+            itunesSummary: item.itunesSummary,
+            itunesImage: item.itunesImage,
+            itunesDuration: item.itunesDuration,
+            itunesKeywords: item.itunesKeywords || [],
+            itunesCategories: item.itunesCategories || [],
+            podcastCategories: parsedFeed.podcastCategories || [],
+            v4vRecipient: item.v4vRecipient,
+            v4vValue: item.v4vValue,
+            startTime: item.startTime,
+            endTime: item.endTime,
+            trackOrder: item.episode ? calculateTrackOrder(item.episode, item.season) : index + 1,
+            updatedAt: new Date()
+          };
+          // Apply chapters, VTS, and other parsed fields
+          applyParsedItemFields(trackData, item);
+          return trackData;
+        });
 
         await prisma.track.createMany({
           data: tracksData,

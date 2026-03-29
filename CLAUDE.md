@@ -53,7 +53,13 @@ Playlists use `<podcast:remoteItem>` with `feedGuid` + `itemGuid`. On `?refresh`
 Central exclusion config: `BLACKLISTED_FEED_IDS`, `BLACKLISTED_FEED_URLS`. Helpers: `isBlacklistedFeedId()`, `isBlacklistedFeedUrl()`.
 
 ### Admin Feed Management (`/admin`)
-Single input handles both add and reparse. Auto-detects type from URL (`-pubfeed` = publisher). **Fixing duplicates**: delete all copies first (`DELETE /api/feeds?id=<feedId>`), then re-add.
+Single input handles both add and reparse. Auto-detects type from URL (`-pubfeed` = publisher). **Fixing duplicates**: delete all copies first (`DELETE /api/feeds?id=<feedId>`), then re-add. Initial import (`POST /api/feeds`) saves all parsed fields including chapters, VTS, and V4V via `applyParsedItemFields()` — no reparse needed.
+
+### Adding Music Podcasts (like Upbeats)
+1. Import feed via `/admin` page (paste RSS URL)
+2. Add feed ID/URL/slug to `lib/podcast-feeds.ts` (`PODCAST_FEED_IDS`, `PODCAST_FEED_URLS`, `PODCAST_SLUGS`)
+3. Add feed ID/URL to `lib/feed-exclusions.ts` (prevents showing in album grid)
+4. Deploy — `/podcast/[id]` dynamic route handles display automatically, episodes sort newest-first
 
 ### Search
 - PostgreSQL trigram `similarity()`, flat 0.3 threshold. Do NOT lower below 0.3 — causes false positives.
