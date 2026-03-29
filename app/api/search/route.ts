@@ -5,7 +5,6 @@ import { parseSearchQuery, buildTsQuery, normalizeQuery, buildFieldFilters } fro
 import { fuzzySearchTracks, fuzzySearchAlbums, fuzzySearchArtists, calculateThreshold } from '@/lib/fuzzy-search';
 import { searchPlaylists, getPlaylistUrls, getAllPlaylistIds } from '@/lib/playlist/configs';
 import { getBlacklistedFeedIds, BLACKLISTED_FEED_URLS } from '@/lib/feed-exclusions';
-import { PODCAST_FEED_IDS, PODCAST_FEED_URLS } from '@/lib/podcast-feeds';
 
 const prisma = new PrismaClient();
 
@@ -361,24 +360,16 @@ export async function GET(request: NextRequest) {
       }));
     }
 
-    // Search podcasts (curated podcast feeds)
+    // Search podcasts (all feeds with type='podcast')
     if (type === 'all' || type === 'podcasts') {
       const podcastFeeds = await prisma.feed.findMany({
         where: {
+          status: 'active',
+          type: 'podcast',
           OR: [
-            { id: { in: PODCAST_FEED_IDS } },
-            { guid: { in: PODCAST_FEED_IDS } },
-            { originalUrl: { in: PODCAST_FEED_URLS } },
-          ],
-          AND: [
-            { status: 'active' },
-            {
-              OR: [
-                { title: { contains: query, mode: 'insensitive' } },
-                { artist: { contains: query, mode: 'insensitive' } },
-                { description: { contains: query, mode: 'insensitive' } }
-              ]
-            }
+            { title: { contains: query, mode: 'insensitive' } },
+            { artist: { contains: query, mode: 'insensitive' } },
+            { description: { contains: query, mode: 'insensitive' } }
           ]
         },
         include: {
