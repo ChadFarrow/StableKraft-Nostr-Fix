@@ -625,6 +625,9 @@ export default function PlaylistTemplateCompact({ config }: PlaylistTemplateComp
           duration: (t.valueForValue?.resolvedDuration || t.duration).toString(),
           image: t.image,
           artwork: t.image,
+          v4vRecipient: t.v4vRecipient,
+          v4vValue: t.v4vValue,
+          guid: (t as any).guid,
           // Preserve metadata for share links
           feedTitle: t.feedTitle,
           albumTitle: t.albumTitle

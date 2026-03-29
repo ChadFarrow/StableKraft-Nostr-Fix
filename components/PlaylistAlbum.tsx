@@ -255,7 +255,10 @@ export default function PlaylistAlbum({ tracks: rawTracks, config, onTrackResolv
         url: t.valueForValue?.resolved && t.valueForValue?.resolvedAudioUrl ? t.valueForValue.resolvedAudioUrl : t.audioUrl || '',
         startTime: t.valueForValue?.resolved ? 0 : 0,
         duration: t.duration ? t.duration.toString() : '300',
-        image: t.artworkUrl || t.valueForValue?.resolvedImage || config.coverArt || ''
+        image: t.artworkUrl || t.valueForValue?.resolvedImage || config.coverArt || '',
+        v4vRecipient: (t as any).v4vRecipient,
+        v4vValue: (t as any).v4vValue,
+        guid: (t as any).guid,
       }))
     };
     

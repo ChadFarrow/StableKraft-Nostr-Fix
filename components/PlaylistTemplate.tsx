@@ -232,7 +232,10 @@ export default function PlaylistTemplate({ config }: PlaylistTemplateProps) {
           artist: t.valueForValue?.resolvedArtist || t.artist,
           audioUrl: t.valueForValue?.resolvedAudioUrl || t.audioUrl,
           duration: formatDuration(t.valueForValue?.resolvedDuration || t.duration),
-          artwork: t.image || '/placeholder-album.jpg'
+          artwork: t.image || '/placeholder-album.jpg',
+          v4vRecipient: t.v4vRecipient,
+          v4vValue: t.v4vValue,
+          guid: (t as any).guid,
         }))
       };
 

@@ -425,9 +425,13 @@ function FavoritesPageContent() {
               endTime: track.endTime
             })),
             link: '',
-            feedUrl: ''
+            feedUrl: album.originalAlbum.originalUrl || '',
+            feedId: album.originalAlbum.id,
+            feedGuid: album.originalAlbum.guid || undefined,
+            v4vRecipient: album.originalAlbum.v4vRecipient || undefined,
+            v4vValue: album.originalAlbum.v4vValue || undefined,
           };
-          
+
           console.log('🎵 Attempting to play RSSAlbum from original data:', rssAlbum.title, 'with', rssAlbum.tracks.length, 'tracks');
           const success = await globalPlayAlbum(rssAlbum, 0);
           if (success) {
@@ -554,7 +558,11 @@ function FavoritesPageContent() {
           endTime: track.endTime
         })),
         link: albumData.link || albumData.feedUrl || '',
-        feedUrl: albumData.feedUrl || albumData.link || ''
+        feedUrl: albumData.feedUrl || albumData.link || '',
+        feedId: albumData.feedId || albumData.id,
+        feedGuid: albumData.feedGuid || undefined,
+        v4vRecipient: albumData.v4vRecipient || undefined,
+        v4vValue: albumData.v4vValue || undefined,
       };
 
       console.log('🎵 Attempting to play RSSAlbum:', rssAlbum.title, 'with', rssAlbum.tracks.length, 'tracks');
@@ -1521,9 +1529,16 @@ function FavoritesPageContent() {
                                     duration: track.duration || '0:00',
                                     url: track.url || '',
                                     id: track.id,
+                                    v4vRecipient: track.v4vRecipient,
+                                    v4vValue: track.v4vValue,
+                                    guid: track.guid,
                                   })),
                                   link: '',
-                                  feedUrl: ''
+                                  feedUrl: data.album.feedUrl || '',
+                                  feedId: data.album.feedId || data.album.id,
+                                  feedGuid: data.album.feedGuid,
+                                  v4vRecipient: data.album.v4vRecipient,
+                                  v4vValue: data.album.v4vValue,
                                 };
                                 await globalPlayAlbum(rssAlbum, 0);
                                 return;
@@ -1557,9 +1572,16 @@ function FavoritesPageContent() {
                                         duration: track.duration || '0:00',
                                         url: track.url || '',
                                         id: track.id,
+                                        v4vRecipient: track.v4vRecipient,
+                                        v4vValue: track.v4vValue,
+                                        guid: track.guid,
                                       })),
                                       link: '',
-                                      feedUrl: ''
+                                      feedUrl: data.album.feedUrl || '',
+                                      feedId: data.album.feedId || data.album.id,
+                                      feedGuid: data.album.feedGuid,
+                                      v4vRecipient: data.album.v4vRecipient,
+                                      v4vValue: data.album.v4vValue,
                                     };
                                     await globalPlayAlbum(rssAlbum, trackIndex);
                                     return;

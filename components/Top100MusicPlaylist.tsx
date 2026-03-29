@@ -139,7 +139,11 @@ export default function Top100MusicPlaylist() {
         title: t.title,
         url: t.audioUrl!,
         startTime: t.startTime || 0,
-        duration: t.duration.toString()
+        duration: t.duration.toString(),
+        v4vRecipient: (t as any).v4vRecipient,
+        v4vValue: (t as any).v4vValue,
+        guid: (t as any).guid,
+        id: t.id,
       }))
     };
     
