@@ -371,6 +371,13 @@ export async function POST(request: NextRequest) {
       // Parse the RSS feed
       const parsedFeed = await parseRSSFeedWithSegments(resolvedUrl);
 
+      // Override type based on podcast:medium from RSS if the frontend sent default 'album'
+      let resolvedType = type;
+      if (parsedFeed.medium === 'podcast' && type === 'album') {
+        resolvedType = 'podcast';
+        console.log('🎙️ Detected podcast:medium=podcast, setting type to podcast');
+      }
+
       // Generate a URL-friendly feed ID from artist and title
       let feedId = generateFeedId(parsedFeed.artist, parsedFeed.title);
 
@@ -383,7 +390,7 @@ export async function POST(request: NextRequest) {
           guid: parsedFeed.podcastGuid || null,
           originalUrl: normalizedOriginalUrl,
           cdnUrl: cdnUrl || normalizedOriginalUrl,
-          type,
+          type: resolvedType,
           priority,
           title: parsedFeed.title,
           description: parsedFeed.description,

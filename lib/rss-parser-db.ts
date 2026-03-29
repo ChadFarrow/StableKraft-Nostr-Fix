@@ -91,6 +91,7 @@ export interface ParsedFeed {
   podcastCategories?: string[];
   explicit: boolean;
   podcastGuid?: string;
+  medium?: string;
   items: ParsedItem[];
   v4vRecipient?: string;
   v4vValue?: any;
@@ -521,6 +522,25 @@ export function parsePublisherFeedFromXML(xmlText: string): { feedGuid: string; 
   }
 }
 
+// Helper function to extract podcast:medium from channel level
+export function parsePodcastMediumFromXML(xmlText: string): string | null {
+  try {
+    const channelMatch = xmlText.match(/<channel[^>]*>(.*?)<\/channel>/s);
+    if (!channelMatch) return null;
+
+    const beforeItems = channelMatch[1].split(/<item[\s>]/)[0];
+    const mediumMatch = beforeItems.match(/<podcast:medium>([^<]+)<\/podcast:medium>/);
+
+    if (mediumMatch && mediumMatch[1]) {
+      return mediumMatch[1].trim().toLowerCase();
+    }
+    return null;
+  } catch (error) {
+    console.error('Error extracting podcast:medium from XML:', error);
+    return null;
+  }
+}
+
 // Helper function to extract podcast:guid from channel level
 export function parsePodcastGuidFromXML(xmlText: string): string | null {
   try {
@@ -886,8 +906,9 @@ export async function parseRSSFeed(feedUrl: string): Promise<ParsedFeed> {
     const v4vData = parseV4VFromXML(xmlText);
     console.log('🔍 DEBUG: Direct XML V4V parsing result:', v4vData);
 
-    // Extract podcast:guid from channel level
+    // Extract podcast:guid and podcast:medium from channel level
     const podcastGuid = parsePodcastGuidFromXML(xmlText);
+    const podcastMedium = parsePodcastMediumFromXML(xmlText);
 
     // Extract podcast:publisher remoteItem from channel level
     const publisherFeed = parsePublisherFeedFromXML(xmlText);
@@ -1258,6 +1279,7 @@ export async function parseRSSFeed(feedUrl: string): Promise<ParsedFeed> {
       podcastCategories: podcastCategories.length > 0 ? podcastCategories : undefined,
       explicit: feedExplicit,
       podcastGuid: podcastGuid || undefined,
+      medium: podcastMedium || undefined,
       items,
       v4vRecipient: feedV4vRecipient,
       v4vValue: feedV4vValue,
