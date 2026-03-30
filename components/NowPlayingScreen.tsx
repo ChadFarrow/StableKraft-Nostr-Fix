@@ -59,9 +59,11 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
     artistName?: string;
   } | null>(null);
   const [titleOverflows, setTitleOverflows] = useState(false);
+  const [chapterTitleOverflows, setChapterTitleOverflows] = useState(false);
 
   const progressRef = useRef<HTMLDivElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const chapterTitleRef = useRef<HTMLParagraphElement>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
 
   // Find the active valueTimeSplit based on current playback position
@@ -237,6 +239,14 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
       setTitleOverflows(overflows);
     }
   }, [currentTrack?.title]);
+
+  // Check if chapter title overflows its container
+  useEffect(() => {
+    if (chapterTitleRef.current) {
+      const overflows = chapterTitleRef.current.scrollWidth > chapterTitleRef.current.clientWidth;
+      setChapterTitleOverflows(overflows);
+    }
+  }, [currentChapterIndex, chapters]);
 
   // Helper function to proxy external image URLs (same as GlobalNowPlayingBar)
   const getProxiedImageUrl = (imageUrl: string): string => {
@@ -580,9 +590,20 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
             {currentTrack.artist || currentPlayingAlbum.artist || 'Unknown Artist'}
           </p>
           {chapters.length > 0 && currentChapterIndex >= 0 && chapters[currentChapterIndex] && (
-            <p className="text-sm opacity-60 truncate mt-1">
-              Ch. {currentChapterIndex + 1}/{chapters.length}: {chapters[currentChapterIndex].title}
-            </p>
+            <div className="overflow-hidden">
+              <p
+                ref={chapterTitleRef}
+                className={`text-sm opacity-60 mt-1 whitespace-nowrap ${chapterTitleOverflows ? 'animate-marquee hover:animate-none' : ''}`}
+              >
+                Ch. {currentChapterIndex + 1}/{chapters.length}: {chapters[currentChapterIndex].title}
+                {chapterTitleOverflows && (
+                  <>
+                    <span className="px-8" />
+                    Ch. {currentChapterIndex + 1}/{chapters.length}: {chapters[currentChapterIndex].title}
+                  </>
+                )}
+              </p>
+            </div>
           )}
         </div>
 
