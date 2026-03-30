@@ -74,6 +74,7 @@ export function BoostButton({
   const [paymentStatuses, setPaymentStatuses] = useState<Map<string, { status: 'waiting' | 'pending' | 'sending' | 'success' | 'failed'; error?: string; amount?: number }>>(new Map());
   const [showSplitDetails, setShowSplitDetails] = useState(false);
   const [fetchedValueSplits, setFetchedValueSplits] = useState<typeof valueSplits>([]);
+  const [fetchedLightningAddress, setFetchedLightningAddress] = useState<string | undefined>(undefined);
   // Resolved Nostr pubkeys from Lightning Addresses (for tagging musicians in boost posts)
   // These are extracted from Lightning Address NIP-05 verification during payment resolution
   // and used to add p-tags to Nostr boost posts so musicians receive notifications
@@ -141,7 +142,7 @@ export function BoostButton({
     // Skip if trackId looks like a composite ID (contains '-https' or multiple UUIDs)
     const isCompositeId = trackId && (trackId.includes('-https') || trackId.split('-').length > 5);
 
-    if (trackId && !isCompositeId && valueSplits.length === 0) {
+    if (trackId && !isCompositeId && valueSplits.length === 0 && !lightningAddress) {
       hasFetchedRef.current = true; // Mark as fetched before async call to prevent duplicates
 
       fetch(`/api/music-tracks/${trackId}`)
@@ -158,25 +159,31 @@ export function BoostButton({
         .then(response => {
           if (!response) return;
 
-          if (response.success && response.data?.v4vValue) {
-            // Parse v4vValue to extract recipients
-            const v4v = response.data.v4vValue;
+          if (response.success && response.data) {
+            if (response.data.v4vValue) {
+              // Parse v4vValue to extract recipients
+              const v4v = response.data.v4vValue;
 
-            // Handle both old format (recipients) and new format (destinations)
-            const recipientsList = v4v.recipients || v4v.destinations || [];
+              // Handle both old format (recipients) and new format (destinations)
+              const recipientsList = v4v.recipients || v4v.destinations || [];
 
-            // Filter out fee recipients and convert to our format
-            const splits = recipientsList
-              .filter((r: any) => !r.fee)
-              .map((r: any) => ({
-                name: r.name || 'Unknown',
-                type: r.type || 'node',
-                address: r.address,
-                split: Number(r.split) || 0
-              }));
+              // Filter out fee recipients and convert to our format
+              const splits = recipientsList
+                .filter((r: any) => !r.fee)
+                .map((r: any) => ({
+                  name: r.name || 'Unknown',
+                  type: r.type || 'node',
+                  address: r.address,
+                  split: Number(r.split) || 0
+                }));
 
-            if (splits.length > 0) {
-              setFetchedValueSplits(splits);
+              if (splits.length > 0) {
+                setFetchedValueSplits(splits);
+              }
+            }
+            // Also pick up v4vRecipient (lightning address) if available
+            if (response.data.v4vRecipient && !lightningAddress) {
+              setFetchedLightningAddress(response.data.v4vRecipient);
             }
           }
         })
@@ -191,9 +198,10 @@ export function BoostButton({
 
   // Use fetched value splits if available, otherwise use prop value splits
   const activeValueSplits = fetchedValueSplits.length > 0 ? fetchedValueSplits : valueSplits;
+  const activeLightningAddress = lightningAddress || fetchedLightningAddress;
 
   // Check if valid V4V payment info exists
-  const hasValidV4V = (activeValueSplits && activeValueSplits.length > 0) || !!lightningAddress;
+  const hasValidV4V = (activeValueSplits && activeValueSplits.length > 0) || !!activeLightningAddress;
 
   // Don't render on server-side
   if (!isClient) {
@@ -307,7 +315,7 @@ export function BoostButton({
         if (valueSplitResult.boostboxUrls) {
           collectedBoostboxUrls = valueSplitResult.boostboxUrls;
         }
-      } else if (lightningAddress && LNURLService.isLightningAddress(lightningAddress)) {
+      } else if (activeLightningAddress && LNURLService.isLightningAddress(activeLightningAddress)) {
         // Pay to Lightning Address via LNURL-pay
 
         try {
@@ -317,7 +325,7 @@ export function BoostButton({
             const boostboxResult = await BoostBoxService.storeMetadata(
               buildHelipadMetadata(amount, message),
               undefined,
-              lightningAddress
+              activeLightningAddress
             );
             if (boostboxResult) {
               comment = boostboxResult.desc;
@@ -326,7 +334,7 @@ export function BoostButton({
           }
 
           const { invoice } = await LNURLService.payLightningAddress(
-            lightningAddress,
+            activeLightningAddress,
             amount,
             comment
           );
@@ -336,13 +344,13 @@ export function BoostButton({
           console.error('Lightning Address payment failed:', lnurlError);
           result = { error: `Lightning Address payment failed: ${lnurlError instanceof Error ? lnurlError.message : 'Unknown error'}` };
         }
-      } else if (lightningAddress && lightningAddress.length === 66 && (lightningAddress.startsWith('02') || lightningAddress.startsWith('03'))) {
+      } else if (activeLightningAddress && activeLightningAddress.length === 66 && (activeLightningAddress.startsWith('02') || activeLightningAddress.startsWith('03'))) {
         // Pay to node pubkey via keysend
         try {
           const helipadMetadata = buildHelipadMetadata(amount, message);
           console.log('📋 Final Helipad metadata:', helipadMetadata);
 
-          result = await sendKeysend(lightningAddress, amount, message, helipadMetadata);
+          result = await sendKeysend(activeLightningAddress, amount, message, helipadMetadata);
         } catch (keysendError) {
           console.error('Keysend payment failed:', keysendError);
           result = { error: `Keysend payment failed: ${keysendError instanceof Error ? keysendError.message : 'Unknown error'}` };
@@ -379,7 +387,7 @@ export function BoostButton({
           senderName,
           preimage: result.preimage,
           paymentMethod: activeValueSplits?.length ? 'value-splits' :
-                        lightningAddress ? 'lightning-address' : 'keysend',
+                        activeLightningAddress ? 'lightning-address' : 'keysend',
         });
 
         // Post to Nostr if user is authenticated and Nostr integration is enabled
@@ -986,8 +994,8 @@ export function BoostButton({
       let recipient = 'unknown';
       if (activeValueSplits?.length) {
         recipient = `${activeValueSplits.length} recipients`;
-      } else if (lightningAddress) {
-        recipient = lightningAddress;
+      } else if (activeLightningAddress) {
+        recipient = activeLightningAddress;
       }
 
       // Ensure we always have required fields
@@ -1293,10 +1301,10 @@ export function BoostButton({
                         );
                       })()}
                     </div>
-                  ) : lightningAddress && LNURLService.isLightningAddress(lightningAddress) ? (
+                  ) : activeLightningAddress && LNURLService.isLightningAddress(activeLightningAddress) ? (
                     <>
                       <Mail className="w-3 h-3 text-blue-400" />
-                      <span className="text-blue-400">Lightning Address: {lightningAddress}</span>
+                      <span className="text-blue-400">Lightning Address: {activeLightningAddress}</span>
                     </>
                   ) : (
                     <div className="flex flex-col gap-2">
