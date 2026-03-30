@@ -33,7 +33,9 @@ export async function GET(
             artist: true,
             type: true,
             originalUrl: true,
-            image: true
+            image: true,
+            v4vValue: true,
+            v4vRecipient: true
           }
         }
       }
@@ -64,16 +66,21 @@ export async function GET(
       feedId: track.feedId,
       feedGuid: track.Feed.guid || null,
       guid: track.guid || null,
-      v4vValue: track.v4vValue || null, // Include raw v4vValue for Lightning payments
-      valueForValue: track.v4vValue ? {
-        lightningAddress: (track.v4vValue as any).lightningAddress || '',
-        suggestedAmount: (track.v4vValue as any).suggestedAmount || 0,
-        customKey: (track.v4vValue as any).customKey || '',
-        customValue: (track.v4vValue as any).customValue || '',
-        remotePercentage: (track.v4vValue as any).remotePercentage || 100,
-        feedGuid: (track.v4vValue as any).feedGuid || null,
-        itemGuid: (track.v4vValue as any).itemGuid || null
-      } : null,
+      v4vValue: track.v4vValue || track.Feed.v4vValue || null, // Include raw v4vValue for Lightning payments (fall back to feed-level)
+      v4vRecipient: track.v4vRecipient || track.Feed.v4vRecipient || null,
+      valueForValue: (() => {
+        const v4v = (track.v4vValue || track.Feed.v4vValue) as any;
+        if (!v4v) return null;
+        return {
+          lightningAddress: v4v.lightningAddress || '',
+          suggestedAmount: v4v.suggestedAmount || 0,
+          customKey: v4v.customKey || '',
+          customValue: v4v.customValue || '',
+          remotePercentage: v4v.remotePercentage || 100,
+          feedGuid: v4v.feedGuid || null,
+          itemGuid: v4v.itemGuid || null
+        };
+      })(),
       discoveredAt: track.createdAt,
       lastUpdated: track.updatedAt,
       Feed: {

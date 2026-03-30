@@ -1171,7 +1171,6 @@ function FavoritesPageContent() {
                     // Get v4v data from track or feed
                     const v4vValue = track.v4vValue || track.Feed?.v4vValue;
                     const v4vRecipient = track.v4vRecipient || track.Feed?.v4vRecipient;
-                    const hasV4v = !!(v4vValue || v4vRecipient);
                     const valueSplits = v4vValue?.recipients || v4vValue?.destinations || [];
 
                     return (
@@ -1213,29 +1212,25 @@ function FavoritesPageContent() {
                         </span>
 
                         {/* Boost Button */}
-                        {hasV4v ? (
-                          <BoostButton
-                            trackId={track.id}
-                            feedId={track.Feed?.id}
-                            trackTitle={track.title}
-                            artistName={track.artist || track.Feed?.artist || 'Unknown Artist'}
-                            lightningAddress={v4vRecipient || undefined}
-                            valueSplits={valueSplits.filter((r: any) => !r.fee).map((r: any) => ({
-                              name: r.name,
-                              address: r.address,
-                              split: r.split,
-                              type: r.type || (r.address?.includes('@') ? 'lnaddress' : 'node')
-                            }))}
-                            feedUrl={track.Feed?.originalUrl || undefined}
-                            episodeGuid={track.guid || track.id}
-                            remoteFeedGuid={(track.Feed as any)?.guid}
-                            albumName={track.album || track.Feed?.title}
-                            iconOnly={true}
-                            className="w-8 h-8 sm:w-9 sm:h-9"
-                          />
-                        ) : (
-                          <div className="w-8 h-8 sm:w-9 sm:h-9" />
-                        )}
+                        <BoostButton
+                          trackId={track.id}
+                          feedId={track.Feed?.id}
+                          trackTitle={track.title}
+                          artistName={track.artist || track.Feed?.artist || 'Unknown Artist'}
+                          lightningAddress={v4vRecipient || undefined}
+                          valueSplits={valueSplits.filter((r: any) => !r.fee).map((r: any) => ({
+                            name: r.name,
+                            address: r.address,
+                            split: r.split,
+                            type: r.type || (r.address?.includes('@') ? 'lnaddress' : 'node')
+                          }))}
+                          feedUrl={track.Feed?.originalUrl || undefined}
+                          episodeGuid={track.guid || track.id}
+                          remoteFeedGuid={(track.Feed as any)?.guid}
+                          albumName={track.album || track.Feed?.title}
+                          iconOnly={true}
+                          className="w-8 h-8 sm:w-9 sm:h-9"
+                        />
 
                         {/* Favorite Button */}
                         <FavoriteButton
