@@ -758,16 +758,14 @@ async function loadPublisherData(publisherId: string) {
 
       if (byPlatform.size <= 1) {
         // Single platform — keep as one section
-        // Detect the platform from album URLs (more accurate than the publisher feed URL)
-        const albumPlatform = sectionAlbums[0]?.originalUrl
-          ? getPlatformName(sectionAlbums[0].originalUrl)
-          : null;
+        // Use publisher feed URL for platform label (albums may be hosted elsewhere)
+        const feedPlatform = feed.originalUrl ? getPlatformName(feed.originalUrl) : null;
         expandedSections.push({
           title: feed.title || feed.artist || 'Official Releases',
           feedUrl: feed.originalUrl || '',
           feedId: feed.id,
           albums: sectionAlbums,
-          _albumPlatform: albumPlatform // used for disambiguation below
+          _albumPlatform: feedPlatform // used for disambiguation below
         });
       } else {
         // Multiple platforms — split into sub-sections
@@ -795,8 +793,9 @@ async function loadPublisherData(publisherId: string) {
       const key = s.title.toLowerCase().trim();
       const isDuplicate = (titleCounts.get(key) || 0) > 1;
       if ((isDuplicate || needsLabels) && !s.title.includes('(')) {
-        // Use album platform if available (more accurate), fall back to feed URL
-        const platform = s._albumPlatform || (s.feedUrl ? getPlatformName(s.feedUrl) : null);
+        // Use publisher feed URL for platform label (more accurate than album URLs,
+        // since albums may be hosted on a different platform than the publisher feed)
+        const platform = (s.feedUrl ? getPlatformName(s.feedUrl) : null) || s._albumPlatform;
         if (platform) {
           s.title = `${s.title} (${platform})`;
         }
