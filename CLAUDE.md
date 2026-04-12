@@ -47,7 +47,7 @@ Playlists use `<podcast:remoteItem>` with `feedGuid` + `itemGuid`. On `?refresh`
 Central exclusion config: `BLACKLISTED_FEED_IDS`, `BLACKLISTED_FEED_URLS`. Helpers: `isBlacklistedFeedId()`, `isBlacklistedFeedUrl()`.
 
 ### Admin Feed Management (`/admin`)
-Single input handles both add and reparse. Auto-detects type from URL (`-pubfeed` = publisher). **Fixing duplicates**: delete all copies first (`DELETE /api/feeds?id=<feedId>`), then re-add. Initial import (`POST /api/feeds`) saves all parsed fields including chapters, VTS, and V4V via `applyParsedItemFields()` — no reparse needed.
+Single input handles both add and reparse. Type dropdown (Auto-detect/Album/Publisher/Podcast) next to URL input — use for feeds whose URL doesn't match auto-detect patterns. Auto-detects type from URL (`-pubfeed`, `/publisher`, `/artist/` = publisher). **Server-side fallback**: feeds with 0 items + `<podcast:remoteItem>` references auto-detect as publisher. **GUID collision handling**: if a publisher feed's `podcast:guid` collides with an existing album, the feed is created without GUID rather than failing. **Fixing duplicates**: delete all copies first (`DELETE /api/feeds?id=<feedId>`), then re-add. Initial import (`POST /api/feeds`) saves all parsed fields including chapters, VTS, and V4V via `applyParsedItemFields()` — no reparse needed.
 
 ### Adding Music Podcasts (like Upbeats, Two For Tunestr)
 Import feed via `/admin` page (paste RSS URL). Non-Wavlake feeds with `<podcast:medium>podcast</podcast:medium>` automatically get `type: 'podcast'`, appear under the Podcasts filter, hide from the album grid, and are searchable — no config file edits needed. `/podcast/[id]` dynamic route handles display, episodes sort newest-first.
@@ -62,7 +62,7 @@ Import feed via `/admin` page (paste RSS URL). Non-Wavlake feeds with `<podcast:
 - Podcasts searchable by title/artist/description (queries `type: 'podcast'` feeds)
 
 ### Publisher Pages (`app/publisher/[id]/page.tsx`)
-Matched by: title slug, artist slug, or URL path. Multi-feed support with per-platform sections. Album resolution: (1) GUIDs/URLs from publisher feed XMLs → (2) `publisherId`-linked albums → (3) artist name matching. Do NOT re-add platform filters — hides legitimate cross-platform albums.
+Matched by: title slug, artist slug, or URL path. Multi-feed support with per-platform sections. Album resolution: (1) GUIDs/URLs from publisher feed XMLs → (2) `publisherId`-linked albums → (3) artist name matching. Do NOT re-add platform filters — hides legitimate cross-platform albums. **Section labels** use the publisher feed's URL for platform detection (not album URLs), so a self-hosted publisher feed referencing Wavlake-hosted albums shows "(henrikflyman.com)" not "(Wavlake)". **`linkAlbumsToPublisher`** only links albums with `publisherId: null` — albums already linked to another publisher are skipped. To re-link, use `PUT /api/feeds` with `{ id, publisherId }`. **Phantom publisher IDs**: some albums have a `publisherId` that doesn't correspond to a feed record (e.g., Wavlake artist GUIDs auto-assigned during import). The publisher page creates synthetic feed info for these.
 
 ### Duration Filtering
 Tracks over 2 hours filtered as non-music (silent, no warnings)
