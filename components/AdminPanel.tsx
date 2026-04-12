@@ -9,6 +9,7 @@ export default function AdminPanel() {
   const [loading, setLoading] = useState(true);
   const [addingFeed, setAddingFeed] = useState(false);
   const [newFeedUrl, setNewFeedUrl] = useState('');
+  const [feedTypeOverride, setFeedTypeOverride] = useState<string>('auto');
   const [verifying, setVerifying] = useState(false);
   const [recentFeeds, setRecentFeeds] = useState<any[]>([]);
   const [loadingRecent, setLoadingRecent] = useState(false);
@@ -520,12 +521,14 @@ export default function AdminPanel() {
     setAddingFeed(true);
 
     try {
-      // Auto-detect type from URL patterns, default to 'album'
-      let detectedType = 'album';
-      if (feedUrl.includes('/artist/') || feedUrl.includes('/publisher') || feedUrl.includes('-pubfeed') || feedUrl.includes('publisher-feed')) {
-        detectedType = 'publisher';
-      } else if (feedUrl.includes('/playlist/')) {
-        detectedType = 'playlist';
+      // Use manual override if set, otherwise auto-detect from URL patterns
+      let detectedType = feedTypeOverride !== 'auto' ? feedTypeOverride : 'album';
+      if (feedTypeOverride === 'auto') {
+        if (feedUrl.includes('/artist/') || feedUrl.includes('/publisher') || feedUrl.includes('-pubfeed') || feedUrl.includes('publisher-feed')) {
+          detectedType = 'publisher';
+        } else if (feedUrl.includes('/playlist/')) {
+          detectedType = 'playlist';
+        }
       }
 
       // Use the main feeds API which parses tracks automatically
@@ -903,6 +906,17 @@ export default function AdminPanel() {
                   required
                   autoFocus
                 />
+                <select
+                  value={feedTypeOverride}
+                  onChange={(e) => setFeedTypeOverride(e.target.value)}
+                  disabled={addingFeed}
+                  className="px-3 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                >
+                  <option value="auto" className="bg-gray-800">Auto-detect</option>
+                  <option value="album" className="bg-gray-800">Album</option>
+                  <option value="publisher" className="bg-gray-800">Publisher</option>
+                  <option value="podcast" className="bg-gray-800">Podcast</option>
+                </select>
                 <button
                   type="submit"
                   disabled={addingFeed || bulkSearching || !newFeedUrl.trim()}

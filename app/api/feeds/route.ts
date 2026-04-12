@@ -383,6 +383,23 @@ export async function POST(request: NextRequest) {
         console.log('🎙️ Detected podcast:medium=podcast, setting type to podcast');
       }
 
+      // Auto-detect publisher feeds: 0 items + has remoteItem album references
+      if (resolvedType === 'album' && parsedFeed.items.length === 0) {
+        try {
+          const xmlCheck = await fetch(resolvedUrl, { signal: AbortSignal.timeout(15000) });
+          if (xmlCheck.ok) {
+            const xmlText = await xmlCheck.text();
+            const remoteItems = extractRemoteItemsFromXML(xmlText);
+            if (remoteItems.length > 0) {
+              resolvedType = 'publisher';
+              console.log(`🔗 Auto-detected publisher feed: 0 items, ${remoteItems.length} remoteItem references`);
+            }
+          }
+        } catch (e) {
+          console.warn('⚠️ Publisher auto-detection check failed:', e);
+        }
+      }
+
       // Generate a URL-friendly feed ID from artist and title
       let feedId = generateFeedId(parsedFeed.artist, parsedFeed.title);
 
@@ -495,7 +512,7 @@ export async function POST(request: NextRequest) {
 
       // Auto-import and link albums when a publisher feed is added
       let linkedAlbumsInfo = null;
-      if (type === 'publisher') {
+      if (resolvedType === 'publisher') {
         console.log('🔗 Auto-importing and linking albums to publisher feed...');
 
         try {
@@ -539,7 +556,7 @@ export async function POST(request: NextRequest) {
       let publisherFeedInfo = null;
       let importedPublisherFeed = null;
 
-      if (type === 'album') {
+      if (resolvedType === 'album') {
         // First check if the feed has a podcast:publisher tag
         if (parsedFeed.publisherFeed) {
           console.log('✅ Found publisher feed in RSS:', parsedFeed.publisherFeed.title || parsedFeed.publisherFeed.feedUrl);
