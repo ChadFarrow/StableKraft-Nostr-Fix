@@ -405,37 +405,78 @@ export async function POST(request: NextRequest) {
 
       // Use upsert to atomically handle feed creation (prevents race conditions)
       // If another request created the same feed between our check and create, this won't fail
-      const feed = await prisma.feed.upsert({
-        where: { originalUrl: normalizedOriginalUrl },
-        create: {
-          id: feedId,
-          guid: parsedFeed.podcastGuid || null,
-          originalUrl: normalizedOriginalUrl,
-          cdnUrl: cdnUrl || normalizedOriginalUrl,
-          type: resolvedType,
-          priority,
-          title: parsedFeed.title,
-          description: parsedFeed.description,
-          artist: parsedFeed.artist,
-          image: parsedFeed.image,
-          language: parsedFeed.language,
-          category: parsedFeed.category,
-          podcastCategories: parsedFeed.podcastCategories || [],
-          explicit: parsedFeed.explicit,
-          v4vRecipient: parsedFeed.v4vRecipient || null,
-          v4vValue: parsedFeed.v4vValue || null,
-          lastFetched: new Date(),
-          status: 'active',
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        update: {
-          // If feed exists by URL, just update lastFetched (race condition case)
-          lastFetched: new Date(),
-          updatedAt: new Date()
-        },
-        select: { id: true, createdAt: true, updatedAt: true, originalUrl: true }
-      });
+      let feed;
+      try {
+        feed = await prisma.feed.upsert({
+          where: { originalUrl: normalizedOriginalUrl },
+          create: {
+            id: feedId,
+            guid: parsedFeed.podcastGuid || null,
+            originalUrl: normalizedOriginalUrl,
+            cdnUrl: cdnUrl || normalizedOriginalUrl,
+            type: resolvedType,
+            priority,
+            title: parsedFeed.title,
+            description: parsedFeed.description,
+            artist: parsedFeed.artist,
+            image: parsedFeed.image,
+            language: parsedFeed.language,
+            category: parsedFeed.category,
+            podcastCategories: parsedFeed.podcastCategories || [],
+            explicit: parsedFeed.explicit,
+            v4vRecipient: parsedFeed.v4vRecipient || null,
+            v4vValue: parsedFeed.v4vValue || null,
+            lastFetched: new Date(),
+            status: 'active',
+            createdAt: new Date(),
+            updatedAt: new Date()
+          },
+          update: {
+            // If feed exists by URL, just update lastFetched (race condition case)
+            lastFetched: new Date(),
+            updatedAt: new Date()
+          },
+          select: { id: true, createdAt: true, updatedAt: true, originalUrl: true }
+        });
+      } catch (upsertError: any) {
+        // GUID unique constraint collision — retry without GUID
+        // This happens when a publisher feed's GUID was already claimed by one of its album feeds
+        if (upsertError?.message?.includes('Unique constraint') && upsertError?.message?.includes('guid')) {
+          console.warn(`⚠️ GUID collision for ${parsedFeed.podcastGuid}, creating feed without GUID`);
+          feed = await prisma.feed.upsert({
+            where: { originalUrl: normalizedOriginalUrl },
+            create: {
+              id: feedId,
+              guid: null,
+              originalUrl: normalizedOriginalUrl,
+              cdnUrl: cdnUrl || normalizedOriginalUrl,
+              type: resolvedType,
+              priority,
+              title: parsedFeed.title,
+              description: parsedFeed.description,
+              artist: parsedFeed.artist,
+              image: parsedFeed.image,
+              language: parsedFeed.language,
+              category: parsedFeed.category,
+              podcastCategories: parsedFeed.podcastCategories || [],
+              explicit: parsedFeed.explicit,
+              v4vRecipient: parsedFeed.v4vRecipient || null,
+              v4vValue: parsedFeed.v4vValue || null,
+              lastFetched: new Date(),
+              status: 'active',
+              createdAt: new Date(),
+              updatedAt: new Date()
+            },
+            update: {
+              lastFetched: new Date(),
+              updatedAt: new Date()
+            },
+            select: { id: true, createdAt: true, updatedAt: true, originalUrl: true }
+          });
+        } else {
+          throw upsertError;
+        }
+      }
 
       // Check if this was a new creation vs update (race condition detection)
       const wasCreated = Math.abs(feed.createdAt.getTime() - feed.updatedAt.getTime()) < 1000;
