@@ -171,14 +171,7 @@ export default function Nip46Connect({
 
   const handleDeepLink = () => {
     if (deepLinkUrl) {
-      // Use window.open to launch the signer app while keeping the browser page active.
-      // On iOS, window.open with _blank lets the OS open the app without replacing the
-      // current page, making it easier for the user to return to the browser.
-      const opened = window.open(deepLinkUrl, '_blank');
-      if (!opened) {
-        // Fallback: if popup was blocked, try location.href
-        window.location.href = deepLinkUrl;
-      }
+      window.location.href = deepLinkUrl;
       setIsConnecting(true);
       setConnectionStatus('connecting');
     }
