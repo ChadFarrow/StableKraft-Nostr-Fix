@@ -250,7 +250,7 @@ export class UnifiedSigner {
           const client = new NIP46Client();
           // Pass saved pubkey to connect() so it's included in the connection object from the start
           // This allows authenticate() to skip the connect request if we're already authenticated
-          await client.connect(savedConnection.signerUrl, savedConnection.token, false, savedConnection.pubkey);
+          await client.connect(savedConnection.signerUrl, savedConnection.token, false, savedConnection.pubkey, savedConnection.signerAppPubkey);
           
           // authenticate() will now see the pubkey and skip the connect request
           await client.authenticate();
@@ -313,7 +313,7 @@ export class UnifiedSigner {
           } else {
             try {
               const client = new NIP46Client();
-              await client.connect(savedConnection.signerUrl, savedConnection.token, false, savedConnection.pubkey);
+              await client.connect(savedConnection.signerUrl, savedConnection.token, false, savedConnection.pubkey, savedConnection.signerAppPubkey);
               await client.authenticate();
 
               this.nip46Signer = new NIP46Signer(client);
@@ -375,7 +375,7 @@ export class UnifiedSigner {
         } else {
           try {
             const client = new NIP46Client();
-            await client.connect(savedConnection.signerUrl, savedConnection.token, false, savedConnection.pubkey);
+            await client.connect(savedConnection.signerUrl, savedConnection.token, false, savedConnection.pubkey, savedConnection.signerAppPubkey);
             await client.authenticate();
             
             this.nip46Signer = new NIP46Signer(client);

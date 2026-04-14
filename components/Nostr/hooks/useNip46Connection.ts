@@ -133,7 +133,8 @@ export function useNip46Connection(options: UseNip46ConnectionOptions): Nip46Con
           storedConnection.signerUrl,
           storedConnection.token,
           false,
-          storedConnection.pubkey
+          storedConnection.pubkey,
+          storedConnection.signerAppPubkey // Restore signer's actual pubkey for sign_event targeting
         );
         await client.authenticate();
 

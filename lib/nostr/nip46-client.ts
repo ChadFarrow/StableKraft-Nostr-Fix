@@ -154,7 +154,7 @@ export class NIP46Client {
    * @param connectImmediately - Whether to connect immediately (default: false, wait for signer to initiate)
    * @param signerPubkey - Optional signer pubkey (for bunker:// connections, extracted from URI)
    */
-  async connect(signerUrl: string, token: string, connectImmediately: boolean = false, signerPubkey?: string): Promise<void> {
+  async connect(signerUrl: string, token: string, connectImmediately: boolean = false, signerPubkey?: string, signerAppPubkey?: string): Promise<void> {
     if (this.connection && this.connection.connected) {
       await this.disconnect();
     }
@@ -175,10 +175,10 @@ export class NIP46Client {
       // Extract relay URL from nostrconnect:// URI if needed
       // For now, assume signerUrl is already the relay URL
       // Pass signerPubkey if provided (for restoring saved connections)
-      return this.connectNostrConnect(signerUrl, token, signerPubkey);
+      return this.connectNostrConnect(signerUrl, token, signerPubkey, signerAppPubkey);
     } else {
       // Direct URL connection (existing logic)
-      return this.connectDirect(signerUrl, token, connectImmediately, signerPubkey);
+      return this.connectDirect(signerUrl, token, connectImmediately, signerPubkey, signerAppPubkey);
     }
   }
 
@@ -447,7 +447,7 @@ export class NIP46Client {
   /**
    * Connect using nostrconnect:// URI (relay-based)
    */
-  private async connectNostrConnect(nostrConnectUri: string, token: string, savedPubkey?: string): Promise<void> {
+  private async connectNostrConnect(nostrConnectUri: string, token: string, savedPubkey?: string, savedSignerAppPubkey?: string): Promise<void> {
     // For nostrconnect://, we need to extract the relay URL
     // The URI format is: nostrconnect://<pubkey>?relay=<relay_url>&secret=<secret>
     // For now, we'll use the existing relay-based connection logic
@@ -461,7 +461,16 @@ export class NIP46Client {
       connected: false, // Will be set to true after relay connects and we verify it's active
       connectedAt: undefined, // Will be set after successful authentication
     };
-    
+
+    // Restore the signer service's actual pubkey if available (from previous session)
+    // This is critical for sign_event requests — without it, restored connections
+    // encrypt/tag to the user's pubkey instead of the signer's, causing timeouts.
+    if (savedSignerAppPubkey) {
+      (this.connection as any).signerPubkey = savedSignerAppPubkey;
+      (this.connection as any).actualSignerAppPubkey = savedSignerAppPubkey;
+      this.debugLog('✅ NIP-46: Restored signer app pubkey:', savedSignerAppPubkey.slice(0, 16) + '...');
+    }
+
     if (savedPubkey) {
       this.debugLog('✅ NIP-46: Restoring connection with saved user pubkey:', savedPubkey.slice(0, 16) + '...');
       this.debugLog('ℹ️ NIP-46: Connection will be verified after relay connects');
@@ -494,13 +503,20 @@ export class NIP46Client {
   /**
    * Connect using direct URL (existing logic)
    */
-  private async connectDirect(signerUrl: string, token: string, connectImmediately: boolean, signerPubkey?: string): Promise<void> {
+  private async connectDirect(signerUrl: string, token: string, connectImmediately: boolean, signerPubkey?: string, signerAppPubkey?: string): Promise<void> {
     this.connection = {
       signerUrl,
       token,
       pubkey: signerPubkey,
       connected: false,
     };
+
+    // Restore the signer service's actual pubkey if available (from previous session)
+    if (signerAppPubkey) {
+      (this.connection as any).signerPubkey = signerAppPubkey;
+      (this.connection as any).actualSignerAppPubkey = signerAppPubkey;
+      this.debugLog('✅ NIP-46: Restored signer app pubkey for direct connection:', signerAppPubkey.slice(0, 16) + '...');
+    }
 
     // If connectImmediately is true, treat this as a relay-based connection
     // (client-initiated nostrconnect:// flow)
@@ -1900,12 +1916,14 @@ export class NIP46Client {
               );
             }
 
-            // For bunker:// connections, store the actual signer app pubkey from successful responses
+            // Store the actual signer app pubkey from successful responses for ALL connection types
             // This allows us to filter out noise from other signers after we know who we're talking to
-            const isBunkerConn = this.connection?.signerUrl?.startsWith('bunker://');
-            if (isBunkerConn && this.connection && !(this.connection as any).actualSignerAppPubkey) {
+            // Critical for nostrconnect:// (Primal) connections too — without this, restored
+            // connections lose the signer pubkey and sign_event requests get encrypted/tagged
+            // with the user's pubkey instead of the signer's, causing timeouts.
+            if (this.connection && !(this.connection as any).actualSignerAppPubkey) {
               (this.connection as any).actualSignerAppPubkey = event.pubkey;
-              this.debugLog(`🔑 NIP-46: Stored actual signer app pubkey for bunker connection: ${event.pubkey.slice(0, 16)}...`);
+              this.debugLog(`🔑 NIP-46: Stored actual signer app pubkey: ${event.pubkey.slice(0, 16)}...`);
             }
 
             this.debugLog('✅ NIP-46: Found matching pending request, processing response:', {
@@ -2279,6 +2297,7 @@ export class NIP46Client {
                 connected: true,
                 connectedAt: Date.now(),
                 relayUrl: (this.connection as any).relayUrl, // Save relay URL for bunker:// connections
+                signerAppPubkey: (this.connection as any).signerPubkey || (this.connection as any).actualSignerAppPubkey, // Signer's actual pubkey
               });
               this.debugLog('💾 NIP-46: Saved connection to localStorage:', {
                 userPubkey: pubkey.slice(0, 16) + '...',
@@ -2377,6 +2396,7 @@ export class NIP46Client {
               connected: true,
               connectedAt: Date.now(),
               relayUrl: (this.connection as any).relayUrl, // Save relay URL for bunker:// connections
+              signerAppPubkey: (this.connection as any).signerPubkey || (this.connection as any).actualSignerAppPubkey,
             });
             this.debugLog('💾 NIP-46: Saved connection to localStorage:', {
               userPubkey: pubkey.slice(0, 16) + '...',
@@ -2458,6 +2478,7 @@ export class NIP46Client {
               connected: true,
               connectedAt: Date.now(),
               relayUrl: (this.connection as any).relayUrl, // Save relay URL for bunker:// connections
+              signerAppPubkey: (this.connection as any).signerPubkey || (this.connection as any).actualSignerAppPubkey,
             });
             this.debugLog('💾 NIP-46: Saved connection to localStorage:', {
               userPubkey: signerPubkey.slice(0, 16) + '...',
@@ -2605,6 +2626,7 @@ export class NIP46Client {
                   signerUrl: this.connection.signerUrl,
                   connected: this.connection.connected || true,
                   connectedAt: Date.now(),
+                  signerAppPubkey: (this.connection as any).signerPubkey || (this.connection as any).actualSignerAppPubkey,
                 });
                 this.debugLog('💾 NIP-46: Saved nsecbunker connection to localStorage');
               } catch (err) {
@@ -2707,12 +2729,18 @@ export class NIP46Client {
       // Check if bunker relay is connected (for bunker:// connections)
       if (isBunkerConnection && bunkerRelayUrl) {
         const bunkerRelayConnected = connectedRelays.includes(bunkerRelayUrl);
-        // Also check if connection is stale (no events in last 60 seconds)
-        const timeSinceLastEvent = this.lastEventTime > 0 ? Date.now() - this.lastEventTime : Infinity;
-        const isConnectionStale = timeSinceLastEvent > 60000; // 60 seconds
+        // Check if the relay WebSocket is actually dead (not just idle)
+        // NIP-46 communication is sporadic — minutes of silence between auth and signing is normal.
+        // Only reconnect if the relay WebSocket is genuinely dead, not just because no events arrived.
+        const relayManager = (this.relayClient as any)?.relayManager;
+        const isRelayWebSocketAlive = relayManager?.isConnected?.(bunkerRelayUrl) === true;
 
-        if (!bunkerRelayConnected || isConnectionStale) {
-          const reason = !bunkerRelayConnected ? 'disconnected' : 'stale (no events in 60s)';
+        // Only consider stale if relay is disconnected OR WebSocket is dead
+        // Don't force reconnection just because of idle time — that disrupts the subscription
+        const needsReconnection = !bunkerRelayConnected || !isRelayWebSocketAlive;
+
+        if (needsReconnection) {
+          const reason = !bunkerRelayConnected ? 'disconnected' : 'WebSocket dead';
           console.warn(`⚠️ NIP-46: Bunker relay ${bunkerRelayUrl} is ${reason}. Reconnecting with full subscription...`);
           try {
             // Use startRelayConnection which handles BOTH relay connection AND subscription setup
@@ -2853,9 +2881,10 @@ export class NIP46Client {
       throw new Error('No valid app key pair found');
     }
 
-    // For bunker:// connections, use signerPubkey (signer app's pubkey) to target messages
-    // For nostrconnect:// connections, use pubkey (will be fetched)
-    const signerPubkey = (this.connection as any).signerPubkey || this.connection.pubkey;
+    // Use the signer service's actual pubkey for targeting sign_event requests.
+    // Priority: signerPubkey (from connect response or bunker URI) > actualSignerAppPubkey
+    // (from first successful response) > user's pubkey (fallback, may not work for all signers)
+    const signerPubkey = (this.connection as any).signerPubkey || (this.connection as any).actualSignerAppPubkey || this.connection.pubkey;
 
     // Ensure relay is still connected - reconnect if needed (before creating Promise)
     try {
