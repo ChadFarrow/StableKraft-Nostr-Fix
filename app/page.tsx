@@ -165,7 +165,7 @@ function HomePageContent() {
   // Format-aware loading state (for "all" filter - load all albums before EPs)
   const [formatCounts, setFormatCounts] = useState<{ albums: number; eps: number; singles: number } | null>(null);
   const [currentFormatPhase, setCurrentFormatPhase] = useState<'albums' | 'eps' | 'singles'>('albums');
-  const API_VERSION = 'v10'; // Increment to bust cache when API changes - v10 includes V4V fields + AudioContext version check
+  const API_VERSION = 'v11'; // v11: includes chaptersUrl, chapters, valueTimeSplits in track data (so Now Playing chapters work when playing from the grid)
   
   // HGH filter removed - no longer needed
   
