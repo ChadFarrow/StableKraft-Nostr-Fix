@@ -23,6 +23,7 @@ export default function LoginModal({ onClose }: LoginModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [loginMethod, setLoginMethod] = useState<'nostr-login' | 'primal'>('nostr-login');
+  const [hasExtension, setHasExtension] = useState(false);
 
   // NIP-46 connection hook (used by Primal tab)
   const {
@@ -47,6 +48,10 @@ export default function LoginModal({ onClose }: LoginModalProps) {
       document.body.click();
     };
     closeDropdowns();
+    // Detect NIP-07 browser extension (Nostash, Alby, nos2x, etc.)
+    if (typeof window !== 'undefined' && (window as any).nostr) {
+      setHasExtension(true);
+    }
     return () => setMounted(false);
   }, []);
 
@@ -517,6 +522,39 @@ export default function LoginModal({ onClose }: LoginModalProps) {
     }
   };
 
+  // Direct extension login — skips nostr-login dialog entirely for fastest login
+  const handleExtensionLogin = async () => {
+    try {
+      setIsSubmitting(true);
+      setError(null);
+
+      const nostr = (window as any).nostr;
+      if (!nostr) {
+        throw new Error('No Nostr extension detected. Please install one or use Sign In below.');
+      }
+
+      console.log('🔐 LoginModal: Direct extension login (fast path)...');
+
+      // Get challenge and sign directly with the extension
+      const { challenge, eventTemplate } = await prepareLoginEvent();
+      const signedEvent = await nostr.signEvent(eventTemplate);
+      console.log('✅ LoginModal: Extension signed event directly');
+
+      const result = await processSignedLogin(
+        signedEvent, challenge, 'extension', onClose
+      );
+      if (!result.success) {
+        throw new Error(result.error || 'Login failed');
+      }
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // nostr-login handler — launches nostr-login's auth UI, then uses polyfilled window.nostr
   const handleNostrLogin = async () => {
     try {
@@ -705,12 +743,41 @@ export default function LoginModal({ onClose }: LoginModalProps) {
         {/* nostr-login (works on iOS + any platform without extensions) */}
         {loginMethod === 'nostr-login' && (
           <div className="mb-4">
+            {/* Direct extension login — shown when a NIP-07 extension is detected */}
+            {hasExtension && (
+              <>
+                <button
+                  onClick={handleExtensionLogin}
+                  disabled={isSubmitting}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                >
+                  {isSubmitting ? 'Signing in...' : 'Sign In with Extension'}
+                </button>
+                <div className="mt-2 mb-4 p-2 bg-blue-50 border border-blue-200 rounded-md">
+                  <p className="text-xs text-blue-800">
+                    Nostr extension detected. This is the fastest way to sign in.
+                  </p>
+                </div>
+                <div className="relative mb-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-200" />
+                  </div>
+                  <div className="relative flex justify-center text-xs">
+                    <span className="bg-white px-2 text-gray-400">or</span>
+                  </div>
+                </div>
+              </>
+            )}
             <button
               onClick={handleNostrLogin}
               disabled={isSubmitting}
-              className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              className={`w-full px-4 py-2 rounded-md disabled:opacity-50 disabled:cursor-not-allowed font-medium ${
+                hasExtension
+                  ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
+                  : 'bg-green-600 text-white hover:bg-green-700'
+              }`}
             >
-              {isSubmitting ? 'Signing in...' : '🔑 Sign In to Nostr'}
+              {isSubmitting ? 'Signing in...' : hasExtension ? 'Other Sign In Options' : 'Sign In to Nostr'}
             </button>
             <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-md">
               <p className="text-xs text-green-800">
