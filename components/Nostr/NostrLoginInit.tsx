@@ -1,45 +1,69 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 
 /**
- * NostrLoginInit - Initializes the nostr-login library on the client side.
- * 
- * This component loads nostr-login which polyfills window.nostr for platforms
- * that don't have browser extensions (iOS, mobile browsers). It supports:
- * - NIP-46 bunker connections
- * - NIP-07 extension detection (defers to existing extensions on desktop)
- * 
- * nostr-login is configured with noBanner so it doesn't show its own UI.
- * Instead, the LoginModal dispatches 'nlLaunch' events to trigger auth flows.
+ * Lazy initializer for the nostr-login library.
  *
- * Note: 'local' method is intentionally excluded — users must create Nostr
- * keys elsewhere. Only existing key import and bunker connections are supported.
+ * nostr-login polyfills window.nostr for users without a browser extension
+ * (iOS, mobile, nsec-based auth, bunker connections). But initializing it
+ * on every page load imports the bundle and opens background WebSocket
+ * connections to default relays — which slows page loads and, crucially,
+ * makes NIP-07 extension sign-ins feel sluggish.
+ *
+ * We now init in two modes:
+ *   1. `ensureNostrLoginInitialized()` — explicit, called from the login
+ *      handler right before dispatching `nlLaunch`.
+ *   2. `<NostrLoginAutoInit />` — auto-init ONLY when there's no real
+ *      window.nostr AND the user has a stored session (so nostr-login can
+ *      restore the polyfilled window.nostr for signing).
+ *
+ * Extension users and logged-out users pay zero nostr-login cost on page
+ * load.
  */
-export default function NostrLoginInit() {
-  const initialized = useRef(false);
 
-  useEffect(() => {
-    if (initialized.current) return;
-    initialized.current = true;
+let initPromise: Promise<void> | null = null;
 
-    import('nostr-login')
-      .then(async ({ init }) => {
-        init({
-          // Don't show the floating banner — we control the UI via LoginModal
-          noBanner: true,
-          // Dark theme to match stablekraft aesthetic
-          theme: 'default',
-          // Only allow existing key import and bunker — no local key creation
-          methods: ['connect', 'extension'] as any,
-        });
-        console.log('✅ nostr-login initialized (iOS/mobile signer support ready)');
-      })
-      .catch((error) => {
-        // Non-fatal — desktop users with extensions don't need this
-        console.log('ℹ️ nostr-login not loaded (extensions may still work):', error?.message);
+export function ensureNostrLoginInitialized(): Promise<void> {
+  if (initPromise) return initPromise;
+
+  initPromise = import('nostr-login')
+    .then(({ init }) => {
+      init({
+        // Don't show the floating banner — we control the UI via LoginModal
+        noBanner: true,
+        // Dark theme to match stablekraft aesthetic
+        theme: 'default',
+        // Only allow existing key import and bunker — no local key creation
+        methods: ['connect', 'extension'] as any,
       });
-  }, []);
+      console.log('✅ nostr-login initialized');
+    })
+    .catch((error) => {
+      // Reset so a later attempt can retry (e.g., flaky network)
+      initPromise = null;
+      console.log('ℹ️ nostr-login failed to load:', error?.message);
+      throw error;
+    });
 
+  return initPromise;
+}
+
+/**
+ * Auto-init nostr-login on mount ONLY if the user likely needs it for session
+ * restoration. Skipped for users with real NIP-07 extensions (they already
+ * have window.nostr) and for logged-out users (nothing to restore).
+ */
+export default function NostrLoginAutoInit() {
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    // Real extension is already providing window.nostr — skip.
+    if ((window as any).nostr) return;
+    // No stored login — defer until the user explicitly chooses nostr-login.
+    if (!localStorage.getItem('nostr_user')) return;
+    // Stored login but no window.nostr → likely logged in via nostr-login
+    // (nsec/bunker). Init so signing works on this page.
+    ensureNostrLoginInitialized().catch(() => {});
+  }, []);
   return null;
 }

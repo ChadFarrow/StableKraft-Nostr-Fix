@@ -8,7 +8,7 @@ import { ToastContainer } from '@/components/Toast'
 import { AudioProvider } from '@/contexts/AudioContext'
 import { SessionProvider } from '@/contexts/SessionContext'
 import { NostrProvider } from '@/contexts/NostrContext'
-import NostrLoginInit from '@/components/Nostr/NostrLoginInit'
+import NostrLoginAutoInit from '@/components/Nostr/NostrLoginInit'
 import { UserSettingsProvider } from '@/contexts/UserSettingsContext'
 import { SidebarProvider } from '@/contexts/SidebarContext'
 import { BatchedFavoritesProvider } from '@/contexts/BatchedFavoritesContext'
@@ -244,7 +244,7 @@ export default function RootLayout({
         <ClientErrorBoundary>
           <ErrorBoundary>
             <NostrProvider>
-              <NostrLoginInit />
+              <NostrLoginAutoInit />
               <UserSettingsProvider>
                 <LightningWrapper>
                   <SidebarProvider>

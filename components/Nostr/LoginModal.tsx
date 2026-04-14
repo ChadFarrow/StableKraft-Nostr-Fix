@@ -7,6 +7,7 @@ import { getUnifiedSigner } from '@/lib/nostr/signer';
 import { saveNIP46Connection } from '@/lib/nostr/nip46-storage';
 import Nip46Connect from './Nip46Connect';
 import { useNip46Connection } from './hooks';
+import { ensureNostrLoginInitialized } from './NostrLoginInit';
 import {
   preserveWalletConnection,
   prepareLoginEvent,
@@ -562,6 +563,10 @@ export default function LoginModal({ onClose }: LoginModalProps) {
       setError(null);
 
       console.log('🔐 LoginModal: Launching nostr-login auth flow...');
+
+      // Lazy-load nostr-login on first use (avoids slowing every page load
+      // for users who sign in with an extension and never touch this path).
+      await ensureNostrLoginInitialized();
 
       // Launch nostr-login's auth modal
       document.dispatchEvent(
