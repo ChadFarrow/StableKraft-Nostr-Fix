@@ -67,14 +67,40 @@ Matched by: title slug, artist slug, or URL path. Multi-feed support with per-pl
 ### Duration Filtering
 Tracks over 2 hours filtered as non-music (silent, no warnings)
 
-### NIP-46 Remote Signer (Amber / Primal)
-Key files: `lib/nostr/nip46-client.ts`, `components/Nostr/hooks/useNip46Connection.ts`. iOS Safari kills WebSocket connections after ~30s backgrounded; reconnects on `visibilitychange`. **Primal is the best iOS signer** — auto-signs with Full trust, responds <1s. Performance optimizations (adaptive rate limiting, pre-decrypted content, smart subscription filters, keypair cache) are gated behind `localStorage.setItem('nip46_debug', 'true')` for debug logging.
+### NIP-46 Remote Signer (Amber / Primal / bunker)
+Key files: `lib/nostr/nip46-client.ts`, `lib/nostr/signer.ts` (NIP46Signer wrapper), `components/Nostr/hooks/useNip46Connection.ts`, `lib/nostr/signer-nudge.ts`. iOS Safari kills WebSocket connections after ~30s backgrounded; reconnects on `visibilitychange`. **Primal is the best iOS signer** — auto-signs with Full trust, responds <1s. Performance optimizations (adaptive rate limiting, pre-decrypted content, smart subscription filters, keypair cache) are gated behind `localStorage.setItem('nip46_debug', 'true')` for debug logging.
+
+**Signer nudge toast** (`lib/nostr/signer-nudge.ts`): `withSignerNudge()` wraps `signEvent`/`getPublicKey`, shows dismissable toast after **4s** ("Waiting on Primal to approve…"), hard-fails at **45s**. `NIP46Signer.signEvent`/`getPublicKey` in `signer.ts` route through it automatically; direct `client.signEvent` callers in `LoginModal` also wrap manually. Throttled to 8s so bursts don't spam toasts. Pattern adapted from `soapbox-pub/ditto`.
+
+**iOS PWA reconnect feedback**: `useNip46Connection`'s `visibilitychange` handler emits `toast.success('Signer reconnected')` on successful reconnect, or an actionable red toast with Retry on failure. No more silent hangs.
+
+### Nostr Login Modal (`components/Nostr/LoginModal.tsx`)
+**Card-menu UI** (pattern from `hzrd149/nostrudel`) — no tabs. Cards: Browser Extension (shown only if `window.nostr` detected), Bunker URI (paste `bunker://` / `nostrconnect://`), Primal QR, More options (nostr-login full UI). `view` state: `'menu' | 'bunker' | 'primal'`.
+
+**Extension path is fast-path**: `handleExtensionLogin` calls `window.nostr.signEvent(eventTemplate)` **directly**, not through `UnifiedSigner`. Any future login UX change for extensions should keep this direct path.
+
+**Bunker URI path**: `handlePastedUriConnect` uses a fresh `NIP46Client` + `signer.setNIP46Signer(client)` — bypasses nostr-login entirely. Most reliable iOS PWA path (relay-based, no native-app switching).
+
+**nostr-login is lazy-init**: `components/Nostr/NostrLoginInit.tsx` exports `ensureNostrLoginInitialized()` (called on demand from `handleNostrLogin`) and `<NostrLoginAutoInit />` (mounts in `layout.tsx`, only runs `init()` if user is logged in AND `window.nostr` is absent — i.e., session-restore for nostr-login-polyfilled users). Extension users and logged-out users pay zero cost. Do **not** reintroduce eager init.
+
+### Post-Login Flow (`lib/nostr/auth-utils.ts`)
+Login flows save user data, set `localStorage['nostr_pending_favorites_sync'] = user.id`, close the modal, and reload — **no delay**. `NostrContext`'s mount effect picks up the flag, runs `syncFavoritesToNostr`, and clears it. Running sync pre-reload aborted the in-flight fetches when reload fired; deferring is cleaner and has no warning noise.
+
+When adding new login paths (NIP-46, nostr-login, etc.), call `markFavoritesSyncPending(userId)` instead of firing sync inline.
 
 ### iOS PWA Background Audio (`contexts/AudioContext.tsx`)
 Three-layer strategy: (1) preload at 15s before end, (2) proactive timer at 5s before end, (3) visibility change safety net. `trackEndProcessedRef` prevents double-advance. **Critical**: do not auto-resume if user explicitly paused.
 
 ### Sorting
 `/api/albums-fast` accepts `sort` param (`added-desc`, `added-asc`, `year-desc`, `year-asc`, `name-asc`, `name-desc`, `tracks-desc`, `tracks-asc`). **Do NOT send `sort=name-asc` as default** — it bypasses format grouping (Albums → EPs → Singles). Date fields: `Feed.oldestItemPubdate` = release date, `Feed.createdAt` = when added.
+
+### `/api/albums-fast` track fields (critical gotchas)
+The main-grid play button plays tracks straight from this endpoint — whatever fields are missing here don't show up on the Now Playing screen.
+
+- **Two Track `select` blocks**: one in the general path (~line 163) and another inside the `case 'podcasts'` branch (~line 451). When adding a field, update **both**. They have different indentation so a naive `replace_all` only hits one.
+- **Must include `chaptersUrl`, `chapters`, `valueTimeSplits`** in both selects and both track-mapping blocks — otherwise podcast chapter ticks/titles and VTS playback silently fail when playing from the grid (works from `/podcast/[id]` because that uses `/api/albums/[slug]` which already selects them).
+- **Bump `API_VERSION` in `app/page.tsx`** whenever the response shape changes. The main page caches responses under `localStorage['cachedAlbums_${N}_${API_VERSION}']` and without a bump, users keep serving themselves stale, field-missing data indefinitely. Comment on the constant when bumping so the next change remembers.
+- **15-minute in-memory server cache** in `albums-fast/route.ts` — Railway redeploy clears it; manual clear is `POST /api/admin/clear-cache`.
 
 ### Adding New Playlists
 Files to modify (9 total):
@@ -92,6 +118,10 @@ Populate: `curl https://stablekraft.app/api/playlist/[id]?refresh`
 
 ### Nostr Publish Queue & Relay Management
 Favoriting saves to DB immediately, queues Nostr publish (500ms debounce). **Always call `disconnectAll()`** after publishing or WebSocket connections leak. Key files: `lib/nostr/publish-queue.ts`, `lib/nostr/relay.ts`.
+
+**NIP-01 tag validation**: `createFavoriteEventTemplate` (in `lib/nostr/favorites.ts`) throws if `itemId` is falsy so we never publish events with `["d", null]` tags — strict relays (nsec.app) reject them with "failed to parse envelope". When adding new NIP-51/30001-style parameterized replaceable events, validate all required tag values are non-empty strings at build time, not at publish time.
+
+**Dead-socket filtering** (`RelayManager.publish`): write relays are filtered by `relay.connected !== false` before publishing. Personal NIP-65 relays often accept connect but close the socket before publish runs → nostr-tools throws `SendingOnClosedConnection` synchronously. Each `relay.publish()` is wrapped in `Promise.resolve().then(...)` so any remaining sync throws flow cleanly through `Promise.allSettled` instead of surfacing as unhandled rejections.
 
 ### Favorites Page (`/favorites`)
 Optimistic unfavorite, auto-sync on page load. **Playlist favorites gotcha**: `isPlaylist()` and `playlistImageFallbacks` must use **lowercased feedId**, not the human name. `playlistSlugOverrides` handles ID-to-slug mismatches. Nostr playlist publishing: Kind 34139 addressable event (`d` tag = `stablekraft-favorites`).
@@ -127,6 +157,9 @@ Two paths gated by `autoBoostEnabled` setting and `autoBoostProcessingRef` mutex
 - **`triggerChapterAutoBoost`** — VTS segment transitions. Fetches remote V4V, scales by `remotePercentage`, blends show-host recipients. Non-music chapters use show-level V4V only. API fallback via `feedGuid` if `album.v4vValue` is empty.
 
 **Gap tracking** (`inVtsGapRef`): boosts music segments on gap entry, talk chapters on gap exit. Pre-VTS gaps (intro) tracked on track start. Track-end in a gap boosts via `triggerChapterAutoBoostRef` in `handleEnded`. **Manual seek suppression** (`isManualSeekRef`): chapter skips/progress bar don't trigger autoboost, only natural playback. **iOS foreground recovery**: `visibilitychange`/`pageshow` detect and boost missed segments.
+
+### Toast API (`components/Toast.tsx`)
+Event-driven via `window.dispatchEvent(new CustomEvent('toast', ...))`. Helpers `toast.success/error/warning/info(message, { duration, action })` return the toast id (string). Use `toast.dismiss(id)` to programmatically remove a toast (used by `signer-nudge.ts` to clear the "Waiting on your signer…" toast the moment signing completes). A dismiss listens for a `toast-dismiss` CustomEvent.
 
 ### Episode/Play Count Markers
 `<podcast:txt purpose="episode">` or `<podcast:txt purpose="playcount">` in XML. Parser decodes XML entities via `decodeXmlEntities()` in `lib/playlist/parser.ts`. Original titles stored in `SystemPlaylistTrack.episodeTitle` — do NOT reverse-engineer from episode IDs (lossy). Refresh: `curl https://stablekraft.app/api/playlist/[id]?refresh`
