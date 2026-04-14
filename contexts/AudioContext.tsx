@@ -3090,8 +3090,10 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
 
   // Play next track - moved before useEffect hooks that depend on it
   const playNextTrack = useCallback(async () => {
-    // Chapter navigation: if we have chapters and aren't at the last one, skip to next chapter
-    if (chapters.length > 0 && currentChapterIndex >= 0 && currentChapterIndex < chapters.length - 1) {
+    // Chapter navigation: if we have chapters and aren't at the last one, skip to next chapter.
+    // Skipped when shuffle is active — in shuffle, Next should always advance to the next
+    // shuffled track rather than stepping through VTS segments of the current show.
+    if (!isShuffleMode && chapters.length > 0 && currentChapterIndex >= 0 && currentChapterIndex < chapters.length - 1) {
       const nextChapter = chapters[currentChapterIndex + 1];
       console.debug(`📖 Skipping to next chapter: "${nextChapter.title}" at ${nextChapter.startTime}s`);
       seek(nextChapter.startTime);
@@ -3289,8 +3291,10 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
 
   // Play previous track
   const playPreviousTrack = useCallback(async () => {
-    // Chapter navigation: if we have chapters, go to previous chapter or start of current
-    if (chapters.length > 0 && currentChapterIndex >= 0) {
+    // Chapter navigation: if we have chapters, go to previous chapter or start of current.
+    // Skipped when shuffle is active — in shuffle, Previous should move between shuffled
+    // tracks rather than stepping through VTS segments of the current show.
+    if (!isShuffleMode && chapters.length > 0 && currentChapterIndex >= 0) {
       const currentChapter = chapters[currentChapterIndex];
       const timeIntoChapter = currentTimeRef.current - currentChapter.startTime;
 
