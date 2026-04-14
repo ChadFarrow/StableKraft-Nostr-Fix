@@ -17,6 +17,21 @@ import { hasV4V as checkHasV4V, getV4VRecipients, getPrimaryRecipient, formatVal
 import { prefetchUpcomingTracks, prefetchAudio } from '@/lib/audio-prefetch';
 import { PodcastChapter } from '@/lib/podcast-types';
 
+/**
+ * Detect OP3 boost chapter feeds. OP3 surfaces each boost as a "chapter" so
+ * listeners can see who boosted and when. These are informational markers —
+ * we render them on the progress bar but never skip between them on next/prev.
+ */
+function isBoostChaptersUrl(url: string | undefined | null): boolean {
+  if (!url) return false;
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    return hostname === 'op3.dev' || hostname.endsWith('.op3.dev');
+  } catch {
+    return /(^|\/\/)op3\.dev\//i.test(url);
+  }
+}
+
 interface AudioContextType {
   // Audio state
   currentPlayingAlbum: RSSAlbum | null;
@@ -110,6 +125,10 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   // Chapter state for podcast navigation
   const [chapters, setChapters] = useState<PodcastChapter[]>([]);
   const [currentChapterIndex, setCurrentChapterIndex] = useState(-1);
+  // OP3 boost chapters are informational markers (each boost is a "chapter").
+  // We still render them on the progress bar, but skip/next should advance to
+  // the next track rather than cycling through individual boost markers.
+  const [chaptersAreBoostMarkers, setChaptersAreBoostMarkers] = useState(false);
   const chaptersTrackKeyRef = useRef<string>(''); // Track which episode chapters belong to
   const currentTimeRef = useRef(0); // Ref for currentTime to avoid re-creating callbacks
 
@@ -3090,15 +3109,16 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
 
   // Play next track - moved before useEffect hooks that depend on it
   const playNextTrack = useCallback(async () => {
-    // Chapter navigation: if we have chapters and aren't at the last one, skip to next chapter
-    if (chapters.length > 0 && currentChapterIndex >= 0 && currentChapterIndex < chapters.length - 1) {
+    // Chapter navigation: if we have real chapters and aren't at the last one, skip to next chapter.
+    // OP3 boost-marker chapters are skipped over — they're informational and not meant for navigation.
+    if (!chaptersAreBoostMarkers && chapters.length > 0 && currentChapterIndex >= 0 && currentChapterIndex < chapters.length - 1) {
       const nextChapter = chapters[currentChapterIndex + 1];
       console.debug(`📖 Skipping to next chapter: "${nextChapter.title}" at ${nextChapter.startTime}s`);
       seek(nextChapter.startTime);
       setCurrentChapterIndex(currentChapterIndex + 1);
       return;
     }
-    // If at last chapter (or no chapters), fall through to normal next-track behavior
+    // If at last chapter (or no chapters, or boost markers), fall through to normal next-track behavior
 
     console.log('⏭️ playNextTrack called from lockscreen', {
       repeatMode,
@@ -3280,7 +3300,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         setCurrentTrackIndex(0);
       }
     }
-  }, [currentPlayingAlbum, currentTrackIndex, isShuffleMode, shuffledPlaylist, currentShuffleIndex, playShuffledTrack, playAlbum, repeatMode, chapters, currentChapterIndex, seek]);
+  }, [currentPlayingAlbum, currentTrackIndex, isShuffleMode, shuffledPlaylist, currentShuffleIndex, playShuffledTrack, playAlbum, repeatMode, chapters, currentChapterIndex, chaptersAreBoostMarkers, seek]);
 
   // Update the ref whenever playNextTrack changes
   useEffect(() => {
@@ -3289,8 +3309,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
 
   // Play previous track
   const playPreviousTrack = useCallback(async () => {
-    // Chapter navigation: if we have chapters, go to previous chapter or start of current
-    if (chapters.length > 0 && currentChapterIndex >= 0) {
+    // Chapter navigation: if we have real chapters, go to previous chapter or start of current.
+    // OP3 boost-marker chapters are skipped over — prev goes to the previous track instead.
+    if (!chaptersAreBoostMarkers && chapters.length > 0 && currentChapterIndex >= 0) {
       const currentChapter = chapters[currentChapterIndex];
       const timeIntoChapter = currentTimeRef.current - currentChapter.startTime;
 
@@ -3343,7 +3364,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     } else {
       console.log('⚠️ Already at first track');
     }
-  }, [isShuffleMode, shuffledPlaylist, currentShuffleIndex, playShuffledTrack, currentPlayingAlbum, currentTrackIndex, playAlbum, chapters, currentChapterIndex, seek]);
+  }, [isShuffleMode, shuffledPlaylist, currentShuffleIndex, playShuffledTrack, currentPlayingAlbum, currentTrackIndex, playAlbum, chapters, currentChapterIndex, chaptersAreBoostMarkers, seek]);
 
   // Update the ref whenever playPreviousTrack changes
   useEffect(() => {
@@ -3362,11 +3383,14 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     if (trackKey === chaptersTrackKeyRef.current) return;
     chaptersTrackKeyRef.current = trackKey;
 
+    const isBoostChapters = isBoostChaptersUrl(track.chaptersUrl);
+
     // Use pre-loaded chapters from DB if available
     if (track.chapters && Array.isArray(track.chapters) && track.chapters.length > 0) {
       setChapters(track.chapters);
       setCurrentChapterIndex(0);
-      console.debug(`📖 Using ${track.chapters.length} pre-loaded chapters for: ${track.title}`);
+      setChaptersAreBoostMarkers(isBoostChapters);
+      console.debug(`📖 Using ${track.chapters.length} pre-loaded chapters for: ${track.title}${isBoostChapters ? ' (boost markers)' : ''}`);
       return;
     }
 
@@ -3374,6 +3398,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
     if (!track.chaptersUrl) {
       setChapters([]);
       setCurrentChapterIndex(-1);
+      setChaptersAreBoostMarkers(false);
       return;
     }
 
@@ -3387,10 +3412,12 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
         if (data?.chapters?.length > 0) {
           setChapters(data.chapters);
           setCurrentChapterIndex(0);
-          console.debug(`📖 Fetched ${data.chapters.length} chapters for: ${track.title}`);
+          setChaptersAreBoostMarkers(isBoostChapters);
+          console.debug(`📖 Fetched ${data.chapters.length} chapters for: ${track.title}${isBoostChapters ? ' (boost markers)' : ''}`);
         } else {
           setChapters([]);
           setCurrentChapterIndex(-1);
+          setChaptersAreBoostMarkers(false);
         }
       })
       .catch(err => {
@@ -3398,6 +3425,7 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
           console.warn('Failed to load chapters:', err);
           setChapters([]);
           setCurrentChapterIndex(-1);
+          setChaptersAreBoostMarkers(false);
         }
       });
 
