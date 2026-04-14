@@ -124,11 +124,18 @@ export function useNip46Connection(options: UseNip46ConnectionOptions): Nip46Con
         if (currentUserPubkey && storedConnection.pubkey !== currentUserPubkey) {
           throw new Error('Stored connection is for a different user. Please reconnect.');
         }
-        // Create client and restore connection
+        // Create client and restore connection using proper connect() to
+        // establish a real relay WebSocket. The old code injected the stored
+        // connection object directly, which left the client with no relay
+        // link — signing requests would silently fail.
         const client = new NIP46Client();
-
-        // Manually set the connection data from storage
-        (client as any).connection = storedConnection;
+        await client.connect(
+          storedConnection.signerUrl,
+          storedConnection.token,
+          false,
+          storedConnection.pubkey
+        );
+        await client.authenticate();
 
         setNip46Client(client);
         nip46ClientRef.current = client;
