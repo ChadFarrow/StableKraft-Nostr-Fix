@@ -97,7 +97,7 @@ export class NIP46Client {
   // Enable with: localStorage.setItem('nip46_debug', 'true')
   private static DEBUG = typeof window !== 'undefined' && localStorage.getItem('nip46_debug') === 'true';
   private debugLog(...args: any[]) {
-    if (NIP46Client.DEBUG) this.debugLog(...args);
+    if (NIP46Client.DEBUG) console.log(...args);
   }
 
   // iOS Safari kills WebSocket connections after ~30 seconds when backgrounded
