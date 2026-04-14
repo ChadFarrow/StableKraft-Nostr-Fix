@@ -220,6 +220,40 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
     }
   }, [shouldShow, isVideoMode, videoRef]);
 
+  // Lock body scroll while fullscreen Now Playing is open.
+  // Without this, iOS Safari's elastic bounce reveals the main page behind the
+  // fixed overlay when the user scrolls/drags up inside the screen.
+  useEffect(() => {
+    if (!shouldShow) return;
+
+    const body = document.body;
+    const html = document.documentElement;
+    const scrollY = window.scrollY;
+
+    const prevBodyOverflow = body.style.overflow;
+    const prevBodyPosition = body.style.position;
+    const prevBodyTop = body.style.top;
+    const prevBodyWidth = body.style.width;
+    const prevHtmlOverscroll = html.style.overscrollBehavior;
+
+    // position: fixed on body is the only reliable way to prevent iOS Safari
+    // from scrolling the page behind a fullscreen overlay.
+    body.style.position = 'fixed';
+    body.style.top = `-${scrollY}px`;
+    body.style.width = '100%';
+    body.style.overflow = 'hidden';
+    html.style.overscrollBehavior = 'none';
+
+    return () => {
+      body.style.overflow = prevBodyOverflow;
+      body.style.position = prevBodyPosition;
+      body.style.top = prevBodyTop;
+      body.style.width = prevBodyWidth;
+      html.style.overscrollBehavior = prevHtmlOverscroll;
+      window.scrollTo(0, scrollY);
+    };
+  }, [shouldShow]);
+
   // Debug: Log V4V data availability
   useEffect(() => {
     if (currentTrack) {
@@ -410,7 +444,7 @@ export default function NowPlayingScreen({ isOpen, onClose }: NowPlayingScreenPr
   }
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 overflow-hidden" style={{ height: '100dvh', minHeight: '100vh' }}>
+    <div className="fixed inset-0 z-50 overflow-hidden" style={{ height: '100dvh', overscrollBehavior: 'none', WebkitOverflowScrolling: 'auto' }}>
       {/* Solid Color Background - ITDV Style with good contrast */}
       <div
         className="absolute inset-0 transition-all duration-1000 pointer-events-none"
