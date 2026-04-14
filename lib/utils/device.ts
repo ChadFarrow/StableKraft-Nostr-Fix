@@ -105,16 +105,21 @@ export function isBrave(): boolean {
 
 /**
  * Build a callback URL that returns the user to their current browser on iOS.
- * Non-Safari iOS browsers (Brave, Firefox, Chrome) need their custom URL scheme
+ * Non-Safari iOS browsers (Firefox, Chrome) need their custom URL scheme
  * so the OS routes the redirect back to the correct app.
+ * Brave: brave://open-url doesn't work from external apps (shows "Cannot Open Page").
+ * Plain https:// is used instead — iOS routes it to Brave if it's the default browser.
  */
 export function buildIOSCallbackUrl(targetUrl: string): string {
   if (!isIOS()) {
     return targetUrl;
   }
 
+  // Brave: use plain https:// URL. brave://open-url is not a valid external handler
+  // and causes "Cannot Open Page" errors. If Brave is the user's default browser,
+  // iOS will route the https:// callback back to Brave automatically.
   if (isBrave()) {
-    return `brave://open-url?url=${encodeURIComponent(targetUrl)}`;
+    return targetUrl;
   }
 
   // Firefox iOS
