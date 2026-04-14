@@ -104,7 +104,7 @@ const withPWA = require('next-pwa')({
         cacheName: 'pages-cache',
         expiration: {
           maxEntries: 50,
-          maxAgeSeconds: 60 * 60 * 24, // 1 day
+          maxAgeSeconds: 60 * 60, // 1 hour — avoid iOS PWA sitting on stale shells
         },
         networkTimeoutSeconds: 3,
       },
