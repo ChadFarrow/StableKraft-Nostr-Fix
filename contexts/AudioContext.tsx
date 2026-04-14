@@ -3111,7 +3111,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   const playNextTrack = useCallback(async () => {
     // Chapter navigation: if we have real chapters and aren't at the last one, skip to next chapter.
     // OP3 boost-marker chapters are skipped over — they're informational and not meant for navigation.
-    if (!chaptersAreBoostMarkers && chapters.length > 0 && currentChapterIndex >= 0 && currentChapterIndex < chapters.length - 1) {
+    // Skipped when shuffle is active — in shuffle, Next should always advance to the next
+    // shuffled track rather than stepping through VTS segments of the current show.
+    if (!isShuffleMode && !chaptersAreBoostMarkers && chapters.length > 0 && currentChapterIndex >= 0 && currentChapterIndex < chapters.length - 1) {
       const nextChapter = chapters[currentChapterIndex + 1];
       console.debug(`📖 Skipping to next chapter: "${nextChapter.title}" at ${nextChapter.startTime}s`);
       seek(nextChapter.startTime);
@@ -3311,7 +3313,9 @@ export const AudioProvider: React.FC<AudioProviderProps> = ({ children, radioMod
   const playPreviousTrack = useCallback(async () => {
     // Chapter navigation: if we have real chapters, go to previous chapter or start of current.
     // OP3 boost-marker chapters are skipped over — prev goes to the previous track instead.
-    if (!chaptersAreBoostMarkers && chapters.length > 0 && currentChapterIndex >= 0) {
+    // Skipped when shuffle is active — in shuffle, Previous should move between shuffled
+    // tracks rather than stepping through VTS segments of the current show.
+    if (!isShuffleMode && !chaptersAreBoostMarkers && chapters.length > 0 && currentChapterIndex >= 0) {
       const currentChapter = chapters[currentChapterIndex];
       const timeIntoChapter = currentTimeRef.current - currentChapter.startTime;
 
