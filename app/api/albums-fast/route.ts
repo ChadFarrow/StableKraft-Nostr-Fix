@@ -463,6 +463,9 @@ export async function GET(request: Request) {
                   trackOrder: true,
                   mediaType: true,
                   alternateEnclosures: true,
+                  chaptersUrl: true,
+                  chapters: true,
+                  valueTimeSplits: true,
                 },
                 orderBy: [
                   { trackOrder: 'asc' },
