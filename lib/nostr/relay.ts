@@ -137,9 +137,18 @@ export class RelayManager {
     const writeRelays = Array.from(this.configs.entries())
       .filter(([_, config]) => config.write)
       .map(([url]) => this.relays.get(url))
-      .filter((relay): relay is Relay => relay !== undefined);
+      .filter((relay): relay is Relay => relay !== undefined)
+      // Skip relays whose WebSocket has closed between connect() and publish().
+      // Without this, nostr-tools throws SendingOnClosedConnection synchronously,
+      // which surfaces as an unhandled-rejection in the console. The user's
+      // personal relays in particular (via NIP-65) are often flaky.
+      .filter(relay => (relay as any).connected !== false);
 
-    const publishPromises = writeRelays.map(relay => relay.publish(event));
+    const publishPromises = writeRelays.map(relay =>
+      // Wrap in a try/catch to convert synchronous throws into rejected
+      // promises so Promise.allSettled sees them cleanly.
+      Promise.resolve().then(() => relay.publish(event)),
+    );
     return Promise.allSettled(publishPromises);
   }
 

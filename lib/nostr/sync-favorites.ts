@@ -83,6 +83,12 @@ export async function syncFavoritesToNostr(userId: string): Promise<SyncResults>
           const trackTitle = track.title;
           const artistName = track.Feed?.artist;
 
+          if (!trackId) {
+            console.warn('⚠️ Skipping favorite track with no id/guid/audioUrl:', trackTitle);
+            results.tracks.failed++;
+            continue;
+          }
+
           const eventId = await publishFavoriteTrackToNostr(
             trackId,
             null, // Use unified signer (NIP-46/extension)
@@ -151,6 +157,15 @@ export async function syncFavoritesToNostr(userId: string): Promise<SyncResults>
           const feedId = album.feedId;
           const albumTitle = album.Feed?.title;
           const artistName = album.Feed?.artist;
+
+          // Skip entries without a stable id — NIP-01 rejects events with
+          // null/empty tag values, and there's no way to meaningfully identify
+          // the album on Nostr without one. Likely indicates a partial import.
+          if (!feedId) {
+            console.warn('⚠️ Skipping favorite album with no feedId:', albumTitle || album.id);
+            results.albums.failed++;
+            continue;
+          }
 
           const eventId = await publishFavoriteAlbumToNostr(
             feedId,

@@ -22,6 +22,13 @@ function createFavoriteEventTemplate(
   title?: string,
   artistName?: string
 ) {
+  // NIP-01 requires tag values to be non-empty strings. A missing/undefined
+  // itemId would serialize as ["d", null] and get rejected by strict relays
+  // ("failed to parse envelope"). Refuse to build the event rather than
+  // silently publishing invalid data.
+  if (!itemId || typeof itemId !== 'string') {
+    throw new Error(`Favorite ${type} missing required id (got: ${itemId})`);
+  }
   return {
     kind: FAVORITE_KIND,
     tags: [
