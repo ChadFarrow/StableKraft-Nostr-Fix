@@ -7,12 +7,14 @@ import { useEffect, useRef } from 'react';
  * 
  * This component loads nostr-login which polyfills window.nostr for platforms
  * that don't have browser extensions (iOS, mobile browsers). It supports:
- * - Local key management (keys stored encrypted in browser)
  * - NIP-46 bunker connections
  * - NIP-07 extension detection (defers to existing extensions on desktop)
  * 
  * nostr-login is configured with noBanner so it doesn't show its own UI.
  * Instead, the LoginModal dispatches 'nlLaunch' events to trigger auth flows.
+ *
+ * Note: 'local' method is intentionally excluded — users must create Nostr
+ * keys elsewhere. Only existing key import and bunker connections are supported.
  */
 export default function NostrLoginInit() {
   const initialized = useRef(false);
@@ -28,8 +30,8 @@ export default function NostrLoginInit() {
           noBanner: true,
           // Dark theme to match stablekraft aesthetic
           theme: 'default',
-          // Allow all auth methods: extension, bunker connect, local key
-          methods: ['connect', 'extension', 'local'] as any,
+          // Only allow existing key import and bunker — no local key creation
+          methods: ['connect', 'extension'] as any,
         });
         console.log('✅ nostr-login initialized (iOS/mobile signer support ready)');
       })
