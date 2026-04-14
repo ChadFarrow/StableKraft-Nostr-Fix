@@ -296,7 +296,13 @@ export async function ensureSignerAvailable(): Promise<ReconnectResult> {
   const signer = getUnifiedSigner();
   const loginType = getLoginType();
 
-  // Try to reinitialize first
+  // CRITICAL: Wait for the constructor's async initialization to complete first.
+  // Without this, isAvailable() returns false while init is still in flight,
+  // triggering a redundant reinitialize() that races with the original init —
+  // creating two NIP-46 clients competing for the same relay connection.
+  await signer.ensureInitialized();
+
+  // Try to reinitialize if still not available after init completed
   if (!signer.isAvailable()) {
     try {
       await signer.reinitialize();

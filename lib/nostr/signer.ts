@@ -398,9 +398,11 @@ export class UnifiedSigner {
 
   /**
    * Reinitialize signer (useful after connection changes)
+   * Updates initPromise so ensureInitialized() callers see the new result
    */
   async reinitialize(): Promise<void> {
-    await this.initialize();
+    this.initPromise = this.initialize();
+    await this.initPromise;
   }
 
   /**

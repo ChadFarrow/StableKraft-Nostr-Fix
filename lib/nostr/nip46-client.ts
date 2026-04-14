@@ -3826,8 +3826,13 @@ export class NIP46Client {
         await this.startRelayConnection(relayUrl);
       }
     } catch (err) {
-      console.warn('⚠️ NIP-46: Error checking relay health:', err);
-      // Don't throw — let the sign request proceed anyway
+      // CRITICAL: Propagate relay reconnection errors instead of swallowing them.
+      // If the relay is dead and reconnection fails, signing will hang for 120s
+      // waiting for a response that never comes (causing the app to appear frozen).
+      // Better to fail fast with a clear error so the user sees it immediately.
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error('❌ NIP-46: Relay reconnection failed in ensureSubscription:', errorMsg);
+      throw new Error(`Relay connection lost and reconnection failed: ${errorMsg}. Please try again.`);
     }
   }
 
