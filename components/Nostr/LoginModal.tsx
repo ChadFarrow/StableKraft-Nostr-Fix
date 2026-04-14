@@ -468,24 +468,11 @@ export default function LoginModal({ onClose }: LoginModalProps) {
         const signer = getUnifiedSigner();
         await signer.setNIP46Signer(client);
 
-        // Sync favorites to Nostr (fire and forget - don't block login)
-        try {
-          console.log('🔄 Syncing favorites to Nostr...');
-          // Import dynamically to avoid issues with server-side rendering
-          import('@/lib/nostr/sync-favorites').then(({ syncFavoritesToNostr }) => {
-            syncFavoritesToNostr(loginData.user.id).then((results) => {
-              if (results.interrupted) return; // already warned inside
-              console.log('✅ Favorites synced to Nostr:', results);
-            }).catch((err) => {
-              console.error('❌ Error syncing favorites:', err);
-            });
-          }).catch((err) => {
-            console.error('❌ Error importing sync module:', err);
-          });
-        } catch (syncError) {
-          // Don't fail login if sync fails
-          console.error('❌ Error initiating favorites sync:', syncError);
-        }
+        // Defer favorites sync until after the post-login reload.
+        // NostrContext picks this up on the next page load and runs sync
+        // when the page is stable.
+        const { markFavoritesSyncPending } = await import('@/lib/nostr/auth-utils');
+        markFavoritesSyncPending(loginData.user.id);
 
         // Hide NIP-46 connect UI if still showing
         setShowNip46Connect(false);

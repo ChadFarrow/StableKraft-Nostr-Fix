@@ -42,6 +42,29 @@ export function NostrProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<NostrUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Run any favorites sync that was deferred from a login flow. The previous
+  // pattern fired sync before window.location.reload(), which aborted the
+  // in-flight fetches. Now completeLogin / NIP-46 login sets a localStorage
+  // flag and we pick it up here on the stable post-reload page.
+  useEffect(() => {
+    if (!user?.id) return;
+    const pendingUserId = localStorage.getItem('nostr_pending_favorites_sync');
+    if (!pendingUserId || pendingUserId !== user.id) return;
+
+    // Clear the flag first so we don't re-trigger if this effect re-runs.
+    localStorage.removeItem('nostr_pending_favorites_sync');
+
+    console.log('🔄 Running deferred favorites sync to Nostr...');
+    import('@/lib/nostr/sync-favorites')
+      .then(({ syncFavoritesToNostr }) => syncFavoritesToNostr(user.id))
+      .then((results) => {
+        if (!results) return;
+        if (results.interrupted) return; // already warned inside
+        console.log('✅ Favorites synced to Nostr:', results);
+      })
+      .catch((err) => console.error('❌ Error running deferred favorites sync:', err));
+  }, [user?.id]);
+
   // Load user from localStorage on mount
   useEffect(() => {
     try {

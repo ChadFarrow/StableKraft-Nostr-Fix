@@ -132,7 +132,29 @@ export function saveUserData(user: AuthenticatedUser, loginType: LoginType): voi
 }
 
 /**
- * Start favorites sync (fire and forget)
+ * Key used to defer favorites sync until after the post-login reload.
+ * NostrContext picks this up once the page is stable and runs sync then —
+ * avoids in-flight fetches being aborted by window.location.reload().
+ */
+export const PENDING_FAVORITES_SYNC_KEY = 'nostr_pending_favorites_sync';
+
+/**
+ * Mark that a favorites sync should run after the next page load. The actual
+ * sync is triggered by NostrContext's mount effect so it doesn't race the
+ * post-login reload.
+ */
+export function markFavoritesSyncPending(userId: string): void {
+  try {
+    localStorage.setItem(PENDING_FAVORITES_SYNC_KEY, userId);
+    console.log('🔖 Favorites sync deferred until after reload');
+  } catch (err) {
+    console.warn('⚠️ Failed to mark favorites sync pending:', err);
+  }
+}
+
+/**
+ * Start favorites sync immediately (fire and forget). Prefer
+ * markFavoritesSyncPending() in login flows that reload the page.
  */
 export function startFavoritesSync(userId: string): void {
   console.log('🔄 Syncing favorites to Nostr...');
@@ -161,7 +183,9 @@ export async function completeLogin(
   reloadDelay = 500
 ): Promise<void> {
   saveUserData(user, loginType);
-  startFavoritesSync(user.id);
+  // Defer sync until after the reload — running it here just gets the
+  // fetches aborted 500ms later when window.location.reload() fires.
+  markFavoritesSyncPending(user.id);
   onClose();
   await preserveWalletConnection();
   setTimeout(() => window.location.reload(), reloadDelay);
