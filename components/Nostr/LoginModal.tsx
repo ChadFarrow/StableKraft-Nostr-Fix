@@ -781,7 +781,7 @@ export default function LoginModal({ onClose }: LoginModalProps) {
             </button>
             <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-md">
               <p className="text-xs text-green-800">
-                <strong>Works everywhere:</strong> Create a new key, paste your nsec, or connect to a bunker. No app or extension required — keys are managed securely in your browser.
+                <strong>Works everywhere:</strong> Paste your nsec or connect to a bunker. No app or extension required. Need a Nostr account? Create one with an app like <a href="https://primal.net" target="_blank" rel="noopener noreferrer" className="underline">Primal</a> or <a href="https://iris.to" target="_blank" rel="noopener noreferrer" className="underline">Iris</a>.
               </p>
             </div>
           </div>
