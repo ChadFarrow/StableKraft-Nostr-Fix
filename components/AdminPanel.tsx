@@ -887,7 +887,7 @@ export default function AdminPanel() {
               <label htmlFor="feedUrl" className="block text-sm font-medium text-gray-300 mb-2">
                 Paste RSS Feed URL
               </label>
-              <div className="flex gap-2">
+              <div className="space-y-2">
                 <input
                   type="url"
                   id="feedUrl"
@@ -901,38 +901,40 @@ export default function AdminPanel() {
                     }
                   }}
                   placeholder="https://example.com/feed.xml"
-                  className="flex-1 px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   disabled={addingFeed}
                   required
                   autoFocus
                 />
-                <select
-                  value={feedTypeOverride}
-                  onChange={(e) => setFeedTypeOverride(e.target.value)}
-                  disabled={addingFeed}
-                  className="px-3 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                >
-                  <option value="auto" className="bg-gray-800">Auto-detect</option>
-                  <option value="album" className="bg-gray-800">Album</option>
-                  <option value="publisher" className="bg-gray-800">Publisher</option>
-                  <option value="podcast" className="bg-gray-800">Podcast</option>
-                </select>
-                <button
-                  type="submit"
-                  disabled={addingFeed || bulkSearching || !newFeedUrl.trim()}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center gap-2"
-                >
-                  {addingFeed || bulkSearching ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      {bulkSearching ? 'Searching...' : 'Processing...'}
-                    </>
-                  ) : isPodcastIndexSearchUrl(newFeedUrl.trim()) ? (
-                    'Search & Import'
-                  ) : (
-                    'Add / Update'
-                  )}
-                </button>
+                <div className="flex gap-2">
+                  <select
+                    value={feedTypeOverride}
+                    onChange={(e) => setFeedTypeOverride(e.target.value)}
+                    disabled={addingFeed}
+                    className="flex-1 px-3 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  >
+                    <option value="auto" className="bg-gray-800">Auto-detect</option>
+                    <option value="album" className="bg-gray-800">Album</option>
+                    <option value="publisher" className="bg-gray-800">Publisher</option>
+                    <option value="podcast" className="bg-gray-800">Podcast</option>
+                  </select>
+                  <button
+                    type="submit"
+                    disabled={addingFeed || bulkSearching || !newFeedUrl.trim()}
+                    className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium flex items-center justify-center gap-2"
+                  >
+                    {addingFeed || bulkSearching ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        {bulkSearching ? 'Searching...' : 'Processing...'}
+                      </>
+                    ) : isPodcastIndexSearchUrl(newFeedUrl.trim()) ? (
+                      'Search & Import'
+                    ) : (
+                      'Add / Update'
+                    )}
+                  </button>
+                </div>
               </div>
               <p className="mt-2 text-xs text-gray-400">
                 Paste any RSS feed URL, Podcast Index link (e.g., podcastindex.org/podcast/12345), or PI search page URL (e.g., podcastindex.org/search?q=...) for bulk import. New feeds will be added and parsed. Existing feeds will be reparsed.
