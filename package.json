@@ -1,6 +1,6 @@
 {
   "name": "podcast-music-site",
-  "version": "1.2a970ca675",
+  "version": "1.2a31171cee",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -78,6 +78,7 @@
     "next": "^15.5.9",
     "next-pwa": "^5.6.0",
     "node-fetch": "^2.7.0",
+    "nostr-login": "^1.7.12",
     "nostr-tools": "^2.23.1",
     "postcss": "^8",
     "postcss-import": "^16.1.1",

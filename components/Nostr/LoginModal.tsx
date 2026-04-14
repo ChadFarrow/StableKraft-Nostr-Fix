@@ -3,10 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { NIP46Client } from '@/lib/nostr/nip46-client';
-import { NIP55Client } from '@/lib/nostr/nip55-client';
 import { getUnifiedSigner } from '@/lib/nostr/signer';
 import { saveNIP46Connection } from '@/lib/nostr/nip46-storage';
-import { isAndroid, isIOS } from '@/lib/utils/device';
 import Nip46Connect from './Nip46Connect';
 import { useNip46Connection } from './hooks';
 import {
@@ -23,34 +21,20 @@ export default function LoginModal({ onClose }: LoginModalProps) {
   // Core UI state
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [hasExtension, setHasExtension] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [nip05Identifier, setNip05Identifier] = useState('');
-  const [loginMethod, setLoginMethod] = useState<'extension' | 'nip05' | 'amber' | 'primal'>('extension');
+  const [loginMethod, setLoginMethod] = useState<'nostr-login' | 'primal'>('nostr-login');
 
-  // NIP-55 state
-  const [nip55Client, setNip55Client] = useState<NIP55Client | null>(null);
-  const [isNip55Available, setIsNip55Available] = useState(false);
-
-  // NIP-46 connection hook
+  // NIP-46 connection hook (used by Primal tab)
   const {
     nip46Client,
     showNip46Connect,
     nip46ConnectionToken,
     nip46SignerUrl,
-    amberConnectionInitialized,
     amberConnectionError,
     isInitializingAmber,
-    pastedConnectionUri,
-    showPasteUri,
     setShowNip46Connect,
-    setPastedConnectionUri,
-    setShowPasteUri,
     setAmberConnectionError,
     setAmberConnectionInitialized,
-    setNip46Client,
-    setNip46ConnectionToken,
-    setNip46SignerUrl,
     cleanupAmberConnection,
     nip46ClientRef,
   } = useNip46Connection({ loginMethod, isSubmitting });
@@ -66,358 +50,7 @@ export default function LoginModal({ onClose }: LoginModalProps) {
     return () => setMounted(false);
   }, []);
 
-  // Check for NIP-07 extension (Alby, nos2x, etc.)
-  // BUT: Skip this check if user is already logged in with NIP-46 to prevent Alby popups
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      // Check if user is already logged in with NIP-46 - if so, skip extension check
-      const loginType = localStorage.getItem('nostr_login_type');
-      if (loginType === 'nip46') {
-        console.log('ℹ️ LoginModal: User logged in with NIP-46, skipping extension check to prevent Alby popups');
-        return;
-      }
 
-      // Check for standard NIP-07 interface
-      if ((window as any).nostr) {
-        setHasExtension(true);
-        return;
-      }
-      
-      // Also check for Alby specifically
-      if ((window as any).webln || (window as any).alby) {
-        // Alby might expose nostr through webln
-        if ((window as any).webln?.nostr) {
-          setHasExtension(true);
-          return;
-        }
-      }
-      
-      // Check periodically in case extension loads after page load
-      const checkInterval = setInterval(() => {
-        if ((window as any).nostr) {
-          setHasExtension(true);
-          clearInterval(checkInterval);
-        }
-      }, 500);
-      
-      // Stop checking after 5 seconds
-      setTimeout(() => clearInterval(checkInterval), 5000);
-      
-      return () => clearInterval(checkInterval);
-    }
-  }, []);
-
-  // Check NIP-55 availability on Android and set up callback handler early
-  // NIP-55 is Android-only and NOT supported on iOS
-  useEffect(() => {
-    // Skip NIP-55 setup entirely on iOS — auto-select Primal instead
-    if (isIOS()) {
-      console.log('ℹ️ NIP-55: Skipping NIP-55 setup on iOS (not supported)');
-      setIsNip55Available(false);
-      // Auto-select Primal on iOS if no extension detected
-      if (!hasExtension && loginMethod === 'extension') {
-        console.log('📱 iOS detected: Auto-selecting Primal login (best iOS signer)');
-        setLoginMethod('primal');
-      }
-      return;
-    }
-
-    if (isAndroid()) {
-      const available = NIP55Client.isAvailable();
-      setIsNip55Available(available);
-
-      // IMPORTANT: Create NIP55Client instance early to set up callback handler
-      // This ensures the callback handler is ready when Amber redirects back after approval
-      if (available && !nip55Client) {
-        console.log('📱 NIP-55: Creating client instance early to set up callback handler');
-        const client = new NIP55Client();
-        setNip55Client(client);
-      }
-
-      // Auto-select Amber on Android if NIP-55 available and no extension
-      if (available && !hasExtension && loginMethod === 'extension') {
-        setLoginMethod('amber');
-      } else if (!available && !hasExtension && loginMethod === 'extension') {
-        // Fall back to Amber (will use NIP-46) if NIP-55 not available
-        setLoginMethod('amber');
-      }
-    }
-  }, [hasExtension, loginMethod, nip55Client]);
-
-  // Check for NIP-55 connection result (after page reload from Amber callback)
-  useEffect(() => {
-    // Skip NIP-55 callback processing on iOS - NIP-55 is Android-only
-    if (isIOS()) {
-      console.log('ℹ️ NIP-55: Skipping callback check on iOS (NIP-55 not supported)');
-      // Clear any stale NIP-55 data
-      sessionStorage.removeItem('nip55_connection_result');
-      return;
-    }
-
-    const connectionResult = sessionStorage.getItem('nip55_connection_result');
-    if (connectionResult) {
-      console.log('🎯🎯🎯 NIP-55: Found connection result from callback, completing login...');
-      alert('🎯 Found NIP-55 connection result! Completing login...');
-
-      // Complete the login flow
-      (async () => {
-        try {
-          const { pubkey, signature, eventTemplate } = JSON.parse(connectionResult);
-
-          // Clear the result
-          sessionStorage.removeItem('nip55_connection_result');
-
-          setIsSubmitting(true);
-
-          // Get challenge for authentication
-          const challengeResponse = await fetch('/api/nostr/auth/challenge', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-          });
-
-          if (!challengeResponse.ok) {
-            throw new Error('Failed to get challenge');
-          }
-
-          const challengeData = await challengeResponse.json();
-      const challenge = challengeData.challenge;
-
-      // Create standardized login event template
-      const { createLoginEventTemplate } = await import('@/lib/nostr/events');
-      const challengeEventTemplate = createLoginEventTemplate(challenge);
-
-      // Create NIP-55 client and sign the challenge
-      const client = new NIP55Client();
-      setNip55Client(client);
-
-      // Set connection with the pubkey we got
-      (client as any).connection = {
-        pubkey,
-        connected: true,
-        connectedAt: Date.now(),
-      };
-
-      const signedEvent = await client.signEvent(challengeEventTemplate);
-
-          // Send login request
-          const { publicKeyToNpub } = await import('@/lib/nostr/keys');
-          const npub = publicKeyToNpub(pubkey);
-
-          const loginResponse = await fetch('/api/nostr/auth/login', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              publicKey: pubkey,
-              npub,
-              challenge,
-              signature: signedEvent.sig,
-              eventId: signedEvent.id,
-              createdAt: signedEvent.created_at,
-              kind: signedEvent.kind, // Include kind so API can verify correctly
-              content: signedEvent.content, // Include content so API can verify correctly
-            }),
-          });
-
-          if (!loginResponse.ok) {
-            const errorData = await loginResponse.json();
-            throw new Error(errorData.error || 'Login failed');
-          }
-
-          const loginData = await loginResponse.json();
-          if (loginData.success && loginData.user) {
-            console.log('✅ NIP-55: Login successful (after callback)!');
-
-            // Save connection info
-            localStorage.setItem('nostr_user', JSON.stringify(loginData.user));
-            localStorage.setItem('nostr_login_type', 'nip55');
-            
-            // Save preferred signer for better UX on return visits
-            const { savePreferredSigner } = await import('@/lib/nostr/nip46-storage');
-            savePreferredSigner(loginData.user.nostrPubkey, 'nip55');
-
-            // Update signer in context
-            const signer = getUnifiedSigner();
-            await signer.setNIP55Signer(client);
-
-            // Sync favorites to Nostr (fire and forget - don't block login)
-            try {
-              console.log('🔄 Syncing favorites to Nostr...');
-              import('@/lib/nostr/sync-favorites').then(({ syncFavoritesToNostr }) => {
-                syncFavoritesToNostr(loginData.user.id).then((results) => {
-                  console.log('✅ Favorites synced to Nostr:', results);
-                }).catch((err) => {
-                  console.error('❌ Error syncing favorites:', err);
-                });
-              }).catch((err) => {
-                console.error('❌ Error importing sync module:', err);
-              });
-            } catch (syncError) {
-              console.error('❌ Error initiating favorites sync:', syncError);
-            }
-
-            // Close modal and reload
-            onClose();
-            // Preserve wallet connection before reload (Android fix)
-            await preserveWalletConnection();
-            setTimeout(() => {
-              window.location.reload();
-            }, 2000);
-          } else {
-            throw new Error(loginData.error || 'Login failed');
-          }
-        } catch (err) {
-          console.error('❌ NIP-55: Error completing login after callback:', err);
-          setError(err instanceof Error ? err.message : 'NIP-55 login failed');
-          setIsSubmitting(false);
-        }
-      })();
-    }
-  }, [onClose]);
-
-
-  const handleNip05Login = async () => {
-    try {
-      setIsSubmitting(true);
-      setError(null);
-
-      // Validate NIP-05 format
-      const nip05Regex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-      if (!nip05Regex.test(nip05Identifier)) {
-        throw new Error('Invalid NIP-05 format. Expected: user@domain.com');
-      }
-
-      console.log('🔐 LoginModal: Starting NIP-05 login...', nip05Identifier);
-
-      // Login with NIP-05 identifier
-      const loginResponse = await fetch('/api/nostr/auth/nip05-login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          identifier: nip05Identifier.trim(),
-        }),
-      });
-
-      if (!loginResponse.ok) {
-        const errorData = await loginResponse.json().catch(() => ({}));
-        throw new Error(errorData.error || `Login failed: ${loginResponse.status} ${loginResponse.statusText}`);
-      }
-
-      const loginData = await loginResponse.json();
-      console.log('📥 LoginModal: NIP-05 login response', { success: loginData.success, error: loginData.error });
-      
-      if (loginData.success && loginData.user) {
-        console.log('✅ LoginModal: NIP-05 login successful!', { userId: loginData.user?.id });
-        
-        // Save user data to localStorage
-        try {
-          localStorage.setItem('nostr_user', JSON.stringify(loginData.user));
-          localStorage.setItem('nostr_login_type', 'nip05'); // Mark as NIP-05 login
-          console.log('💾 LoginModal: Saved user to localStorage (NIP-05 login)');
-        } catch (storageError) {
-          console.error('❌ LoginModal: Failed to save to localStorage:', storageError);
-        }
-
-        onClose();
-        // Preserve wallet connection before reload (Android fix)
-        await preserveWalletConnection();
-        window.location.reload(); // Refresh to update context
-      } else {
-        throw new Error(loginData.error || 'Login failed');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'NIP-05 login failed');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  // Connect using pasted bunker:// or nostrconnect:// URI
-  const handlePastedUriConnect = async () => {
-    if (!pastedConnectionUri.trim()) {
-      setError('Please enter a connection URI');
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      setError(null);
-
-      const { NIP46Client } = await import('@/lib/nostr/nip46-client');
-      const isBunkerUri = pastedConnectionUri.trim().startsWith('bunker://');
-
-      console.log('🔌 Connecting with pasted URI:', pastedConnectionUri.substring(0, 30) + '...');
-      if (isBunkerUri) {
-        console.log('📱 Bunker URI detected - make sure your signer app (Aegis/Amber) is open and connected');
-      }
-
-      // Parse token from URI (both bunker:// and nostrconnect:// have secret param)
-      let token = '';
-      try {
-        const url = new URL(pastedConnectionUri.replace(/^(bunker|nostrconnect):\/\//, 'http://'));
-        const secretParam = url.searchParams.get('secret');
-        if (secretParam) {
-          token = decodeURIComponent(secretParam);
-        }
-      } catch (parseErr) {
-        console.warn('⚠️ Failed to parse token from URI, using empty token:', parseErr);
-      }
-
-      const client = new NIP46Client();
-
-      // connect() signature: (signerUrl, token, connectImmediately?, signerPubkey?)
-      // For bunker:// URIs, connect immediately without showing QR code UI
-      await client.connect(pastedConnectionUri, token, true);
-
-      setNip46Client(client);
-      nip46ClientRef.current = client;
-
-      // Register NIP-46 client with unified signer so boost signing works
-      const { getUnifiedSigner } = await import('@/lib/nostr/signer');
-      const signer = getUnifiedSigner();
-      await signer.setNIP46Signer(client);
-      console.log('✅ NIP-46 client registered with unified signer');
-
-      // For bunker:// URIs, wait a bit for the signer to be ready before completing login
-      // The signer app needs time to receive and process the connection
-      if (isBunkerUri) {
-        console.log('⏳ Bunker connection: waiting for signer to be ready...');
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
-
-      // Complete login flow using the connected client
-      await handleNip46ConnectedWithClient(client);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to connect with URI';
-      // Provide more helpful error for bunker:// connections
-      if (pastedConnectionUri.trim().startsWith('bunker://') && errorMessage.includes('timeout')) {
-        setError(`Connection timed out. Make sure your signer app (Aegis/Amber) is open and connected to the relay. The relay in your bunker URI must be accessible.`);
-      } else {
-        setError(errorMessage);
-      }
-      setIsSubmitting(false);
-    }
-  };
-
-  // Unified Amber login - picks best NIP for device
-  // handleAmberLogin now only handles pasted URI case - QR flow is automatic via useEffect
-  const handleAmberLogin = async () => {
-    const trimmedUri = pastedConnectionUri.trim();
-    if (trimmedUri) {
-      // Validate URI format
-      if (!trimmedUri.startsWith('bunker://') && !trimmedUri.startsWith('nostrconnect://')) {
-        setError('Invalid connection URI. Must start with bunker:// or nostrconnect://');
-        return;
-      }
-      await handlePastedUriConnect();
-    }
-    // QR flow is now automatic - no button action needed
-  };
 
   const handleNip46Connected = async () => {
     // Use the ref to get the client
@@ -884,79 +517,72 @@ export default function LoginModal({ onClose }: LoginModalProps) {
     }
   };
 
-  const handleNip55Login = async () => {
+  // nostr-login handler — launches nostr-login's auth UI, then uses polyfilled window.nostr
+  const handleNostrLogin = async () => {
     try {
       setIsSubmitting(true);
       setError(null);
 
-      if (!NIP55Client.isAvailable()) {
-        throw new Error('NIP-55 is only available on Android devices');
-      }
+      console.log('🔐 LoginModal: Launching nostr-login auth flow...');
 
-      console.log('📱 NIP-55: Starting login with Android signer...');
+      // Launch nostr-login's auth modal
+      document.dispatchEvent(
+        new CustomEvent('nlLaunch', { detail: 'welcome' })
+      );
 
-      // Use existing client or create new one
-      const client = nip55Client || new NIP55Client();
-      if (!nip55Client) {
-        setNip55Client(client);
-      }
+      // Wait for nostr-login to complete auth (fires nlAuth event)
+      await new Promise<void>((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          document.removeEventListener('nlAuth', handler);
+          reject(new Error('Login timed out. Please try again.'));
+        }, 120000); // 2 minute timeout
 
-      // Get challenge and prepare event
-      const { challenge, eventTemplate } = await prepareLoginEvent();
+        const handler = async (e: Event) => {
+          const detail = (e as CustomEvent).detail;
+          document.removeEventListener('nlAuth', handler);
+          clearTimeout(timeoutId);
 
-      // Sign challenge event using NIP-55
-      const signedEvent = await client.signEvent(eventTemplate);
-      console.log('✅ NIP-55: Signed challenge event');
+          if (detail?.type === 'logout' || !detail) {
+            reject(new Error('Login was cancelled'));
+            return;
+          }
 
-      // Register signer before completing login
-      const signer = getUnifiedSigner();
-      await signer.setNIP55Signer(client);
+          console.log('✅ nostr-login auth complete, window.nostr is ready');
 
-      // Complete login flow
-      const result = await processSignedLogin(signedEvent, challenge, 'nip55', onClose, 2000);
-      if (!result.success) {
-        throw new Error(result.error || 'Login failed');
-      }
+          try {
+            // window.nostr is now polyfilled by nostr-login
+            // Run the standard challenge/sign/verify flow
+            const { challenge, eventTemplate } = await prepareLoginEvent();
+
+            // Reinitialize the unified signer so it picks up the new window.nostr
+            const signer = getUnifiedSigner();
+            await signer.reinitialize();
+
+            const signedEvent = await signer.signEvent(eventTemplate as any);
+            console.log('✅ LoginModal: Got signed event from nostr-login signer');
+
+            const result = await processSignedLogin(
+              signedEvent, challenge, 'extension', onClose
+            );
+            if (!result.success) {
+              throw new Error(result.error || 'Login failed');
+            }
+            resolve();
+          } catch (signErr) {
+            reject(signErr);
+          }
+        };
+
+        document.addEventListener('nlAuth', handler);
+      });
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'NIP-55 login failed';
-      setError(errorMessage);
-      console.error('❌ NIP-55: Login error:', err);
+      if (err instanceof Error && err.message !== 'Login was cancelled') {
+        setError(err.message);
+      }
     } finally {
       setIsSubmitting(false);
     }
   };
-
-  const handleExtensionLogin = async () => {
-    try {
-      setIsSubmitting(true);
-      setError(null);
-
-      console.log('🔌 LoginModal: Starting extension login...');
-      const nostr = (window as any).nostr;
-      if (!nostr) {
-        throw new Error('Nostr extension not found');
-      }
-
-      // Get challenge and prepare event
-      const { challenge, eventTemplate } = await prepareLoginEvent();
-
-      // Sign with unified signer (uses extension)
-      const signer = getUnifiedSigner();
-      const signedEvent = await signer.signEvent(eventTemplate as any);
-      console.log('✅ LoginModal: Got signed event from extension');
-
-      // Complete login flow
-      const result = await processSignedLogin(signedEvent, challenge, 'extension', onClose);
-      if (!result.success) {
-        throw new Error(result.error || 'Login failed');
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
 
   const modalContent = (
     <div 
@@ -991,26 +617,16 @@ export default function LoginModal({ onClose }: LoginModalProps) {
         )}
 
         {/* Login Method Tabs */}
-        <div className="mb-4 flex gap-2 border-b border-gray-200 flex-wrap">
+        <div className="mb-4 flex gap-2 border-b border-gray-200">
           <button
-            onClick={() => setLoginMethod('extension')}
+            onClick={() => setLoginMethod('nostr-login')}
             className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
-              loginMethod === 'extension'
-                ? 'border-b-2 border-blue-600 text-blue-600'
+              loginMethod === 'nostr-login'
+                ? 'border-b-2 border-green-600 text-green-600'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            Extension
-          </button>
-          <button
-            onClick={() => setLoginMethod('amber')}
-            className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
-              loginMethod === 'amber'
-                ? 'border-b-2 border-blue-600 text-blue-600'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Amber
+            Sign In
           </button>
           <button
             onClick={() => setLoginMethod('primal')}
@@ -1022,117 +638,7 @@ export default function LoginModal({ onClose }: LoginModalProps) {
           >
             Primal
           </button>
-          <button
-            onClick={() => setLoginMethod('nip05')}
-            className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
-              loginMethod === 'nip05'
-                ? 'border-b-2 border-blue-600 text-blue-600'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            NIP-05
-          </button>
         </div>
-
-        {/* Extension Login */}
-        {loginMethod === 'extension' && hasExtension && (
-          <div className="mb-4">
-            <button
-              onClick={handleExtensionLogin}
-              disabled={isSubmitting}
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-            >
-              {isSubmitting ? 'Connecting...' : '🔌 Connect with Extension'}
-            </button>
-            <p className="mt-2 text-xs text-gray-500 text-center">
-              Click to connect with your Nostr extension
-            </p>
-          </div>
-        )}
-
-        {/* Unified Amber Login */}
-        {loginMethod === 'amber' && (
-          <>
-            {/* Paste URI option - always visible at top */}
-            <div className="mb-4 pb-4 border-b border-gray-200">
-              <h4 className="text-sm font-medium text-gray-700 mb-2">
-                Paste connection string from Amber
-              </h4>
-              <p className="text-xs text-gray-500 mb-2">
-                If you have a bunker:// or nostrconnect:// URI from Amber or nsecBunker
-              </p>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={pastedConnectionUri}
-                  onChange={(e) => {
-                    setPastedConnectionUri(e.target.value);
-                    setShowPasteUri(e.target.value.trim().length > 0);
-                  }}
-                  placeholder="bunker://... or nostrconnect://..."
-                  disabled={isSubmitting}
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 font-mono text-xs"
-                />
-                <button
-                  onClick={handleAmberLogin}
-                  disabled={isSubmitting || !pastedConnectionUri.trim()}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium whitespace-nowrap"
-                >
-                  {isSubmitting ? 'Connecting...' : 'Connect'}
-                </button>
-              </div>
-            </div>
-
-            {/* Loading state while initializing */}
-            {isInitializingAmber && !showNip46Connect && (
-              <div className="mb-4 flex flex-col items-center gap-3 py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                <p className="text-sm text-gray-600">Preparing connection...</p>
-              </div>
-            )}
-
-            {/* Error state with retry */}
-            {amberConnectionError && !showNip46Connect && !isInitializingAmber && (
-              <div className="mb-4">
-                <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded mb-3">
-                  {amberConnectionError}
-                </div>
-                <button
-                  onClick={() => {
-                    setAmberConnectionError(null);
-                    setAmberConnectionInitialized(false);
-                  }}
-                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                >
-                  Retry Connection
-                </button>
-              </div>
-            )}
-
-            {/* QR Code (shows immediately once ready) */}
-            {showNip46Connect && (
-              <Nip46Connect
-                connectionToken={nip46ConnectionToken}
-                signerUrl={nip46SignerUrl}
-                onConnected={() => {
-                  // Hide the connection UI immediately when connected
-                  setShowNip46Connect(false);
-                  // Then handle the connection and login
-                  handleNip46Connected();
-                }}
-                onError={(error) => {
-                  setError(error);
-                  setIsSubmitting(false);
-                  setShowNip46Connect(false);
-                  setAmberConnectionInitialized(false);
-                }}
-                onCancel={() => {
-                  cleanupAmberConnection();
-                }}
-              />
-            )}
-          </>
-        )}
 
         {/* Primal Login (iOS-optimized NIP-46) */}
         {loginMethod === 'primal' && (
@@ -1196,38 +702,19 @@ export default function LoginModal({ onClose }: LoginModalProps) {
           </>
         )}
 
-        {/* NIP-05 Login */}
-        {loginMethod === 'nip05' && (
+        {/* nostr-login (works on iOS + any platform without extensions) */}
+        {loginMethod === 'nostr-login' && (
           <div className="mb-4">
-            <div className="mb-3">
-              <label htmlFor="nip05-input" className="block text-sm font-medium text-gray-700 mb-2">
-                NIP-05 Identifier
-              </label>
-              <input
-                id="nip05-input"
-                type="text"
-                value={nip05Identifier}
-                onChange={(e) => setNip05Identifier(e.target.value)}
-                placeholder="user@domain.com"
-                disabled={isSubmitting}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !isSubmitting && nip05Identifier.trim()) {
-                    handleNip05Login();
-                  }
-                }}
-              />
-            </div>
             <button
-              onClick={handleNip05Login}
-              disabled={isSubmitting || !nip05Identifier.trim()}
-              className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              onClick={handleNostrLogin}
+              disabled={isSubmitting}
+              className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
             >
-              {isSubmitting ? 'Verifying...' : '🔐 Sign in with NIP-05'}
+              {isSubmitting ? 'Signing in...' : '🔑 Sign In to Nostr'}
             </button>
-            <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-md">
-              <p className="text-xs text-blue-800">
-                <strong>Read-only mode:</strong> NIP-05 login allows you to view your favorites. To add or remove favorites, you&apos;ll need to use the extension login method.
+            <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-md">
+              <p className="text-xs text-green-800">
+                <strong>Works everywhere:</strong> Create a new key, paste your nsec, or connect to a bunker. No app or extension required — keys are managed securely in your browser.
               </p>
             </div>
           </div>
