@@ -226,14 +226,7 @@ export function useNip46Connection(options: UseNip46ConnectionOptions): Nip46Con
     // Request broad permissions - some signers (Primal) don't support kind-specific permissions
     // Use generic sign_event to allow all event signing, plus specific kinds for signers that support it
     const perms = encodeURIComponent('nip04_encrypt,nip04_decrypt,nip44_encrypt,nip44_decrypt,sign_event,get_public_key');
-    // Include callbackUrl so signer apps (like Primal) can redirect back to the browser after approval.
-    // On iOS, non-Safari browsers (Brave, Firefox, Chrome) need a browser-specific URL scheme
-    // so the OS routes the redirect back to the correct browser, not the default one (Safari).
-    const { buildIOSCallbackUrl } = await import('@/lib/utils/device');
-    const callbackUrl = typeof window !== 'undefined'
-      ? encodeURIComponent(buildIOSCallbackUrl(window.location.href))
-      : appUrl;
-    const nostrconnectUri = `nostrconnect://${publicKey}?relay=${relayEncoded}&secret=${secretEncoded}&name=${appName}&url=${appUrl}&perms=${perms}&callbackUrl=${callbackUrl}`;
+    const nostrconnectUri = `nostrconnect://${publicKey}?relay=${relayEncoded}&secret=${secretEncoded}&name=${appName}&url=${appUrl}&perms=${perms}`;
 
     console.log('NIP-46: Generated connection URI for relay:', relayUrl);
 
