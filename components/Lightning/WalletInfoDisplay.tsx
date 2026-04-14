@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useBitcoinConnect } from './BitcoinConnectProvider';
-import { Wallet, RefreshCw, Copy, ExternalLink, Check, Plus, X, CheckCircle } from 'lucide-react';
+import { Wallet, RefreshCw, Copy, ExternalLink, Check, Plus, X, CheckCircle, Info } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   formatBalance,
@@ -97,6 +97,18 @@ export function WalletInfoDisplay({
     return null;
   };
   const providerLogo = getProviderLogo();
+
+  // NWC-type connections (Alby Hub, Alby, generic NWC) may be scoped to an
+  // isolated sub-account (balance = sub-account only) or a full-access app
+  // connection (balance = entire node). The displayed balance depends on the
+  // NWC URL used. Show a hint so users aren't confused when they see their
+  // full hub total instead of a sub-account balance.
+  const isNwcLike =
+    walletProviderType === 'alby-hub' ||
+    walletProviderType === 'alby' ||
+    walletProviderType === 'nwc';
+  const balanceHint =
+    'For NWC wallets this shows whatever balance the NWC connection is scoped to. Alby Hub: an isolated sub-wallet\'s NWC URL shows the sub-wallet balance; a hub-wide URL (including AlbyGo\'s automatic pairing) shows your full node balance. To see a single sub-wallet, pair it from inside that sub-wallet\'s screen in AlbyGo, or generate the NWC URL from the Alby Hub web admin.';
 
   const handleCopyAddress = async () => {
     if (walletInfo.lightningAddress) {
@@ -212,7 +224,18 @@ export function WalletInfoDisplay({
         {showBalance && walletInfo.supportsBalance && (
           <div className="bg-gray-800/50 rounded-lg p-3">
             <div className="flex items-center justify-between mb-1">
-              <span className="text-gray-400 text-sm">Balance</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-400 text-sm">Balance</span>
+                {isNwcLike && (
+                  <span
+                    className="inline-flex cursor-help"
+                    aria-label="Balance info"
+                    title={balanceHint}
+                  >
+                    <Info className="w-3.5 h-3.5 text-gray-500" />
+                  </span>
+                )}
+              </div>
               <button
                 onClick={handleRefreshBalance}
                 disabled={isBalanceLoading}
@@ -421,7 +444,18 @@ export function WalletInfoDisplay({
           <div className="bg-gray-900/50 rounded-lg p-3">
             <div className="flex items-center justify-between">
               <div>
-                <span className="text-gray-400 text-sm block">Balance</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-gray-400 text-sm">Balance</span>
+                  {isNwcLike && (
+                    <span
+                      className="inline-flex cursor-help"
+                      aria-label="Balance info"
+                      title={balanceHint}
+                    >
+                      <Info className="w-3.5 h-3.5 text-gray-500" />
+                    </span>
+                  )}
+                </div>
                 <div className="text-2xl font-bold text-yellow-400 font-mono">
                   {balance !== null ? formatBalance(balance) : '---'}
                 </div>
