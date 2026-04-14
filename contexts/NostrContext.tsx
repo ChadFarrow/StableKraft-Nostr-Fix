@@ -150,6 +150,22 @@ export function NostrProvider({ children }: { children: React.ReactNode }) {
     clearStoredUserRelays(); // Clear NIP-65 relay list
     setUser(null);
 
+    // Clean up NIP-46 signer and connection state so the next login starts fresh
+    import('@/lib/nostr/signer').then(({ resetUnifiedSigner }) => {
+      resetUnifiedSigner().catch(err => {
+        console.warn('Failed to reset signer on logout:', err);
+      });
+    }).catch(err => {
+      console.warn('Failed to import signer module on logout:', err);
+    });
+
+    // Clear saved NIP-46 connection data from localStorage
+    import('@/lib/nostr/nip46-storage').then(({ clearNIP46Connection }) => {
+      clearNIP46Connection();
+    }).catch(err => {
+      console.warn('Failed to clear NIP-46 connection on logout:', err);
+    });
+
     // Call logout API
     fetch('/api/nostr/auth/logout', {
       method: 'POST',

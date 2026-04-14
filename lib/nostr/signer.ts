@@ -602,3 +602,19 @@ export function getUnifiedSigner(): UnifiedSigner {
   return unifiedSignerInstance;
 }
 
+/**
+ * Reset the unified signer singleton (call on logout)
+ * Disconnects NIP-46 and clears all signer state so the next
+ * login starts completely fresh.
+ */
+export async function resetUnifiedSigner(): Promise<void> {
+  if (unifiedSignerInstance) {
+    try {
+      await unifiedSignerInstance.disconnectNIP46();
+    } catch {
+      // Ignore disconnect errors during cleanup
+    }
+    unifiedSignerInstance = null;
+  }
+}
+
