@@ -61,7 +61,7 @@ jobs:
         echo ""
         echo "📋 Step 2b: Reparsing podcast feeds for new episodes..."
 
-        PODCAST_FEEDS=("3aebb7a8-5942-5ee7-a148-8bdc14f1f3d4" "two-for-tunestr-silvie")  # UpBeats, Two For Tunestr
+        PODCAST_FEEDS=("3aebb7a8-5942-5ee7-a148-8bdc14f1f3d4" "silvie-two-for-tunestr")  # UpBeats, Two For Tunestr
 
         for FEED_ID in "${PODCAST_FEEDS[@]}"; do
           echo "  🔄 Reparsing podcast feed $FEED_ID..."
