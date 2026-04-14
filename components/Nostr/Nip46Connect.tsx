@@ -171,7 +171,14 @@ export default function Nip46Connect({
 
   const handleDeepLink = () => {
     if (deepLinkUrl) {
-      window.location.href = deepLinkUrl;
+      // Use window.open to launch the signer app while keeping the browser page active.
+      // On iOS, window.open with _blank lets the OS open the app without replacing the
+      // current page, making it easier for the user to return to the browser.
+      const opened = window.open(deepLinkUrl, '_blank');
+      if (!opened) {
+        // Fallback: if popup was blocked, try location.href
+        window.location.href = deepLinkUrl;
+      }
       setIsConnecting(true);
       setConnectionStatus('connecting');
     }
@@ -277,10 +284,12 @@ export default function Nip46Connect({
                 : 'bg-blue-600 hover:bg-blue-700'
             }`}
           >
-            {isConnecting ? `Opening ${appName}...` : `Open in ${appName}`}
+            {isConnecting ? `Approve in ${appName}, then come back here` : `Sign in with ${appName}`}
           </button>
           <p className="text-xs text-gray-500 text-center">
-            Tap to open {appName} and connect automatically
+            {isConnecting
+              ? `Switch back to this browser after approving`
+              : `Opens ${appName} to sign in — you'll come back here after`}
           </p>
         </div>
       )}
@@ -296,9 +305,14 @@ export default function Nip46Connect({
           </p>
           <p className="text-xs text-blue-600 text-center">
             {isMobile
-              ? `Please open ${appName} and approve the connection`
+              ? `Approve the connection in ${appName}, then switch back to your browser`
               : `Please scan the QR code and approve the connection in ${appName}`}
           </p>
+          {isMobile && (
+            <p className="text-xs text-purple-700 text-center font-medium">
+              After approving, swipe back to this browser tab
+            </p>
+          )}
           {debugInfo.connectionCheckCount && debugInfo.connectionCheckCount > 10 && (
             <p className="text-xs text-yellow-700 text-center">
               Still waiting... {!isMobile && 'Check the browser console (F12) for details'}
@@ -398,18 +412,21 @@ export default function Nip46Connect({
         <h4 className="text-sm font-semibold mb-2">How to connect:</h4>
         {signerApp === 'primal' ? (
           <ol className="text-xs text-gray-600 space-y-1 list-decimal list-inside">
-            <li>Open the Primal app on your iOS device</li>
-            <li>Go to Settings → Nostr Signing (NIP-46)</li>
             {isMobile ? (
-              <li>Tap &quot;Open in Primal&quot; above, or copy the connection link and paste it in Primal</li>
+              <>
+                <li>Tap &quot;Sign in with Primal&quot; above</li>
+                <li>Approve the connection in Primal</li>
+                <li><strong>Switch back to this browser</strong> after approving</li>
+                <li>Connection completes automatically</li>
+              </>
             ) : (
               <>
                 <li>Scan the QR code above with your phone&apos;s camera, or</li>
                 <li>Copy the connection link and paste it into Primal</li>
+                <li>Approve the connection request in Primal</li>
+                <li>Primal auto-signs with Full trust — connection should be near-instant</li>
               </>
             )}
-            <li>Approve the connection request in Primal</li>
-            <li>Primal auto-signs with Full trust — connection should be near-instant</li>
           </ol>
         ) : (
           <ol className="text-xs text-gray-600 space-y-1 list-decimal list-inside">
