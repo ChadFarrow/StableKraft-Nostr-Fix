@@ -175,6 +175,9 @@ export async function GET(request: Request) {
                 trackOrder: true,
                 mediaType: true,
                 alternateEnclosures: true,
+                chaptersUrl: true,
+                chapters: true,
+                valueTimeSplits: true,
               },
               orderBy: [
                 { trackOrder: 'asc' },
@@ -296,7 +299,10 @@ export async function GET(request: Request) {
           startTime: track.startTime,
           endTime: track.endTime,
           mediaType: track.mediaType || 'audio',
-          alternateEnclosures: track.alternateEnclosures
+          alternateEnclosures: track.alternateEnclosures,
+          chaptersUrl: (track as any).chaptersUrl || undefined,
+          chapters: (track as any).chapters || undefined,
+          valueTimeSplits: (track as any).valueTimeSplits || undefined,
         })),
       // Include V4V payment data from feed (preferred) or first track (fallback)
       v4vRecipient: feed.v4vRecipient || feed.Track?.[0]?.v4vRecipient || null,
@@ -506,6 +512,9 @@ export async function GET(request: Request) {
               endTime: track.endTime,
               mediaType: track.mediaType || 'audio',
               alternateEnclosures: track.alternateEnclosures,
+              chaptersUrl: track.chaptersUrl || undefined,
+              chapters: track.chapters || undefined,
+              valueTimeSplits: track.valueTimeSplits || undefined,
             })),
             totalTracks: feed._count?.Track || feed.Track?.length || 0,
             trackCount: feed._count?.Track || feed.Track?.length || 0,
