@@ -15,7 +15,16 @@
 import { toast } from '@/components/Toast';
 
 const NUDGE_DELAY_MS = 4_000;
-const HARD_TIMEOUT_MS = 45_000;
+// Must sit OUTSIDE the underlying NIP-46 client's 120s relay-request timeout
+// (see `sendRelayRequest` in lib/nostr/nip46-client.ts). A shorter wrapper
+// timeout pre-empts the client's richer error and breaks legitimate slow
+// signers — Primal on iOS PWA in particular routinely takes 30-90s for the
+// full publish → wake signer → approve → relay-deliver-response round-trip,
+// especially after iOS kills the WebSocket while the user is in the signer
+// app. Keep this slightly longer than the client's 120s so the underlying
+// timeout (with its troubleshooting tips) fires first; the wrapper is just
+// a safety net for cases where the underlying promise never settles.
+const HARD_TIMEOUT_MS = 125_000;
 
 /** Throttle: don't show another nudge toast within this window. */
 const NUDGE_THROTTLE_MS = 8_000;
