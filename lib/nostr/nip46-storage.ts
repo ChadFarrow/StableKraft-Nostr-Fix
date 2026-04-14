@@ -19,6 +19,7 @@ export interface NIP46Connection {
   connected: boolean;
   connectedAt?: number;
   relayUrl?: string; // For bunker:// connections, store the actual relay URL separately
+  signerAppPubkey?: string; // Signer service's actual pubkey (distinct from user's pubkey)
 }
 
 const STORAGE_KEY = 'nostr_nip46_connection';
@@ -32,6 +33,7 @@ export interface StoredConnection {
   connectedAt?: number;
   expiresAt: number;
   relayUrl?: string; // For bunker:// connections, store the actual relay URL separately
+  signerAppPubkey?: string; // Signer service's actual pubkey (for encrypting/tagging sign_event requests)
 }
 
 /**
@@ -51,6 +53,7 @@ export function saveNIP46Connection(connection: NIP46Connection): void {
       connectedAt: connection.connectedAt || Date.now(),
       expiresAt: Date.now() + TOKEN_EXPIRY_MS,
       relayUrl: connection.relayUrl, // Store relay URL separately for bunker:// connections
+      signerAppPubkey: connection.signerAppPubkey, // Signer service's pubkey (for sign_event targeting)
     };
 
     // Store the most recent connection (for backward compatibility)
@@ -128,6 +131,7 @@ export function loadNIP46Connection(userPubkey?: string): NIP46Connection | null
               connected: false, // Always start disconnected, need to reconnect
               connectedAt: mostRecent.connectedAt,
               relayUrl: mostRecent.relayUrl, // Restore relay URL for bunker:// connections
+              signerAppPubkey: mostRecent.signerAppPubkey, // Restore signer's actual pubkey
             };
           }
         }
@@ -165,6 +169,7 @@ export function loadNIP46Connection(userPubkey?: string): NIP46Connection | null
       connected: false, // Always start disconnected, need to reconnect
       connectedAt: parsed.connectedAt,
       relayUrl: parsed.relayUrl, // Restore relay URL for bunker:// connections
+      signerAppPubkey: parsed.signerAppPubkey, // Restore signer's actual pubkey
     };
   } catch (error) {
     console.error('❌ Failed to load NIP-46 connection:', error);

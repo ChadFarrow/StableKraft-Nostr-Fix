@@ -101,7 +101,7 @@ async function restoreNIP46Connection(
 
     // Create client and restore connection
     const client = new NIP46Client();
-    await client.connect(savedConnection.signerUrl, savedConnection.token, false, savedConnection.pubkey);
+    await client.connect(savedConnection.signerUrl, savedConnection.token, false, savedConnection.pubkey, savedConnection.signerAppPubkey);
 
     // Authenticate
     console.log('🔐 Authenticating NIP-46/nsecBunker connection...');
