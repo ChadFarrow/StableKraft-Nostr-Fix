@@ -139,7 +139,13 @@ export function startFavoritesSync(userId: string): void {
   import('./sync-favorites')
     .then(({ syncFavoritesToNostr }) => {
       syncFavoritesToNostr(userId)
-        .then((results) => console.log('✅ Favorites synced to Nostr:', results))
+        .then((results) => {
+          if (results.interrupted) {
+            // Already warned inside syncFavoritesToNostr — don't duplicate.
+            return;
+          }
+          console.log('✅ Favorites synced to Nostr:', results);
+        })
         .catch((err) => console.error('❌ Error syncing favorites:', err));
     })
     .catch((err) => console.error('❌ Error importing sync module:', err));

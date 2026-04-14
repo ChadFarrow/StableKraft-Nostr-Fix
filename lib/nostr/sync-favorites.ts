@@ -18,6 +18,8 @@ interface SyncResults {
     skipped: number;
     failed: number;
   };
+  /** True if sync was cut off by a network error (typically post-login reload). */
+  interrupted?: boolean;
 }
 
 /**
@@ -181,7 +183,20 @@ export async function syncFavoritesToNostr(userId: string): Promise<SyncResults>
       }
     }
   } catch (error) {
-    console.error('Error syncing favorites to Nostr:', error);
+    // NetworkError / AbortError during sync is almost always the post-login
+    // window.location.reload() aborting in-flight fetches. Log as a warning
+    // so it doesn't read as an actual failure — the sync will resume on the
+    // next page load or user action.
+    const message = error instanceof Error ? error.message : String(error);
+    const isInterrupted =
+      (error instanceof TypeError && /network|fetch/i.test(message)) ||
+      (error instanceof DOMException && error.name === 'AbortError');
+    if (isInterrupted) {
+      results.interrupted = true;
+      console.warn('⚠️ Favorites sync interrupted (likely page reload):', message);
+    } else {
+      console.error('Error syncing favorites to Nostr:', error);
+    }
   }
 
   return results;

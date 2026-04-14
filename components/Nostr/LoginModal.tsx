@@ -474,6 +474,7 @@ export default function LoginModal({ onClose }: LoginModalProps) {
           // Import dynamically to avoid issues with server-side rendering
           import('@/lib/nostr/sync-favorites').then(({ syncFavoritesToNostr }) => {
             syncFavoritesToNostr(loginData.user.id).then((results) => {
+              if (results.interrupted) return; // already warned inside
               console.log('✅ Favorites synced to Nostr:', results);
             }).catch((err) => {
               console.error('❌ Error syncing favorites:', err);
