@@ -25,6 +25,11 @@ export default function LoginModal({ onClose }: LoginModalProps) {
   const [mounted, setMounted] = useState(false);
   const [loginMethod, setLoginMethod] = useState<'nostr-login' | 'primal'>('nostr-login');
   const [hasExtension, setHasExtension] = useState(false);
+  // Card-menu view state: 'menu' shows the grid of sign-in options. Selecting
+  // a card either runs the handler directly (Extension) or opens a sub-view
+  // (Bunker URI, Primal QR, Advanced/nostr-login).
+  const [view, setView] = useState<'menu' | 'bunker' | 'primal'>('menu');
+  const [bunkerUri, setBunkerUri] = useState('');
 
   // NIP-46 connection hook (used by Primal tab)
   const {
@@ -57,6 +62,57 @@ export default function LoginModal({ onClose }: LoginModalProps) {
   }, []);
 
 
+
+  // Connect using a pasted bunker:// or nostrconnect:// URI. Used by the
+  // Bunker URI card — lets users paste a URI from nsec.app, Alby.to, Keycast,
+  // Amber, etc. Bypasses nostr-login; talks directly to NIP46Client.
+  const handlePastedUriConnect = async () => {
+    const uri = bunkerUri.trim();
+    if (!uri) {
+      setError('Please paste a bunker:// or nostrconnect:// URI');
+      return;
+    }
+    if (!uri.startsWith('bunker://') && !uri.startsWith('nostrconnect://')) {
+      setError('Invalid URI. Must start with bunker:// or nostrconnect://');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setError(null);
+
+      const { NIP46Client } = await import('@/lib/nostr/nip46-client');
+      const isBunker = uri.startsWith('bunker://');
+
+      // Extract token from the URI's `secret` query param.
+      let token = '';
+      try {
+        const url = new URL(uri.replace(/^(bunker|nostrconnect):\/\//, 'http://'));
+        const secret = url.searchParams.get('secret');
+        if (secret) token = decodeURIComponent(secret);
+      } catch {
+        // Ignore — some URIs don't have a parseable secret param.
+      }
+
+      const client = new NIP46Client();
+      await client.connect(uri, token, true);
+      nip46ClientRef.current = client;
+
+      const { getUnifiedSigner } = await import('@/lib/nostr/signer');
+      const signer = getUnifiedSigner();
+      await signer.setNIP46Signer(client);
+
+      // For bunker:// URIs, give the remote signer a moment to be ready
+      // before we request a signature.
+      if (isBunker) await new Promise((r) => setTimeout(r, 1500));
+
+      await handleNip46ConnectedWithClient(client);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to connect';
+      setError(message);
+      setIsSubmitting(false);
+    }
+  };
 
   const handleNip46Connected = async () => {
     // Use the ref to get the client
@@ -136,7 +192,14 @@ export default function LoginModal({ onClose }: LoginModalProps) {
             console.warn('  3. Network/relay connectivity issues');
           }, 30000);
           
-          publicKey = await client.getPublicKey();
+          const { withSignerNudge } = await import('@/lib/nostr/signer-nudge');
+          const signerLabel = (client.getConnection()?.signerUrl || '').includes('primal') ? 'Primal'
+            : (client.getConnection()?.signerUrl || '').includes('nsec.app') ? 'nsec.app'
+            : 'your signer';
+          publicKey = await withSignerNudge(() => client.getPublicKey(), {
+            signerLabel,
+            op: 'getPublicKey',
+          });
           clearTimeout(timeoutWarning);
           console.log('✅ LoginModal: Got public key from signer:', publicKey.slice(0, 16) + '...');
         } catch (err) {
@@ -229,7 +292,14 @@ export default function LoginModal({ onClose }: LoginModalProps) {
 
       let signedEvent: any;
       try {
-        signedEvent = await client.signEvent(event as any);
+        const { withSignerNudge } = await import('@/lib/nostr/signer-nudge');
+        const signerLabel = (client.getConnection()?.signerUrl || '').includes('primal') ? 'Primal'
+          : (client.getConnection()?.signerUrl || '').includes('nsec.app') ? 'nsec.app'
+          : 'your signer';
+        signedEvent = await withSignerNudge(() => client.signEvent(event as any), {
+          signerLabel,
+          op: 'sign',
+        });
       } catch (signError) {
         const errorMessage = signError instanceof Error ? signError.message : String(signError);
         const errorDetails = signError instanceof Error ? {
@@ -477,13 +547,12 @@ export default function LoginModal({ onClose }: LoginModalProps) {
         // Hide NIP-46 connect UI if still showing
         setShowNip46Connect(false);
 
-        // Close modal and reload (delay to let sync messages show)
+        // Close modal and reload. Sync is deferred to post-reload via
+        // markFavoritesSyncPending, so no delay needed.
         onClose();
         // Preserve wallet connection before reload (Android fix)
         await preserveWalletConnection();
-        setTimeout(() => {
-          window.location.reload();
-        }, 2000); // 2 second delay to see sync messages
+        window.location.reload();
       } else {
         throw new Error(loginData.error || 'Login failed');
       }
@@ -647,42 +716,119 @@ export default function LoginModal({ onClose }: LoginModalProps) {
           </div>
         )}
 
-        {/* Login Method Tabs */}
-        <div className="mb-4 flex gap-2 border-b border-gray-200">
-          <button
-            onClick={() => setLoginMethod('nostr-login')}
-            className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
-              loginMethod === 'nostr-login'
-                ? 'border-b-2 border-green-600 text-green-600'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Sign In
-          </button>
-          <button
-            onClick={() => setLoginMethod('primal')}
-            className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
-              loginMethod === 'primal'
-                ? 'border-b-2 border-purple-600 text-purple-600'
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            Primal
-          </button>
-        </div>
+        {/* CARD MENU — pick a sign-in method */}
+        {view === 'menu' && (
+          <div className="grid grid-cols-1 gap-2 mb-4">
+            {hasExtension && (
+              <button
+                onClick={handleExtensionLogin}
+                disabled={isSubmitting}
+                className="text-left p-4 rounded-lg border border-gray-200 hover:border-blue-400 hover:shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <div className="flex items-center gap-3 mb-1">
+                  <span className="text-2xl" aria-hidden>🔌</span>
+                  <span className="font-semibold text-gray-900">
+                    {isSubmitting ? 'Signing in…' : 'Browser Extension'}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600 ml-9">
+                  Sign in with Alby, NoStash, nos2x (fastest).
+                </p>
+              </button>
+            )}
+            <button
+              onClick={() => { setError(null); setBunkerUri(''); setView('bunker'); }}
+              disabled={isSubmitting}
+              className="text-left p-4 rounded-lg border border-gray-200 hover:border-green-400 hover:shadow-sm transition-all disabled:opacity-50"
+            >
+              <div className="flex items-center gap-3 mb-1">
+                <span className="text-2xl" aria-hidden>🔑</span>
+                <span className="font-semibold text-gray-900">Bunker URI</span>
+              </div>
+              <p className="text-xs text-gray-600 ml-9">
+                Paste a <code>bunker://</code> URI from nsec.app, Alby.to, Keycast, Amber, etc.
+              </p>
+            </button>
+            <button
+              onClick={() => { setError(null); setLoginMethod('primal'); setView('primal'); }}
+              disabled={isSubmitting}
+              className="text-left p-4 rounded-lg border border-gray-200 hover:border-purple-400 hover:shadow-sm transition-all disabled:opacity-50"
+            >
+              <div className="flex items-center gap-3 mb-1">
+                <span className="text-2xl" aria-hidden>📱</span>
+                <span className="font-semibold text-gray-900">Primal (QR code)</span>
+              </div>
+              <p className="text-xs text-gray-600 ml-9">
+                Scan with the Primal app on your phone.
+              </p>
+            </button>
+            <button
+              onClick={handleNostrLogin}
+              disabled={isSubmitting}
+              className="text-left p-4 rounded-lg border border-gray-200 hover:border-gray-400 hover:shadow-sm transition-all disabled:opacity-50"
+            >
+              <div className="flex items-center gap-3 mb-1">
+                <span className="text-2xl" aria-hidden>⚙️</span>
+                <span className="font-semibold text-gray-900">More options</span>
+              </div>
+              <p className="text-xs text-gray-600 ml-9">
+                Other bunker providers and advanced settings.
+              </p>
+            </button>
+          </div>
+        )}
 
-        {/* Primal Login (iOS-optimized NIP-46) */}
-        {loginMethod === 'primal' && (
-          <>
-            {/* Loading state while initializing */}
+        {/* BUNKER URI view */}
+        {view === 'bunker' && (
+          <div className="mb-4">
+            <button
+              onClick={() => { setView('menu'); setError(null); }}
+              className="text-sm text-gray-500 hover:text-gray-700 mb-3 flex items-center gap-1"
+            >
+              ← Back
+            </button>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Paste bunker:// or nostrconnect:// URI
+            </label>
+            <input
+              type="text"
+              value={bunkerUri}
+              onChange={(e) => setBunkerUri(e.target.value)}
+              placeholder="bunker://... or nostrconnect://..."
+              disabled={isSubmitting}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:opacity-50 font-mono text-xs mb-2"
+              autoFocus
+            />
+            <button
+              onClick={handlePastedUriConnect}
+              disabled={isSubmitting || !bunkerUri.trim()}
+              className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+            >
+              {isSubmitting ? 'Connecting…' : 'Connect'}
+            </button>
+            <p className="mt-3 text-xs text-gray-600">
+              Get a URI from your signer app: open nsec.app, Alby.to, Keycast, or Amber → export/share connection.
+            </p>
+          </div>
+        )}
+
+        {/* PRIMAL QR view */}
+        {view === 'primal' && (
+          <div className="mb-4">
+            <button
+              onClick={() => { setView('menu'); setLoginMethod('nostr-login'); cleanupAmberConnection(); setError(null); }}
+              className="text-sm text-gray-500 hover:text-gray-700 mb-3 flex items-center gap-1"
+            >
+              ← Back
+            </button>
+
             {isInitializingAmber && !showNip46Connect && (
               <div className="mb-4 flex flex-col items-center gap-3 py-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
-                <p className="text-sm text-gray-600">Preparing Primal connection...</p>
+                <p className="text-sm text-gray-600">Preparing Primal connection…</p>
               </div>
             )}
 
-            {/* Error state with retry */}
             {amberConnectionError && !showNip46Connect && !isInitializingAmber && (
               <div className="mb-4">
                 <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded mb-3">
@@ -700,7 +846,6 @@ export default function LoginModal({ onClose }: LoginModalProps) {
               </div>
             )}
 
-            {/* QR Code / Connection UI */}
             {showNip46Connect && (
               <Nip46Connect
                 connectionToken={nip46ConnectionToken}
@@ -718,65 +863,19 @@ export default function LoginModal({ onClose }: LoginModalProps) {
                 }}
                 onCancel={() => {
                   cleanupAmberConnection();
+                  setView('menu');
+                  setLoginMethod('nostr-login');
                 }}
               />
             )}
 
-            {/* iOS recommendation note */}
             {!isInitializingAmber && !amberConnectionError && !showNip46Connect && (
               <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-md">
                 <p className="text-xs text-purple-800">
-                  <strong>Best for iOS:</strong> Primal auto-signs with Full trust and responds near-instantly. Great for iPhone and iPad users.
+                  <strong>Best for iOS:</strong> Primal auto-signs with Full trust and responds near-instantly.
                 </p>
               </div>
             )}
-          </>
-        )}
-
-        {/* nostr-login (works on iOS + any platform without extensions) */}
-        {loginMethod === 'nostr-login' && (
-          <div className="mb-4">
-            {/* Direct extension login — shown when a NIP-07 extension is detected */}
-            {hasExtension && (
-              <>
-                <button
-                  onClick={handleExtensionLogin}
-                  disabled={isSubmitting}
-                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                >
-                  {isSubmitting ? 'Signing in...' : 'Sign In with Extension'}
-                </button>
-                <div className="mt-2 mb-4 p-2 bg-blue-50 border border-blue-200 rounded-md">
-                  <p className="text-xs text-blue-800">
-                    Nostr extension detected. This is the fastest way to sign in.
-                  </p>
-                </div>
-                <div className="relative mb-4">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-gray-200" />
-                  </div>
-                  <div className="relative flex justify-center text-xs">
-                    <span className="bg-white px-2 text-gray-400">or</span>
-                  </div>
-                </div>
-              </>
-            )}
-            <button
-              onClick={handleNostrLogin}
-              disabled={isSubmitting}
-              className={`w-full px-4 py-2 rounded-md disabled:opacity-50 disabled:cursor-not-allowed font-medium ${
-                hasExtension
-                  ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-300'
-                  : 'bg-green-600 text-white hover:bg-green-700'
-              }`}
-            >
-              {isSubmitting ? 'Signing in...' : hasExtension ? 'Other Sign In Options' : 'Sign In to Nostr'}
-            </button>
-            <div className="mt-3 p-3 bg-green-50 border border-green-200 rounded-md">
-              <p className="text-xs text-green-800">
-                <strong>Works everywhere:</strong> Paste your nsec or connect to a bunker. No app or extension required. Need a Nostr account? Create one with an app like <a href="https://primal.net" target="_blank" rel="noopener noreferrer" className="underline">Primal</a> or <a href="https://iris.to" target="_blank" rel="noopener noreferrer" className="underline">Iris</a>.
-              </p>
-            </div>
           </div>
         )}
 

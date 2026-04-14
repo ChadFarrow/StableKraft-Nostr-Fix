@@ -81,10 +81,23 @@ class NIP46Signer implements Signer {
     return this.client.isConnected();
   }
 
+  /** Best-guess label for nudge toasts based on the signer URL. */
+  private signerLabel(): string {
+    const url = this.client.getConnection()?.signerUrl || '';
+    if (url.includes('primal.net')) return 'Primal';
+    if (url.includes('nsec.app')) return 'nsec.app';
+    if (url.includes('alby')) return 'Alby';
+    if (url.includes('bunker://')) return 'your signer';
+    return 'your signer app';
+  }
+
   async getPublicKey(): Promise<string> {
-    if (!this.pubkey) {
-      this.pubkey = await this.client.getPublicKey();
-    }
+    if (this.pubkey) return this.pubkey;
+    const { withSignerNudge } = await import('./signer-nudge');
+    this.pubkey = await withSignerNudge(() => this.client.getPublicKey(), {
+      signerLabel: this.signerLabel(),
+      op: 'getPublicKey',
+    });
     return this.pubkey;
   }
 
@@ -92,7 +105,11 @@ class NIP46Signer implements Signer {
     if (!this.isAvailable()) {
       throw new Error('NIP-46 client not connected');
     }
-    return this.client.signEvent(event);
+    const { withSignerNudge } = await import('./signer-nudge');
+    return withSignerNudge(() => this.client.signEvent(event), {
+      signerLabel: this.signerLabel(),
+      op: 'sign',
+    });
   }
 
   getClient(): NIP46Client {

@@ -81,14 +81,21 @@ function ToastItem({ toast, onDismiss }: ToastProps) {
 
 export function ToastContainer() {
   const [toasts, setToasts] = useState<Toast[]>([]);
-  
+
   useEffect(() => {
     const handleToast = (event: CustomEvent<Toast>) => {
       setToasts(prev => [...prev, event.detail]);
     };
-    
+    const handleDismiss = (event: CustomEvent<{ id: string }>) => {
+      setToasts(prev => prev.filter(t => t.id !== event.detail.id));
+    };
+
     window.addEventListener('toast' as any, handleToast);
-    return () => window.removeEventListener('toast' as any, handleToast);
+    window.addEventListener('toast-dismiss' as any, handleDismiss);
+    return () => {
+      window.removeEventListener('toast' as any, handleToast);
+      window.removeEventListener('toast-dismiss' as any, handleDismiss);
+    };
   }, []);
   
   const dismissToast = (id: string) => {
@@ -108,27 +115,34 @@ export function ToastContainer() {
 
 // Toast utility functions
 export const toast = {
-  show: (type: ToastType, message: string, duration = 5000, action?: { label: string; onClick: () => void }) => {
+  show: (type: ToastType, message: string, duration = 5000, action?: { label: string; onClick: () => void }): string => {
     const id = Math.random().toString(36).substr(2, 9);
     const event = new CustomEvent('toast', {
       detail: { id, type, message, duration, action },
     });
     window.dispatchEvent(event);
+    return id;
   },
 
-  success: (message: string, options?: { duration?: number; action?: { label: string; onClick: () => void } }) => {
-    toast.show('success', message, options?.duration, options?.action);
+  /** Dismiss a toast by its id (from toast.show() return value). */
+  dismiss: (id: string) => {
+    const event = new CustomEvent('toast-dismiss', { detail: { id } });
+    window.dispatchEvent(event);
   },
 
-  error: (message: string, options?: { duration?: number; action?: { label: string; onClick: () => void } }) => {
-    toast.show('error', message, options?.duration, options?.action);
+  success: (message: string, options?: { duration?: number; action?: { label: string; onClick: () => void } }): string => {
+    return toast.show('success', message, options?.duration, options?.action);
   },
 
-  warning: (message: string, options?: { duration?: number; action?: { label: string; onClick: () => void } }) => {
-    toast.show('warning', message, options?.duration, options?.action);
+  error: (message: string, options?: { duration?: number; action?: { label: string; onClick: () => void } }): string => {
+    return toast.show('error', message, options?.duration, options?.action);
   },
 
-  info: (message: string, options?: { duration?: number; action?: { label: string; onClick: () => void } }) => {
-    toast.show('info', message, options?.duration, options?.action);
+  warning: (message: string, options?: { duration?: number; action?: { label: string; onClick: () => void } }): string => {
+    return toast.show('warning', message, options?.duration, options?.action);
+  },
+
+  info: (message: string, options?: { duration?: number; action?: { label: string; onClick: () => void } }): string => {
+    return toast.show('info', message, options?.duration, options?.action);
   },
 };

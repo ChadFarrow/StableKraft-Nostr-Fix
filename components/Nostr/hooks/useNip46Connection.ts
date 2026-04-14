@@ -288,9 +288,26 @@ export function useNip46Connection(options: UseNip46ConnectionOptions): Nip46Con
         const isiOSDevice = isIOS();
 
         // Check and reconnect - use iOS threshold on iOS devices
-        const reconnected = await nip46ClientRef.current.checkAndReconnectIfNeeded(isiOSDevice);
-        if (reconnected) {
-          console.log(`${isiOSDevice ? 'iOS' : 'Mobile'}: Reconnected NIP-46 after app foreground`);
+        try {
+          const reconnected = await nip46ClientRef.current.checkAndReconnectIfNeeded(isiOSDevice);
+          if (reconnected) {
+            console.log(`${isiOSDevice ? 'iOS' : 'Mobile'}: Reconnected NIP-46 after app foreground`);
+            // Tell the user the signer is back — silences the "why are my boosts hanging?" mystery
+            const { toast } = await import('@/components/Toast');
+            toast.success('Signer reconnected', { duration: 2500 });
+          }
+        } catch (err) {
+          console.warn('NIP-46 reconnect attempt failed:', err);
+          const { toast } = await import('@/components/Toast');
+          toast.error('Signer disconnected — tap to retry', {
+            duration: 10_000,
+            action: {
+              label: 'Retry',
+              onClick: () => {
+                nip46ClientRef.current?.checkAndReconnectIfNeeded(isiOSDevice).catch(() => {});
+              },
+            },
+          });
         }
       }
     };

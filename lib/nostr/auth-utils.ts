@@ -175,16 +175,19 @@ export function startFavoritesSync(userId: string): void {
 
 /**
  * Complete login flow - save data, sync favorites, reload
+ * Default reloadDelay is 0 because favorites sync is now deferred to after
+ * the reload (see markFavoritesSyncPending) — the old 500ms grace period
+ * for in-flight sync fetches is no longer needed and just adds latency.
  */
 export async function completeLogin(
   user: AuthenticatedUser,
   loginType: LoginType,
   onClose: () => void,
-  reloadDelay = 500
+  reloadDelay = 0
 ): Promise<void> {
   saveUserData(user, loginType);
-  // Defer sync until after the reload — running it here just gets the
-  // fetches aborted 500ms later when window.location.reload() fires.
+  // Defer sync until after the reload — NostrContext picks this up once the
+  // page is stable and runs sync then.
   markFavoritesSyncPending(user.id);
   onClose();
   await preserveWalletConnection();
