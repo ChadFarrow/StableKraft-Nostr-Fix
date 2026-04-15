@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm run build",
+  "installCommand": "npm install --no-audit --no-fund",
+  "framework": "nextjs",
+  "functions": {
+    "app/api/nostr/auth/login/route.ts": {
+      "maxDuration": 30
+    }
+  }
+}
