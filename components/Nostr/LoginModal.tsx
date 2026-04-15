@@ -20,16 +20,6 @@ import {
   buildDiagnosticsReport,
 } from '@/lib/nostr/login-diagnostics';
 
-// DEBUG: sign-in options are disabled by default so each can be tested in
-// isolation. Flip to true one at a time while triaging. Extension only shows
-// if window.nostr is also detected.
-const ENABLED_SIGNIN_OPTIONS = {
-  extension: true,
-  bunker: true,
-  amber: true,
-  primal: true,
-};
-
 interface LoginModalProps {
   onClose: () => void;
 }
@@ -148,17 +138,7 @@ export default function LoginModal({ onClose }: LoginModalProps) {
   // Bunker URI card — lets users paste a URI from nsec.app, Alby.to, Keycast,
   // Amber, etc. Bypasses nostr-login; talks directly to NIP46Client.
   const handlePastedUriConnect = async () => {
-    const t0 = performance.now();
-    const mark = (label: string) => console.log(`⏱️  [BunkerLogin] ${label}: ${Math.round(performance.now() - t0)}ms`);
-
     const uri = bunkerUri.trim();
-    console.log('🔑 [BunkerLogin] Connect clicked', {
-      hasUri: !!uri,
-      scheme: uri.startsWith('bunker://') ? 'bunker' : uri.startsWith('nostrconnect://') ? 'nostrconnect' : 'invalid',
-      uriLength: uri.length,
-      uriPreview: uri.slice(0, 60) + (uri.length > 60 ? '…' : ''),
-    });
-
     if (!uri) {
       setError('Please paste a bunker:// or nostrconnect:// URI');
       return;
@@ -177,55 +157,28 @@ export default function LoginModal({ onClose }: LoginModalProps) {
 
       // Extract token from the URI's `secret` query param.
       let token = '';
-      let parsedRelay: string | null = null;
-      let parsedPubkey: string | null = null;
       try {
         const url = new URL(uri.replace(/^(bunker|nostrconnect):\/\//, 'http://'));
         const secret = url.searchParams.get('secret');
         if (secret) token = decodeURIComponent(secret);
-        parsedRelay = url.searchParams.get('relay');
-        parsedPubkey = url.hostname || null;
       } catch {
         // Ignore — some URIs don't have a parseable secret param.
       }
-      console.log('🔑 [BunkerLogin] Parsed URI', {
-        isBunker,
-        hasToken: !!token,
-        tokenLength: token.length,
-        relay: parsedRelay,
-        remoteSignerPubkeyPrefix: parsedPubkey ? parsedPubkey.slice(0, 16) + '…' : null,
-      });
 
       const client = new NIP46Client();
-      mark('NIP46Client constructed');
-
-      const connectStart = performance.now();
       await client.connect(uri, token, true);
-      console.log(`⏱️  [BunkerLogin] client.connect: ${Math.round(performance.now() - connectStart)}ms`);
       nip46ClientRef.current = client;
 
       const { getUnifiedSigner } = await import('@/lib/nostr/signer');
       const signer = getUnifiedSigner();
       await signer.setNIP46Signer(client);
-      mark('UnifiedSigner wired');
 
       // For bunker:// URIs, give the remote signer a moment to be ready
       // before we request a signature.
-      if (isBunker) {
-        console.log('⏳ [BunkerLogin] bunker:// URI — waiting 1500ms before first signer call');
-        await new Promise((r) => setTimeout(r, 1500));
-      }
+      if (isBunker) await new Promise((r) => setTimeout(r, 1500));
 
-      console.log('➡️  [BunkerLogin] Handing off to handleNip46ConnectedWithClient');
       await handleNip46ConnectedWithClient(client);
-      mark('TOTAL success');
     } catch (err) {
-      console.error('❌ [BunkerLogin] Failed', {
-        message: err instanceof Error ? err.message : String(err),
-        name: err instanceof Error ? err.name : undefined,
-        stack: err instanceof Error ? err.stack : undefined,
-        totalElapsedMs: Math.round(performance.now() - t0),
-      });
       const message = err instanceof Error ? err.message : 'Failed to connect';
       setError(message);
       setIsSubmitting(false);
@@ -233,7 +186,6 @@ export default function LoginModal({ onClose }: LoginModalProps) {
   };
 
   const handleNip46Connected = async () => {
-    console.log('🎯 [PrimalLogin] handleNip46Connected fired (signer approved connection)');
     // Use the ref to get the client
     const client = nip46ClientRef.current || nip46Client;
     if (!client) {
@@ -709,81 +661,28 @@ export default function LoginModal({ onClose }: LoginModalProps) {
 
   // Direct extension login — skips nostr-login dialog entirely for fastest login
   const handleExtensionLogin = async () => {
-    const t0 = performance.now();
-    console.log('🔐 [ExtLogin] Click received', {
-      hasWindowNostr: typeof window !== 'undefined' && !!(window as any).nostr,
-      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'n/a',
-      timestamp: new Date().toISOString(),
-    });
     try {
       setIsSubmitting(true);
       setError(null);
 
       const nostr = (window as any).nostr;
-      console.log('🔍 [ExtLogin] window.nostr snapshot', {
-        present: !!nostr,
-        keys: nostr ? Object.keys(nostr) : [],
-        hasGetPublicKey: !!nostr?.getPublicKey,
-        hasSignEvent: !!nostr?.signEvent,
-        hasNip04: !!nostr?.nip04,
-        hasNip44: !!nostr?.nip44,
-      });
       if (!nostr) {
         throw new Error('No Nostr extension detected. Please install one or use Sign In below.');
       }
 
-      // Probe getPublicKey first — cheap sanity check before asking for a signature
-      try {
-        const probeStart = performance.now();
-        const pk = await nostr.getPublicKey();
-        console.log('✅ [ExtLogin] getPublicKey OK', {
-          pubkeyPrefix: typeof pk === 'string' ? pk.slice(0, 16) + '…' : pk,
-          elapsedMs: Math.round(performance.now() - probeStart),
-        });
-      } catch (probeErr) {
-        console.warn('⚠️ [ExtLogin] getPublicKey probe failed (continuing anyway)', probeErr);
-      }
+      console.log('🔐 LoginModal: Direct extension login (fast path)...');
 
-      console.log('📝 [ExtLogin] Preparing login event template…');
       const { challenge, eventTemplate } = await prepareLoginEvent();
-      console.log('📝 [ExtLogin] Template ready', {
-        kind: eventTemplate.kind,
-        challengePrefix: challenge.slice(0, 16) + '…',
-        tags: eventTemplate.tags,
-      });
-
-      console.log('✍️  [ExtLogin] Calling window.nostr.signEvent… (watch for Alby popup)');
-      const signStart = performance.now();
       const signedEvent = await nostr.signEvent(eventTemplate);
-      console.log('✅ [ExtLogin] signEvent returned', {
-        elapsedMs: Math.round(performance.now() - signStart),
-        id: signedEvent?.id?.slice(0, 16) + '…',
-        pubkey: signedEvent?.pubkey?.slice(0, 16) + '…',
-        sig: signedEvent?.sig?.slice(0, 16) + '…',
-        hasAllFields: !!(signedEvent?.id && signedEvent?.pubkey && signedEvent?.sig && signedEvent?.created_at),
-      });
+      console.log('✅ LoginModal: Extension signed event directly');
 
-      console.log('📤 [ExtLogin] POST /api/nostr/auth/login…');
-      const loginStart = performance.now();
       const result = await processSignedLogin(
         signedEvent, challenge, 'extension', onClose
       );
-      console.log('📥 [ExtLogin] processSignedLogin result', {
-        elapsedMs: Math.round(performance.now() - loginStart),
-        success: result.success,
-        error: result.error,
-        totalElapsedMs: Math.round(performance.now() - t0),
-      });
       if (!result.success) {
         throw new Error(result.error || 'Login failed');
       }
     } catch (err) {
-      console.error('❌ [ExtLogin] Failed', {
-        message: err instanceof Error ? err.message : String(err),
-        name: err instanceof Error ? err.name : undefined,
-        stack: err instanceof Error ? err.stack : undefined,
-        totalElapsedMs: Math.round(performance.now() - t0),
-      });
       if (err instanceof Error) {
         setError(err.message);
       }
@@ -827,7 +726,7 @@ export default function LoginModal({ onClose }: LoginModalProps) {
         {/* CARD MENU — pick a sign-in method */}
         {view === 'menu' && (
           <div className="grid grid-cols-1 gap-2 mb-4">
-            {ENABLED_SIGNIN_OPTIONS.extension && hasExtension && (
+            {hasExtension && (
               <button
                 onClick={handleExtensionLogin}
                 disabled={isSubmitting}
@@ -844,7 +743,6 @@ export default function LoginModal({ onClose }: LoginModalProps) {
                 </p>
               </button>
             )}
-            {ENABLED_SIGNIN_OPTIONS.bunker && (
             <button
               onClick={() => { setError(null); setBunkerUri(''); setView('bunker'); }}
               disabled={isSubmitting}
@@ -858,8 +756,6 @@ export default function LoginModal({ onClose }: LoginModalProps) {
                 Paste a <code>bunker://</code> URI from a NIP-46 bunker signer.
               </p>
             </button>
-            )}
-            {ENABLED_SIGNIN_OPTIONS.amber && (
             <button
               onClick={() => { setError(null); setLoginMethod('amber'); setView('amber'); }}
               disabled={isSubmitting}
@@ -873,8 +769,6 @@ export default function LoginModal({ onClose }: LoginModalProps) {
                 Sign in with the Amber app — most popular Android signer.
               </p>
             </button>
-            )}
-            {ENABLED_SIGNIN_OPTIONS.primal && (
             <button
               onClick={() => { setError(null); setLoginMethod('primal'); setView('primal'); }}
               disabled={isSubmitting}
@@ -892,15 +786,6 @@ export default function LoginModal({ onClose }: LoginModalProps) {
                   : 'Scan with the Primal app on your phone.'}
               </p>
             </button>
-            )}
-            {!ENABLED_SIGNIN_OPTIONS.extension &&
-              !ENABLED_SIGNIN_OPTIONS.bunker &&
-              !ENABLED_SIGNIN_OPTIONS.amber &&
-              !ENABLED_SIGNIN_OPTIONS.primal && (
-              <p className="text-sm text-gray-600 text-center py-4">
-                All sign-in options are disabled. Enable one in <code>ENABLED_SIGNIN_OPTIONS</code> (top of <code>LoginModal.tsx</code>) to test.
-              </p>
-            )}
           </div>
         )}
 

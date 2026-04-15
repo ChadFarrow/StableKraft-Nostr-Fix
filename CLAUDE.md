@@ -6,6 +6,52 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Test fork** of `stablekraft-app` scoped to Nostr / NIP-46 / login-modal work. Non-Nostr gotchas (playlists, feeds, VTS, BoostBox, AutoBoost, etc.) live in the production repo at `~/Vibe/stablekraft-app/CLAUDE.md` — consult that if touching those areas.
 
+## Major changes from Nostr-Fix fork (port to prod)
+
+All five commits below fix real bugs or regressions discovered while testing each LoginModal sign-in card one at a time against live signers. Port in order — they layer on the same files. Apply cleanly via `git cherry-pick <hash>` from this fork if the production branch hasn't drifted.
+
+### 1. `7f77d812` — perf: skip server-side profile/relay fetch during login
+**File:** `app/api/nostr/auth/login/route.ts`
+Removes the `NostrClient` + `getDefaultRelays` import and the try-block that called `getProfile` + `getRelayList` on every login. Replace with null profile fields; repeat-logins only refresh `nostrNpub` (never overwrite existing `displayName/avatar/bio/lightningAddress` with nulls).
+**Why:** server login was taking ~21s (measured 21,080ms). Client already fetches NIP-65 itself after redirect via `NostrContext` + `nip65.ts`, so server-side relay round-trip was pure waste. Now 20ms.
+
+### 2. `c3c81940` — perf: show NIP-46 QR instantly
+**File:** `lib/nostr/nip46-client.ts`
+In the connection-setup path (around line 770, `startRelayConnection`): await only the primary relay; fire backup-relay connects in background (`.then(...).catch(...)` without `await`); delete the 500–1000ms post-connect `setTimeout` before subscribing.
+**Why:** Primal/Amber QR took ~6s to appear (measured 6,061ms). Now 466ms.
+
+### 3. `085d8387` — fix: persist Amber NIP-46 login across reload (+ 5 console.error→log)
+**Files:** `components/Nostr/LoginModal.tsx`, `lib/nostr/nip46-client.ts`
+- LoginModal: in the NIP-46 `if (loginData.success) { ... }` branch, drop the "Connection pubkey doesn't match logged-in user — Not saving connection" early return. Instead **normalize** `connection.pubkey = loginData.user.nostrPubkey` and fall through to the save block. For Amber, the connect-response event sender is Amber's per-session signer-app key (e.g. `86e106ca…`), NOT the user's Nostr account pubkey (`f7922a0adb…`). Server verifies signature against the user pubkey; trust that.
+- nip46-client: downgrade five informational logs in `handleRelayEvent` / `sendRequest` from `console.error` → `console.log`:
+  - `[NIP46-CONNECT] Stored signer's pubkey for event filtering: …`
+  - `[NIP46-SUCCESS] Got public key from Amber: …`
+  - `[NIP46-SUCCESS] Using user's pubkey: …`
+  - `[NIP46-SIGN] Using pubkey for signing: …`
+  - `[NIP46-SIGN] Pubkey converts to npub: …`
+**Why:** Without normalization, Amber login 200-OK'd server-side but then the mismatch check skipped `localStorage.setItem('nostr_user', …)` → user appeared logged in, then logged out on the post-login reload. The console.error escalations cause Next.js 15 dev overlay to pop a red "Console Error" on every successful Amber login.
+
+### 4. `753446cd` — fix: make bunker:// URI flow robust to multi-relay signer URIs
+**Files:** `lib/nostr/nip46-client.ts`, `components/Nostr/LoginModal.tsx`, `components/Nostr/hooks/useNip46Connection.ts`
+- nip46-client: for `isBunkerConnection`, replace "await primary only, publish to primary only, subscribe to primary only" with **"connect all URI relays in parallel, succeed if any open; publish + subscribe on every URI relay."** Specifically:
+  - `startRelayConnection`: when `isBunkerConnection`, parse `bunkerInfo.relays` and await `connectToRelays(subscribeRelays)`; succeed if any one of them opens (for Aegis-style single-relay bridges this is still fine — the single URI relay is in the list).
+  - subscription filter: `subscribeRelays` = all URI relays for bunker, was `[relayUrl]`.
+  - publish path (around line 3340): when `isBunkerConnection`, `publishRelays = bunkerInfo.relays`; was hardcoded to `[primaryRelay]` with a "Bunker signers only listen to their specific relay" comment that only applied to Aegis.
+- LoginModal: strip nsec.app/Alby.to/Keycast from user-facing copy (unverified/dead as of April 2026). Add an amber-colored note on the Bunker URI view directing Android users to the dedicated Amber card instead and linking upstream [greenart7c3/Amber#251](https://github.com/greenart7c3/Amber/issues/251).
+**Why:** Amber embeds 5 relays in its `bunker://` URIs (primal, ditto, nsec.app, theforest, nostr.oxtr) and the signer may respond on any of them. Publishing/subscribing to only the first relay loses responses. Also, when primary is blocked by the browser (Firefox blocks relay.primal.net with `NS_ERROR_WEBSOCKET_CONNECTION_REFUSED`), the old code aborted; new code tries all in parallel.
+
+### 5. `43a479d5` — remove: 'More options' card (nostr-login) from LoginModal
+**Files:** `components/Nostr/LoginModal.tsx`, `components/Nostr/NostrLoginInit.tsx`
+- LoginModal: delete the `handleNostrLogin` function, the "More options" card `<button>` in the menu grid, and the `ensureNostrLoginInitialized` import.
+- NostrLoginInit: keep the file as-is — `NostrLoginAutoInit` is still used in `app/layout.tsx` for session-restore of legacy users who previously logged in via nostr-login.
+**Why:** With `noBanner: true`, nostr-login mounts `<nl-banner>` (in hidden state) but never mounts `<nl-auth>` (the modal). Dispatching `nlLaunch` fires the library's internal launch event but no visible UI appears — click just dismissed our modal with nothing rendered. The other 4 cards (Extension, Bunker URI, Amber, Primal) cover every real signer path; nostr-login was a leaky abstraction over features we already built.
+
+### Card count: 4, not 5
+After change #5 the LoginModal has **4** cards: Browser Extension, Bunker URI, Amber (Android), Primal. The `LoginType` union and all signer wiring stays the same — only the "More options" entry was removed from the menu grid.
+
+### Android recommendation
+Direct Android users to the **Amber card** (`nostrconnect://` deep-link, works reliably end-to-end). The Bunker URI card now displays a note warning Android users away because Amber's `bunker://` export is unreliable upstream — per issue #251, Amber's NIP-46 subscription silently stops responding for later `sign_event` requests even though initial `connect` and `get_public_key` work. This is not fixable from our side.
+
 ## Commands
 ```
 npm run dev              # Start dev server
@@ -44,13 +90,17 @@ Key files: `lib/nostr/nip46-client.ts`, `lib/nostr/signer.ts` (NIP46Signer wrapp
 **iOS PWA reconnect feedback**: `useNip46Connection`'s `visibilitychange` handler emits `toast.success('Signer reconnected')` on successful reconnect, or an actionable red toast with Retry on failure. No more silent hangs.
 
 ## Nostr Login Modal (`components/Nostr/LoginModal.tsx`)
-**Card-menu UI** (pattern from `hzrd149/nostrudel`) — no tabs. Cards: Browser Extension (shown only if `window.nostr` detected), Bunker URI (paste `bunker://` / `nostrconnect://`), Primal QR, More options (nostr-login full UI). `view` state: `'menu' | 'bunker' | 'primal'`.
+**Card-menu UI** (pattern from `hzrd149/nostrudel`) — no tabs. **4 cards**: Browser Extension (shown only if `window.nostr` detected), Bunker URI (paste `bunker://` / `nostrconnect://`), Amber (Android, `nostrconnect://` deep-link + QR), Primal (iOS remote signer / desktop QR). `view` state: `'menu' | 'bunker' | 'primal' | 'amber'`.
 
 **Extension path is fast-path**: `handleExtensionLogin` calls `window.nostr.signEvent(eventTemplate)` **directly**, not through `UnifiedSigner`. Any future login UX change for extensions should keep this direct path.
 
-**Bunker URI path**: `handlePastedUriConnect` uses a fresh `NIP46Client` + `signer.setNIP46Signer(client)` — bypasses nostr-login entirely. Most reliable iOS PWA path (relay-based, no native-app switching).
+**Bunker URI path**: `handlePastedUriConnect` uses a fresh `NIP46Client` + `signer.setNIP46Signer(client)` — bypasses nostr-login entirely. For multi-relay `bunker://` URIs (Amber embeds 5), the underlying `NIP46Client.startRelayConnection` connects/subscribes/publishes to **all** URI relays, not just the first — see `lib/nostr/nip46-client.ts` and changelog entry #4 above. Do **not** regress to primary-only.
 
-**nostr-login is lazy-init**: `components/Nostr/NostrLoginInit.tsx` exports `ensureNostrLoginInitialized()` (called on demand from `handleNostrLogin`) and `<NostrLoginAutoInit />` (mounts in `layout.tsx`, only runs `init()` if user is logged in AND `window.nostr` is absent — i.e., session-restore for nostr-login-polyfilled users). Extension users and logged-out users pay zero cost. Do **not** reintroduce eager init.
+**Amber pubkey normalization** (critical, see changelog #3): for NIP-46/Amber, the connect-response event's `event.pubkey` is the signer app's per-session key (e.g. `86e106ca…`), NOT the user's Nostr account pubkey (`f7922a0adb…`). The user pubkey arrives later via `get_public_key` or the `sign_event` response. The post-login save block in `LoginModal.tsx` **must not** treat the difference as a mismatch — instead, normalize `connection.pubkey = loginData.user.nostrPubkey` and fall through to save. Reintroducing a mismatch early-return breaks Amber reload persistence.
+
+**Android recommendation**: direct Android users at the Amber card (`nostrconnect://` flow, works end-to-end). The Bunker URI card shows an in-UI warning pointing Android users away from pasted-`bunker://` because Amber's bunker hosting is unreliable upstream (greenart7c3/Amber#251).
+
+**nostr-login is session-restore only**: `components/Nostr/NostrLoginInit.tsx` exports `ensureNostrLoginInitialized()` and `<NostrLoginAutoInit />` (mounts in `layout.tsx`, only runs `init()` if user is logged in AND `window.nostr` is absent — i.e., session-restore for nostr-login-polyfilled legacy users). **There is no longer a "More options" card** — nostr-login's auth UI isn't reachable from LoginModal for new logins because with `noBanner: true` the library never mounts `<nl-auth>`. Do **not** reintroduce the More options card or a `handleNostrLogin` function. Extension users and logged-out users pay zero cost.
 
 ## Post-Login Flow (`lib/nostr/auth-utils.ts`)
 Login flows save user data, set `localStorage['nostr_pending_favorites_sync'] = user.id`, close the modal, and reload — **no delay**. `NostrContext`'s mount effect picks up the flag, runs `syncFavoritesToNostr`, and clears it. Running sync pre-reload aborted the in-flight fetches when reload fired; deferring is cleaner and has no warning noise.
