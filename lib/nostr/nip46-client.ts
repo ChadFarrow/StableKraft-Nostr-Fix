@@ -109,6 +109,25 @@ export class NIP46Client {
     }
   }
 
+  // Performance optimization flags — all OFF by default so we can isolate
+  // which optimization (if any) is causing the slowness users report. Turn
+  // them on one at a time from DevTools / the login modal to bisect:
+  //
+  //   localStorage.setItem('nip46_perf_adaptive_rate_limit', 'true')
+  //   localStorage.setItem('nip46_perf_pre_decrypted',       'true')
+  //   localStorage.setItem('nip46_perf_smart_filters',       'true')
+  //   localStorage.setItem('nip46_perf_keypair_cache',       'true')
+  //
+  // Read on every call (cheap) so toggling doesn't require a reload.
+  private isPerfEnabled(name: 'adaptive_rate_limit' | 'pre_decrypted' | 'smart_filters' | 'keypair_cache'): boolean {
+    if (typeof window === 'undefined') return false;
+    try {
+      return localStorage.getItem(`nip46_perf_${name}`) === 'true';
+    } catch {
+      return false;
+    }
+  }
+
   // iOS Safari kills WebSocket connections after ~30 seconds when backgrounded
   // Use shorter threshold for iOS to detect stale connections faster
   private static readonly IOS_STALE_THRESHOLD_MS = 15000; // 15 seconds
@@ -651,8 +670,12 @@ export class NIP46Client {
     this.debugLog('🎯 NIP-46: We will listen for events tagged with OUR pubkey:', appPubkey);
     this.debugLog('   - If Aegis responds to a DIFFERENT pubkey, we will NOT receive it!');
     
-    // Build subscription filters based on what we know about the signer
+    // Build subscription filters based on what we know about the signer.
+    // Gated behind `nip46_perf_smart_filters` — when OFF we always use the
+    // broad `{ kinds: [24133] }` filter so we can measure whether the tight
+    // `authors:[signer]` path is helping or hurting throughput.
     const knownSignerPubkey = (this.connection as any)?.signerPubkey;
+    const smartFiltersEnabled = this.isPerfEnabled('smart_filters');
     const filters: Filter[] = [
       {
         kinds: [24133], // NIP-46 request/response events
@@ -660,15 +683,14 @@ export class NIP46Client {
       },
     ];
 
-    if (knownSignerPubkey) {
+    if (smartFiltersEnabled && knownSignerPubkey) {
       // We know the signer pubkey — add a tight filter for events from them
       filters.push({
         kinds: [24133],
         authors: [knownSignerPubkey],
       });
     } else {
-      // During initial connection (waiting for QR scan), use broad filter
-      // to catch connection events from unknown signers
+      // Broad filter: during initial connection OR when smart filters are OFF
       filters.push({
         kinds: [24133],
       });
@@ -1446,10 +1468,12 @@ export class NIP46Client {
 
       // Parse NIP-46 event content
       // Use pre-decrypted content if available (avoids double decryption)
+      // Gated behind `nip46_perf_pre_decrypted` — when OFF, re-decrypt inline
+      // below so we can measure whether the outer decrypt pass is the bottleneck.
       let content;
       let decryptedContent: string | null = null;
 
-      if (preDecrypted) {
+      if (preDecrypted && this.isPerfEnabled('pre_decrypted')) {
         content = preDecrypted;
         decryptedContent = JSON.stringify(preDecrypted);
       }
@@ -1513,11 +1537,14 @@ export class NIP46Client {
               }
             } else {
               // P tag doesn't match - signer is using a cached old app pubkey!
-              // Try to decrypt with historical keypairs
+              // Try to decrypt with historical keypairs.
+              // Gated behind `nip46_perf_keypair_cache` — when OFF we always
+              // do a plain linear search so we can measure whether the
+              // cached-index short-circuit is the source of slowness.
               const keyPairHistory = getAppKeyPairHistory();
+              const keypairCacheEnabled = this.isPerfEnabled('keypair_cache');
 
-              // Try last-successful keypair first (cached index) to avoid linear search
-              if (this.lastSuccessfulKeyPairIndex >= 0 && this.lastSuccessfulKeyPairIndex < keyPairHistory.length) {
+              if (keypairCacheEnabled && this.lastSuccessfulKeyPairIndex >= 0 && this.lastSuccessfulKeyPairIndex < keyPairHistory.length) {
                 const cached = keyPairHistory[this.lastSuccessfulKeyPairIndex];
                 if (pTagPubkey === cached.publicKey) {
                   try {
@@ -1548,8 +1575,11 @@ export class NIP46Client {
                       decryptedContent = nip44.decrypt(event.content, conversationKey);
                       content = JSON.parse(decryptedContent);
 
-                      // Cache this index for next time
-                      this.lastSuccessfulKeyPairIndex = i;
+                      // Cache this index for next time (only relevant when the
+                      // cache optimization is enabled; harmless otherwise).
+                      if (keypairCacheEnabled) {
+                        this.lastSuccessfulKeyPairIndex = i;
+                      }
 
                       // Update localStorage to use this old keypair so future events work
                       localStorage.setItem('nostr_nip46_app_keypair', JSON.stringify(oldKeyPair));
@@ -1916,13 +1946,18 @@ export class NIP46Client {
             this.pendingRequests.delete(content.id);
 
             // Adaptive rate limiting: update average response time
-            const requestStartTime = (pending as any).startTime;
-            if (requestStartTime) {
-              const actualResponseTime = Date.now() - requestStartTime;
-              this.avgResponseTimeMs = Math.max(
-                this.MIN_RATE_LIMIT_MS,
-                Math.min(this.MAX_RATE_LIMIT_MS, (this.avgResponseTimeMs + actualResponseTime) / 2)
-              );
+            // Gated behind `nip46_perf_adaptive_rate_limit` — when OFF, leave
+            // `avgResponseTimeMs` at its initial value so the rate-limit check
+            // (also gated) never kicks in.
+            if (this.isPerfEnabled('adaptive_rate_limit')) {
+              const requestStartTime = (pending as any).startTime;
+              if (requestStartTime) {
+                const actualResponseTime = Date.now() - requestStartTime;
+                this.avgResponseTimeMs = Math.max(
+                  this.MIN_RATE_LIMIT_MS,
+                  Math.min(this.MAX_RATE_LIMIT_MS, (this.avgResponseTimeMs + actualResponseTime) / 2)
+                );
+              }
             }
 
             // Store the actual signer app pubkey from successful responses for ALL connection types
@@ -2981,17 +3016,22 @@ export class NIP46Client {
 
     // Adaptive rate limiting: uses tracked signer response times
     // SKIP rate limiting for 'connect' method - it's critical for initial connection
-    const lastTime = this.lastRequestTime.get(method);
+    // Gated behind `nip46_perf_adaptive_rate_limit` — when OFF, no per-method
+    // wall exists between successive requests (baseline behavior).
     const now = Date.now();
-    const currentRateLimit = Math.max(this.MIN_RATE_LIMIT_MS, Math.min(this.MAX_RATE_LIMIT_MS, this.avgResponseTimeMs));
-    if (method !== 'connect' && lastTime && (now - lastTime) < currentRateLimit) {
-      const waitTime = currentRateLimit - (now - lastTime);
-      const errorMsg = `Rate limit: Please wait ${Math.ceil(waitTime / 1000)} seconds before sending another ${method} request.`;
-      console.warn(`⚠️ NIP-46: Rate limit - ${method} request too soon. Adaptive limit: ${currentRateLimit}ms`);
-      throw new Error(errorMsg);
+    if (this.isPerfEnabled('adaptive_rate_limit')) {
+      const lastTime = this.lastRequestTime.get(method);
+      const currentRateLimit = Math.max(this.MIN_RATE_LIMIT_MS, Math.min(this.MAX_RATE_LIMIT_MS, this.avgResponseTimeMs));
+      if (method !== 'connect' && lastTime && (now - lastTime) < currentRateLimit) {
+        const waitTime = currentRateLimit - (now - lastTime);
+        const errorMsg = `Rate limit: Please wait ${Math.ceil(waitTime / 1000)} seconds before sending another ${method} request.`;
+        console.warn(`⚠️ NIP-46: Rate limit - ${method} request too soon. Adaptive limit: ${currentRateLimit}ms`);
+        throw new Error(errorMsg);
+      }
     }
-    
-    // Update last request time
+
+    // Update last request time (still tracked so turning the flag on later
+    // has data to compare against).
     this.lastRequestTime.set(method, now);
 
     // For relay-based requests, we need to wait for the response event
