@@ -2299,14 +2299,14 @@ export class NIP46Client {
           // Store signer's pubkey in signerPubkey field (same as bunker:// connections use)
           (this.connection as any).signerPubkey = event.pubkey;
           this.connection.connected = true; // Mark as connected
-          console.error(`[NIP46-CONNECT] Stored signer's pubkey for event filtering: ${event.pubkey.slice(0, 16)}...`);
+          console.log(`[NIP46-CONNECT] Stored signer's pubkey for event filtering: ${event.pubkey.slice(0, 16)}...`);
           this.debugLog(`🔑 NIP-46: Will only process events from this signer pubkey: ${event.pubkey}`);
         }
 
         // Request public key and wait for it to complete
         // CRITICAL: We need to resolve any pending connect requests with the actual pubkey, not "ack"
         this.sendRequest('get_public_key', []).then((pubkey: string) => {
-          console.error(`[NIP46-SUCCESS] Got public key from Amber: ${pubkey.slice(0, 16)}...`);
+          console.log(`[NIP46-SUCCESS] Got public key from Amber: ${pubkey.slice(0, 16)}...`);
           this.debugLog('🔵 [NIP46Client] Successfully authenticated with Amber pubkey:', pubkey);
           
           // CRITICAL: Make sure we're using the user's pubkey, not Amber's pubkey
@@ -2321,7 +2321,7 @@ export class NIP46Client {
             console.warn(`[NIP46-WARNING] Got pubkey that matches Amber's pubkey (${pubkey.slice(0, 16)}...). This might be correct if the user is using Amber's own account. Proceeding anyway.`);
             // Continue - this might be correct for new Amber accounts
           } else {
-            console.error(`[NIP46-SUCCESS] Using user's pubkey: ${pubkey.slice(0, 16)}... (Amber's pubkey was: ${amberPubkey.slice(0, 16)}...)`);
+            console.log(`[NIP46-SUCCESS] Using user's pubkey: ${pubkey.slice(0, 16)}... (Amber's pubkey was: ${amberPubkey.slice(0, 16)}...)`);
           }
           
           // Store user's pubkey in connection (this replaces Amber's pubkey that was stored temporarily)
@@ -3958,10 +3958,10 @@ export class NIP46Client {
     this.debugLog('✅ [NIP46-SIGN] Proceeding with signEvent - pubkey confirmed:', signerPubkey.slice(0, 16) + '...');
 
     // CRITICAL: Verify we're using the user's pubkey, not Amber's pubkey
-    console.error(`[NIP46-SIGN] Using pubkey for signing: ${signerPubkey.slice(0, 16)}...`);
+    console.log(`[NIP46-SIGN] Using pubkey for signing: ${signerPubkey.slice(0, 16)}...`);
     try {
       const npub = publicKeyToNpub(signerPubkey);
-      console.error(`[NIP46-SIGN] Pubkey converts to npub: ${npub}`);
+      console.log(`[NIP46-SIGN] Pubkey converts to npub: ${npub}`);
     } catch (e) {
       console.error(`[NIP46-SIGN] Failed to convert pubkey to npub:`, e);
     }

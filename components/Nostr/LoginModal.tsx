@@ -21,6 +21,17 @@ import {
   buildDiagnosticsReport,
 } from '@/lib/nostr/login-diagnostics';
 
+// DEBUG: sign-in options are disabled by default so each can be tested in
+// isolation. Flip to true one at a time while triaging. Extension only shows
+// if window.nostr is also detected.
+const ENABLED_SIGNIN_OPTIONS = {
+  extension: true,
+  bunker: true,
+  amber: true,
+  primal: true,
+  more: true,
+};
+
 interface LoginModalProps {
   onClose: () => void;
 }
@@ -187,6 +198,7 @@ export default function LoginModal({ onClose }: LoginModalProps) {
   };
 
   const handleNip46Connected = async () => {
+    console.log('🎯 [PrimalLogin] handleNip46Connected fired (signer approved connection)');
     // Use the ref to get the client
     const client = nip46ClientRef.current || nip46Client;
     if (!client) {
@@ -547,10 +559,18 @@ export default function LoginModal({ onClose }: LoginModalProps) {
           console.warn('⚠️ Failed to clear stale connections:', err);
         }
         
-        // Validate connection matches logged-in user before saving
+        // Normalize connection.pubkey to the server-verified user pubkey.
+        // For Amber, the connect-response event is sent by the signer app's
+        // identity key (not the user's Nostr account), so connection.pubkey
+        // can legitimately differ from loginData.user.nostrPubkey even though
+        // sign_event returns events signed by the user's actual account.
+        // The server has already verified the signature, so we trust it and
+        // rewrite connection.pubkey to the logged-in user.
         if (connection && connection.pubkey && connection.pubkey !== loginData.user.nostrPubkey) {
-          console.warn(`⚠️ LoginModal: Connection pubkey (${connection.pubkey.slice(0, 16)}...) doesn't match logged-in user (${loginData.user.nostrPubkey.slice(0, 16)}...). Not saving connection.`);
-        } else {
+          console.log(`ℹ️ LoginModal: Connection pubkey (${connection.pubkey.slice(0, 16)}...) differs from logged-in user (${loginData.user.nostrPubkey.slice(0, 16)}...). This is expected for Amber (signer-app key vs user account key). Normalizing connection pubkey.`);
+          connection.pubkey = loginData.user.nostrPubkey;
+        }
+        {
           // Save user data
           localStorage.setItem('nostr_user', JSON.stringify(loginData.user));
           localStorage.setItem('nostr_login_type', loginType);
@@ -654,29 +674,81 @@ export default function LoginModal({ onClose }: LoginModalProps) {
 
   // Direct extension login — skips nostr-login dialog entirely for fastest login
   const handleExtensionLogin = async () => {
+    const t0 = performance.now();
+    console.log('🔐 [ExtLogin] Click received', {
+      hasWindowNostr: typeof window !== 'undefined' && !!(window as any).nostr,
+      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'n/a',
+      timestamp: new Date().toISOString(),
+    });
     try {
       setIsSubmitting(true);
       setError(null);
 
       const nostr = (window as any).nostr;
+      console.log('🔍 [ExtLogin] window.nostr snapshot', {
+        present: !!nostr,
+        keys: nostr ? Object.keys(nostr) : [],
+        hasGetPublicKey: !!nostr?.getPublicKey,
+        hasSignEvent: !!nostr?.signEvent,
+        hasNip04: !!nostr?.nip04,
+        hasNip44: !!nostr?.nip44,
+      });
       if (!nostr) {
         throw new Error('No Nostr extension detected. Please install one or use Sign In below.');
       }
 
-      console.log('🔐 LoginModal: Direct extension login (fast path)...');
+      // Probe getPublicKey first — cheap sanity check before asking for a signature
+      try {
+        const probeStart = performance.now();
+        const pk = await nostr.getPublicKey();
+        console.log('✅ [ExtLogin] getPublicKey OK', {
+          pubkeyPrefix: typeof pk === 'string' ? pk.slice(0, 16) + '…' : pk,
+          elapsedMs: Math.round(performance.now() - probeStart),
+        });
+      } catch (probeErr) {
+        console.warn('⚠️ [ExtLogin] getPublicKey probe failed (continuing anyway)', probeErr);
+      }
 
-      // Get challenge and sign directly with the extension
+      console.log('📝 [ExtLogin] Preparing login event template…');
       const { challenge, eventTemplate } = await prepareLoginEvent();
-      const signedEvent = await nostr.signEvent(eventTemplate);
-      console.log('✅ LoginModal: Extension signed event directly');
+      console.log('📝 [ExtLogin] Template ready', {
+        kind: eventTemplate.kind,
+        challengePrefix: challenge.slice(0, 16) + '…',
+        tags: eventTemplate.tags,
+      });
 
+      console.log('✍️  [ExtLogin] Calling window.nostr.signEvent… (watch for Alby popup)');
+      const signStart = performance.now();
+      const signedEvent = await nostr.signEvent(eventTemplate);
+      console.log('✅ [ExtLogin] signEvent returned', {
+        elapsedMs: Math.round(performance.now() - signStart),
+        id: signedEvent?.id?.slice(0, 16) + '…',
+        pubkey: signedEvent?.pubkey?.slice(0, 16) + '…',
+        sig: signedEvent?.sig?.slice(0, 16) + '…',
+        hasAllFields: !!(signedEvent?.id && signedEvent?.pubkey && signedEvent?.sig && signedEvent?.created_at),
+      });
+
+      console.log('📤 [ExtLogin] POST /api/nostr/auth/login…');
+      const loginStart = performance.now();
       const result = await processSignedLogin(
         signedEvent, challenge, 'extension', onClose
       );
+      console.log('📥 [ExtLogin] processSignedLogin result', {
+        elapsedMs: Math.round(performance.now() - loginStart),
+        success: result.success,
+        error: result.error,
+        totalElapsedMs: Math.round(performance.now() - t0),
+      });
       if (!result.success) {
         throw new Error(result.error || 'Login failed');
       }
     } catch (err) {
+      console.error('❌ [ExtLogin] Failed', {
+        message: err instanceof Error ? err.message : String(err),
+        name: err instanceof Error ? err.name : undefined,
+        stack: err instanceof Error ? err.stack : undefined,
+        totalElapsedMs: Math.round(performance.now() - t0),
+      });
       if (err instanceof Error) {
         setError(err.message);
       }
@@ -791,7 +863,7 @@ export default function LoginModal({ onClose }: LoginModalProps) {
         {/* CARD MENU — pick a sign-in method */}
         {view === 'menu' && (
           <div className="grid grid-cols-1 gap-2 mb-4">
-            {hasExtension && (
+            {ENABLED_SIGNIN_OPTIONS.extension && hasExtension && (
               <button
                 onClick={handleExtensionLogin}
                 disabled={isSubmitting}
@@ -808,6 +880,7 @@ export default function LoginModal({ onClose }: LoginModalProps) {
                 </p>
               </button>
             )}
+            {ENABLED_SIGNIN_OPTIONS.bunker && (
             <button
               onClick={() => { setError(null); setBunkerUri(''); setView('bunker'); }}
               disabled={isSubmitting}
@@ -821,6 +894,8 @@ export default function LoginModal({ onClose }: LoginModalProps) {
                 Paste a <code>bunker://</code> URI from nsec.app, Alby.to, Keycast, Amber, etc.
               </p>
             </button>
+            )}
+            {ENABLED_SIGNIN_OPTIONS.amber && (
             <button
               onClick={() => { setError(null); setLoginMethod('amber'); setView('amber'); }}
               disabled={isSubmitting}
@@ -834,6 +909,8 @@ export default function LoginModal({ onClose }: LoginModalProps) {
                 Sign in with the Amber app — most popular Android signer.
               </p>
             </button>
+            )}
+            {ENABLED_SIGNIN_OPTIONS.primal && (
             <button
               onClick={() => { setError(null); setLoginMethod('primal'); setView('primal'); }}
               disabled={isSubmitting}
@@ -851,6 +928,8 @@ export default function LoginModal({ onClose }: LoginModalProps) {
                   : 'Scan with the Primal app on your phone.'}
               </p>
             </button>
+            )}
+            {ENABLED_SIGNIN_OPTIONS.more && (
             <button
               onClick={handleNostrLogin}
               disabled={isSubmitting}
@@ -864,6 +943,16 @@ export default function LoginModal({ onClose }: LoginModalProps) {
                 Other bunker providers and advanced settings.
               </p>
             </button>
+            )}
+            {!ENABLED_SIGNIN_OPTIONS.extension &&
+              !ENABLED_SIGNIN_OPTIONS.bunker &&
+              !ENABLED_SIGNIN_OPTIONS.amber &&
+              !ENABLED_SIGNIN_OPTIONS.primal &&
+              !ENABLED_SIGNIN_OPTIONS.more && (
+              <p className="text-sm text-gray-600 text-center py-4">
+                All sign-in options are disabled. Enable one in <code>ENABLED_SIGNIN_OPTIONS</code> (top of <code>LoginModal.tsx</code>) to test.
+              </p>
+            )}
           </div>
         )}
 
