@@ -97,11 +97,16 @@ export default function Nip46Connect({
 
     if (connectionStatus === 'waiting' || connectionStatus === 'connecting') {
       let checkCount = 0;
+      let stopped = false;
       const TIMEOUT_SECONDS = 60;
       const CHECK_INTERVAL_MS = 2000;
       const MAX_CHECKS = (TIMEOUT_SECONDS * 1000) / CHECK_INTERVAL_MS; // 30 checks
 
-      const interval = setInterval(() => {
+      // Single check — runs on interval tick AND when the tab regains focus.
+      // Returning true short-circuits further checks (connection found or
+      // timeout reached).
+      const checkForConnection = (): boolean => {
+        if (stopped) return true;
         checkCount++;
 
         // Try to get event count from console logs (if available in window)
@@ -119,13 +124,14 @@ export default function Nip46Connect({
         // Check for timeout (60 seconds)
         if (checkCount >= MAX_CHECKS) {
           console.error('⏱️ NIP-46: Connection timeout after 60 seconds');
+          stopped = true;
           setConnectionStatus('error');
           setIsConnecting(false);
 
           const errorMessage = `Connection timed out after ${TIMEOUT_SECONDS} seconds.\n\nMake sure you:\n1. Scanned the QR code and approved the connection in ${appName}\n2. Have a stable internet connection\n3. Aren't blocking the relay connection with ad blockers or privacy extensions`;
 
           onError(errorMessage);
-          return;
+          return true;
         }
 
         // Check if connection was established (stored in localStorage)
@@ -137,6 +143,7 @@ export default function Nip46Connect({
             // Check if connection has a pubkey (means it's connected)
             if (connection.pubkey) {
               console.log('NIP-46: Connection established');
+              stopped = true;
               setConnectionStatus('connected');
               setIsConnecting(false);
               setDebugInfo(prev => ({
@@ -147,14 +154,32 @@ export default function Nip46Connect({
               setTimeout(() => {
                 onConnected();
               }, 500);
+              return true;
             }
           } catch (err) {
             // Ignore parse errors
           }
         }
-      }, CHECK_INTERVAL_MS); // Check every 2 seconds
+        return false;
+      };
 
-      return () => clearInterval(interval);
+      const interval = setInterval(checkForConnection, CHECK_INTERVAL_MS);
+
+      // On iOS, tapping the Primal deep link suspends this PWA while Primal
+      // approves the connection. When the user swipes back, fire the check
+      // immediately rather than waiting up to 2s for the next interval tick.
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+          checkForConnection();
+        }
+      };
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
+      return () => {
+        stopped = true;
+        clearInterval(interval);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
     }
   }, [connectionStatus, onConnected, connectionToken, debugInfo.relayUrl, debugInfo.appPubkey]);
 

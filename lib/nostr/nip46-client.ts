@@ -676,10 +676,24 @@ export class NIP46Client {
     // `authors:[signer]` path is helping or hurting throughput.
     const knownSignerPubkey = (this.connection as any)?.signerPubkey;
     const smartFiltersEnabled = this.isPerfEnabled('smart_filters');
+
+    // Anchor subscription `since` 30s before the connection attempt started.
+    // On iOS, tapping "Sign in with Primal" suspends the PWA while Primal
+    // handles the nostrconnect:// URI; the relay WebSocket is killed. Primal's
+    // connect response arrives during that gap. When we come back and reconnect
+    // (via visibilitychange → checkAndReconnectIfNeeded → startRelayConnection),
+    // a fresh subscription without `since` would only see *future* events and
+    // the response would be silently missed. Passing `since` makes the relay
+    // replay events from that window so we pick up the missed response.
+    const sinceTimestamp = this.connectionStartTime > 0
+      ? Math.floor((this.connectionStartTime - 30000) / 1000)
+      : undefined;
+
     const filters: Filter[] = [
       {
         kinds: [24133], // NIP-46 request/response events
         '#p': [appPubkey], // Events tagged with our app public key (recipient)
+        ...(sinceTimestamp !== undefined ? { since: sinceTimestamp } : {}),
       },
     ];
 
@@ -688,11 +702,13 @@ export class NIP46Client {
       filters.push({
         kinds: [24133],
         authors: [knownSignerPubkey],
+        ...(sinceTimestamp !== undefined ? { since: sinceTimestamp } : {}),
       });
     } else {
       // Broad filter: during initial connection OR when smart filters are OFF
       filters.push({
         kinds: [24133],
+        ...(sinceTimestamp !== undefined ? { since: sinceTimestamp } : {}),
       });
     }
 

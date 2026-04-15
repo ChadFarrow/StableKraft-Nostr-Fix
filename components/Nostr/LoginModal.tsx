@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { NIP46Client } from '@/lib/nostr/nip46-client';
 import { getUnifiedSigner } from '@/lib/nostr/signer';
 import { saveNIP46Connection } from '@/lib/nostr/nip46-storage';
+import { isIOS } from '@/lib/utils/device';
 import Nip46Connect from './Nip46Connect';
 import { useNip46Connection } from './hooks';
 import { ensureNostrLoginInitialized } from './NostrLoginInit';
@@ -840,10 +841,14 @@ export default function LoginModal({ onClose }: LoginModalProps) {
             >
               <div className="flex items-center gap-3 mb-1">
                 <span className="text-2xl" aria-hidden>📱</span>
-                <span className="font-semibold text-gray-900">Primal (QR code)</span>
+                <span className="font-semibold text-gray-900">
+                  {isIOS() ? 'Primal (Remote Signer)' : 'Primal (QR code)'}
+                </span>
               </div>
               <p className="text-xs text-gray-600 ml-9">
-                Scan with the Primal app on your phone.
+                {isIOS()
+                  ? 'Tap to open Primal, approve, then swipe back here.'
+                  : 'Scan with the Primal app on your phone.'}
               </p>
             </button>
             <button
