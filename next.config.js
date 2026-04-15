@@ -140,6 +140,19 @@ const nextConfig = {
 
   // Fix workspace root detection (bun.lock in parent directory was causing issues)
   outputFileTracingRoot: path.join(__dirname),
+
+  // Exclude the optimized-images asset folder (~400 MB of GIFs/MP4s) from the
+  // serverless function trace. On Railway it's served from the file system,
+  // but on Vercel the tracing bundles all files referenced by any API route
+  // into that function's deployment — which blows past Vercel's 250 MB
+  // serverless function size limit for /api/optimized-images/[filename].
+  // These files are not needed for /nostr-test or any Nostr code path.
+  outputFileTracingExcludes: {
+    '*': [
+      'data/optimized-images/**',
+      'public/optimized-images/**',
+    ],
+  },
   
   // Inject version from package.json as environment variable
   env: {

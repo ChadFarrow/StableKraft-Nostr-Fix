@@ -1,0 +1,17 @@
+# Exclude the heavy optimized-images asset folder from Vercel deploys.
+# ~400 MB of GIFs/MP4s that are only used by /api/optimized-images/[filename].
+# On Railway the folder is part of the image host; on Vercel it blows past
+# the 250 MB serverless function size limit and fails the deploy. None of
+# these files are needed for /nostr-test or any Nostr code path.
+data/optimized-images/
+public/optimized-images/
+
+# Other large asset folders that aren't needed to test Nostr login.
+data/feeds/
+data/raw/
+data/backup/
+deploy-*/
+
+# Build artifacts that Vercel regenerates anyway
+.next/
+node_modules/
