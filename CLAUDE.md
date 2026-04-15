@@ -68,7 +68,13 @@ Matched by: title slug, artist slug, or URL path. Multi-feed support with per-pl
 Tracks over 2 hours filtered as non-music (silent, no warnings)
 
 ### NIP-46 Remote Signer (Amber / Primal / bunker)
-Key files: `lib/nostr/nip46-client.ts`, `lib/nostr/signer.ts` (NIP46Signer wrapper), `components/Nostr/hooks/useNip46Connection.ts`, `lib/nostr/signer-nudge.ts`. iOS Safari kills WebSocket connections after ~30s backgrounded; reconnects on `visibilitychange`. **Primal is the best iOS signer** — auto-signs with Full trust, responds <1s. Performance optimizations (adaptive rate limiting, pre-decrypted content, smart subscription filters, keypair cache) are gated behind `localStorage.setItem('nip46_debug', 'true')` for debug logging.
+Key files: `lib/nostr/nip46-client.ts`, `lib/nostr/signer.ts` (NIP46Signer wrapper), `components/Nostr/hooks/useNip46Connection.ts`, `lib/nostr/signer-nudge.ts`. iOS Safari kills WebSocket connections after ~30s backgrounded; reconnects on `visibilitychange`. **Primal is the best iOS signer** — auto-signs with Full trust, responds <1s. Debug logging is gated behind `localStorage.setItem('nip46_debug', 'true')`.
+
+**Performance optimization flags (default OFF)** — the four NIP-46 optimizations are each gated behind a localStorage flag so we can bisect which one is causing user-reported slowness. Turn them on one at a time from DevTools:
+- `nip46_perf_adaptive_rate_limit` — adaptive per-method wall between requests (500–2000ms, tuned by observed signer response time). When OFF there is **no** client-side rate limit.
+- `nip46_perf_pre_decrypted` — reuse content decrypted in the relay-subscribe callback instead of re-decrypting inside `handleRelayEvent`.
+- `nip46_perf_smart_filters` — adds a tight `authors:[knownSignerPubkey]` subscription filter once the signer pubkey is known. When OFF we use only the broad `{ kinds: [24133] }` / `#p` filters.
+- `nip46_perf_keypair_cache` — short-circuit the historical-keypair linear search via `lastSuccessfulKeyPairIndex`.
 
 **Signer nudge toast** (`lib/nostr/signer-nudge.ts`): `withSignerNudge()` wraps `signEvent`/`getPublicKey`, shows dismissable toast after **4s** ("Waiting on Primal to approve…"), hard-fails at **45s**. `NIP46Signer.signEvent`/`getPublicKey` in `signer.ts` route through it automatically; direct `client.signEvent` callers in `LoginModal` also wrap manually. Throttled to 8s so bursts don't spam toasts. Pattern adapted from `soapbox-pub/ditto`.
 
