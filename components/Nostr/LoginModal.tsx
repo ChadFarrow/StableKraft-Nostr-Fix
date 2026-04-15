@@ -23,12 +23,12 @@ export default function LoginModal({ onClose }: LoginModalProps) {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [loginMethod, setLoginMethod] = useState<'nostr-login' | 'primal'>('nostr-login');
+  const [loginMethod, setLoginMethod] = useState<'nostr-login' | 'primal' | 'amber'>('nostr-login');
   const [hasExtension, setHasExtension] = useState(false);
   // Card-menu view state: 'menu' shows the grid of sign-in options. Selecting
   // a card either runs the handler directly (Extension) or opens a sub-view
-  // (Bunker URI, Primal QR, Advanced/nostr-login).
-  const [view, setView] = useState<'menu' | 'bunker' | 'primal'>('menu');
+  // (Bunker URI, Primal QR, Amber QR, Advanced/nostr-login).
+  const [view, setView] = useState<'menu' | 'bunker' | 'primal' | 'amber'>('menu');
   const [bunkerUri, setBunkerUri] = useState('');
 
   // NIP-46 connection hook (used by Primal tab)
@@ -750,6 +750,19 @@ export default function LoginModal({ onClose }: LoginModalProps) {
               </p>
             </button>
             <button
+              onClick={() => { setError(null); setLoginMethod('amber'); setView('amber'); }}
+              disabled={isSubmitting}
+              className="text-left p-4 rounded-lg border border-gray-200 hover:border-orange-400 hover:shadow-sm transition-all disabled:opacity-50"
+            >
+              <div className="flex items-center gap-3 mb-1">
+                <span className="text-2xl" aria-hidden>🤖</span>
+                <span className="font-semibold text-gray-900">Amber (Android)</span>
+              </div>
+              <p className="text-xs text-gray-600 ml-9">
+                Sign in with the Amber app — most popular Android signer.
+              </p>
+            </button>
+            <button
               onClick={() => { setError(null); setLoginMethod('primal'); setView('primal'); }}
               disabled={isSubmitting}
               className="text-left p-4 rounded-lg border border-gray-200 hover:border-purple-400 hover:shadow-sm transition-all disabled:opacity-50"
@@ -873,6 +886,73 @@ export default function LoginModal({ onClose }: LoginModalProps) {
               <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-md">
                 <p className="text-xs text-purple-800">
                   <strong>Best for iOS:</strong> Primal auto-signs with Full trust and responds near-instantly.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* AMBER view */}
+        {view === 'amber' && (
+          <div className="mb-4">
+            <button
+              onClick={() => { setView('menu'); setLoginMethod('nostr-login'); cleanupAmberConnection(); setError(null); }}
+              className="text-sm text-gray-500 hover:text-gray-700 mb-3 flex items-center gap-1"
+            >
+              ← Back
+            </button>
+
+            {isInitializingAmber && !showNip46Connect && (
+              <div className="mb-4 flex flex-col items-center gap-3 py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
+                <p className="text-sm text-gray-600">Preparing Amber connection…</p>
+              </div>
+            )}
+
+            {amberConnectionError && !showNip46Connect && !isInitializingAmber && (
+              <div className="mb-4">
+                <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded mb-3">
+                  {amberConnectionError}
+                </div>
+                <button
+                  onClick={() => {
+                    setAmberConnectionError(null);
+                    setAmberConnectionInitialized(false);
+                  }}
+                  className="w-full px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700"
+                >
+                  Retry Connection
+                </button>
+              </div>
+            )}
+
+            {showNip46Connect && (
+              <Nip46Connect
+                connectionToken={nip46ConnectionToken}
+                signerUrl={nip46SignerUrl}
+                signerApp="amber"
+                onConnected={() => {
+                  setShowNip46Connect(false);
+                  handleNip46Connected();
+                }}
+                onError={(error) => {
+                  setError(error);
+                  setIsSubmitting(false);
+                  setShowNip46Connect(false);
+                  setAmberConnectionInitialized(false);
+                }}
+                onCancel={() => {
+                  cleanupAmberConnection();
+                  setView('menu');
+                  setLoginMethod('nostr-login');
+                }}
+              />
+            )}
+
+            {!isInitializingAmber && !amberConnectionError && !showNip46Connect && (
+              <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-md">
+                <p className="text-xs text-orange-800">
+                  <strong>Best for Android:</strong> Amber is the most popular Android Nostr signer. Tap the button to open Amber, or scan the QR on another device.
                 </p>
               </div>
             )}
