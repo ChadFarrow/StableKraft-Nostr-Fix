@@ -125,7 +125,13 @@ export function saveUserData(user: AuthenticatedUser, loginType: LoginType): voi
   localStorage.setItem('nostr_user', JSON.stringify(user));
   localStorage.setItem('nostr_login_type', loginType);
   // Only save preferred signer for signer-based login types
-  if (loginType === 'extension' || loginType === 'nip46' || loginType === 'nip55' || loginType === 'nsecbunker') {
+  if (
+    loginType === 'extension' ||
+    loginType === 'nip46' ||
+    loginType === 'nip55' ||
+    loginType === 'nsecbunker' ||
+    loginType === 'amber'
+  ) {
     savePreferredSigner(user.nostrPubkey, loginType);
   }
   console.log(`💾 Saved user to localStorage (${loginType} login)`);

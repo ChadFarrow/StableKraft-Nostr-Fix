@@ -475,14 +475,14 @@ export function getDeviceFingerprint(): string {
 export interface PreferredSigner {
   userPubkey: string;
   deviceId: string;
-  signerType: 'extension' | 'nip46' | 'nip55' | 'nsecbunker';
+  signerType: 'extension' | 'nip46' | 'nip55' | 'nsecbunker' | 'amber';
   lastUsed: number;
 }
 
 /**
  * Save preferred signer for a user+device combination
  */
-export function savePreferredSigner(userPubkey: string, signerType: 'extension' | 'nip46' | 'nip55' | 'nsecbunker'): void {
+export function savePreferredSigner(userPubkey: string, signerType: 'extension' | 'nip46' | 'nip55' | 'nsecbunker' | 'amber'): void {
   if (typeof window === 'undefined') {
     return;
   }
@@ -509,7 +509,7 @@ export function savePreferredSigner(userPubkey: string, signerType: 'extension' 
 /**
  * Get preferred signer for a user+device combination
  */
-export function getPreferredSigner(userPubkey: string): 'extension' | 'nip46' | 'nip55' | 'nsecbunker' | null {
+export function getPreferredSigner(userPubkey: string): 'extension' | 'nip46' | 'nip55' | 'nsecbunker' | 'amber' | null {
   if (typeof window === 'undefined') {
     return null;
   }

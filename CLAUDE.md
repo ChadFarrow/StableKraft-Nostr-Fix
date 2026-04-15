@@ -88,6 +88,11 @@ Login flows save user data, set `localStorage['nostr_pending_favorites_sync'] = 
 
 When adding new login paths (NIP-46, nostr-login, etc.), call `markFavoritesSyncPending(userId)` instead of firing sync inline.
 
+**`LoginType` union must stay in sync across four spots** — drift breaks compilation (caught by `npm run build`'s type check, not linting). The union lives in `lib/nostr/auth-utils.ts` (`LoginType`), `lib/nostr/nip46-storage.ts` (`PreferredSigner.signerType`, `savePreferredSigner`/`getPreferredSigner` signatures), `lib/nostr/signer.ts` (5 inline `userLoginType` unions inside `UnifiedSigner`), and `lib/nostr/signer-reconnect.ts`. Also update the `saveUserData()` condition in `auth-utils.ts` that gates `savePreferredSigner()`.
+
+### NIP-07 Extension Signer Gotcha (`lib/nostr/signer.ts`)
+**Never cache `window.nostr`.** Extensions (Alby, nos2x, NoStash) inject `window.nostr` asynchronously. The `UnifiedSigner` is a module-level singleton, so if it's constructed before injection finishes, a cached `undefined` sticks forever and even `reinitialize()` can't recover because the `NIP07Signer` instance itself is memoized on `UnifiedSigner`. Symptom: login works (because `LoginModal.handleExtensionLogin` calls `window.nostr.signEvent` directly as a fast path), but every later signing attempt (boosts, favorites) fails with "NIP-07 extension not available." `NIP07Signer.getNostr()` now reads `(window as any).nostr` on every call — merely reading the property does not trigger any extension popup (only calling its methods does), so there's no cost to re-reading.
+
 ### iOS PWA Background Audio (`contexts/AudioContext.tsx`)
 Three-layer strategy: (1) preload at 15s before end, (2) proactive timer at 5s before end, (3) visibility change safety net. `trackEndProcessedRef` prevents double-advance. **Critical**: do not auto-resume if user explicitly paused.
 

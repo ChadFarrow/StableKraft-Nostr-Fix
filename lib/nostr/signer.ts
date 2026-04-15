@@ -23,33 +23,43 @@ export interface Signer {
  */
 class NIP07Signer implements Signer {
   type: SignerType = 'nip07';
-  private nostr: any | null = null;
-  private _checkedAvailability: boolean = false;
 
   constructor() {
-    // Don't access window.nostr in constructor - do it lazily in isAvailable()
-    // This prevents triggering Alby popups when the signer is created
+    // Don't touch window.nostr in the constructor. We read it fresh on every
+    // access below; merely reading the property doesn't trigger an extension
+    // popup (only calling its methods like signEvent/getPublicKey does).
+  }
+
+  /**
+   * Get the live window.nostr reference. Must NOT be cached — extensions like
+   * Alby/nos2x inject window.nostr asynchronously, and UnifiedSigner is a
+   * module-level singleton that may be constructed before injection finishes.
+   * Caching a one-time snapshot caused a "signing fails later" class of bug:
+   * once the first check saw `undefined`, every subsequent signer operation
+   * thought the extension was missing, even after the extension became
+   * available. `reinitialize()` couldn't recover because the NIP07Signer
+   * instance (with its stale cache) was itself memoized on UnifiedSigner.
+   */
+  private getNostr(): any | null {
+    if (typeof window === 'undefined') return null;
+    return (window as any).nostr || null;
   }
 
   isAvailable(): boolean {
-    // Lazy check - only access window.nostr when explicitly checked
-    // This prevents triggering popups when the signer is created but not used
-    if (!this._checkedAvailability && typeof window !== 'undefined') {
-      this.nostr = (window as any).nostr;
-      this._checkedAvailability = true;
-    }
-    return typeof window !== 'undefined' && !!this.nostr;
+    return !!this.getNostr();
   }
 
   async getPublicKey(): Promise<string> {
-    if (!this.isAvailable()) {
+    const nostr = this.getNostr();
+    if (!nostr) {
       throw new Error('NIP-07 extension not available');
     }
-    return this.nostr.getPublicKey();
+    return nostr.getPublicKey();
   }
 
   async signEvent(event: Event): Promise<Event> {
-    if (!this.isAvailable()) {
+    const nostr = this.getNostr();
+    if (!nostr) {
       throw new Error('NIP-07 extension not available');
     }
 
@@ -61,7 +71,7 @@ class NIP07Signer implements Signer {
       created_at: event.created_at,
     };
 
-    return this.nostr.signEvent(eventTemplate);
+    return nostr.signEvent(eventTemplate);
   }
 }
 
@@ -235,9 +245,9 @@ export class UnifiedSigner {
     const currentUserPubkey = this.getCurrentUserPubkey();
     
     // Get the login type the user chose FIRST - before any NIP-07 checks
-    let userLoginType: 'extension' | 'nip05' | 'nip46' | 'nip55' | 'nsecbunker' | null = null;
+    let userLoginType: 'extension' | 'nip05' | 'nip46' | 'nip55' | 'nsecbunker' | 'amber' | null = null;
     if (typeof window !== 'undefined') {
-      userLoginType = localStorage.getItem('nostr_login_type') as 'extension' | 'nip05' | 'nip46' | 'nip55' | 'nsecbunker' | null;
+      userLoginType = localStorage.getItem('nostr_login_type') as 'extension' | 'nip05' | 'nip46' | 'nip55' | 'nsecbunker' | 'amber' | null;
     }
 
     // If no explicit login type, check for preferred signer
@@ -430,9 +440,9 @@ export class UnifiedSigner {
     this.nip46Signer = new NIP46Signer(client);
     
     // Check what login type the user chose
-    let userLoginType: 'extension' | 'nip05' | 'nip46' | 'nip55' | 'nsecbunker' | null = null;
+    let userLoginType: 'extension' | 'nip05' | 'nip46' | 'nip55' | 'nsecbunker' | 'amber' | null = null;
     if (typeof window !== 'undefined') {
-      userLoginType = localStorage.getItem('nostr_login_type') as 'extension' | 'nip05' | 'nip46' | 'nip55' | 'nsecbunker' | null;
+      userLoginType = localStorage.getItem('nostr_login_type') as 'extension' | 'nip05' | 'nip46' | 'nip55' | 'nsecbunker' | 'amber' | null;
     }
     
     // Detect if this is nsecBunker by checking the connection URL
@@ -462,9 +472,9 @@ export class UnifiedSigner {
     this.nip55Signer = new NIP55Signer(client);
 
     // Check if user logged in with NIP-46/nsecBunker - if so, don't check NIP-07
-    let userLoginType: 'extension' | 'nip05' | 'nip46' | 'nip55' | 'nsecbunker' | null = null;
+    let userLoginType: 'extension' | 'nip05' | 'nip46' | 'nip55' | 'nsecbunker' | 'amber' | null = null;
     if (typeof window !== 'undefined') {
-      userLoginType = localStorage.getItem('nostr_login_type') as 'extension' | 'nip05' | 'nip46' | 'nip55' | 'nsecbunker' | null;
+      userLoginType = localStorage.getItem('nostr_login_type') as 'extension' | 'nip05' | 'nip46' | 'nip55' | 'nsecbunker' | 'amber' | null;
     }
 
     // NIP-55 takes priority over NIP-46/nsecBunker on Android, but NIP-07 is still preferred (unless user chose NIP-46/nsecBunker)
@@ -534,9 +544,9 @@ export class UnifiedSigner {
       clearNIP46Connection();
       
       // Check if user logged in with NIP-46/nsecBunker - if so, don't fall back to NIP-07 (prevents Alby popups)
-      let userLoginType: 'extension' | 'nip05' | 'nip46' | 'nip55' | 'nsecbunker' | null = null;
+      let userLoginType: 'extension' | 'nip05' | 'nip46' | 'nip55' | 'nsecbunker' | 'amber' | null = null;
       if (typeof window !== 'undefined') {
-        userLoginType = localStorage.getItem('nostr_login_type') as 'extension' | 'nip05' | 'nip46' | 'nip55' | 'nsecbunker' | null;
+        userLoginType = localStorage.getItem('nostr_login_type') as 'extension' | 'nip05' | 'nip46' | 'nip55' | 'nsecbunker' | 'amber' | null;
       }
 
       // Only fall back to NIP-07 if user didn't explicitly choose NIP-46/nsecBunker
@@ -571,9 +581,9 @@ export class UnifiedSigner {
       this.nip55Signer = null;
       
       // Check if user logged in with NIP-46/nsecBunker - if so, prefer that over NIP-07
-      let userLoginType: 'extension' | 'nip05' | 'nip46' | 'nip55' | 'nsecbunker' | null = null;
+      let userLoginType: 'extension' | 'nip05' | 'nip46' | 'nip55' | 'nsecbunker' | 'amber' | null = null;
       if (typeof window !== 'undefined') {
-        userLoginType = localStorage.getItem('nostr_login_type') as 'extension' | 'nip05' | 'nip46' | 'nip55' | 'nsecbunker' | null;
+        userLoginType = localStorage.getItem('nostr_login_type') as 'extension' | 'nip05' | 'nip46' | 'nip55' | 'nsecbunker' | 'amber' | null;
       }
 
       // Prefer NIP-46/nsecBunker if user chose it, otherwise try NIP-07
