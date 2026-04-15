@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyEvent, getEventHash } from 'nostr-tools';
-import { NostrClient } from '@/lib/nostr/client';
-import { getDefaultRelays } from '@/lib/nostr/relay';
 import { getSessionIdFromRequest } from '@/lib/session-utils';
 import { normalizePubkey } from '@/lib/nostr/normalize';
 import { publicKeyToNpub } from '@/lib/nostr/keys';
@@ -20,8 +18,11 @@ const DB_DISABLED = !process.env.DATABASE_URL;
  * Verifies a Nostr login event + syncs profile + ensures DB stores hex pubkeys.
  */
 export async function POST(request: NextRequest) {
+  const t0 = Date.now();
+  const mark = (label: string) => console.log(`⏱️  [login] ${label}: ${Date.now() - t0}ms`);
   try {
     const body = await request.json();
+    mark('body parsed');
 
     const {
       publicKey: rawPubkey,
@@ -97,27 +98,19 @@ export async function POST(request: NextRequest) {
         { status: 401 }
       );
     }
+    mark('signature verified');
 
-    let profileMetadata: any = null;
-    let relayList: string[] | null = null;
-
-    try {
-      const client = new NostrClient(getDefaultRelays());
-      await client.connect();
-
-      profileMetadata = await client.getProfile(hexPubkey);
-      relayList = await client.getRelayList(hexPubkey);
-
-      await client.disconnect();
-    } catch (err) {
-      console.warn('Failed to fetch profile or relays:', err);
-    }
-
-    const displayName = profileMetadata?.name || null;
-    const avatar = profileMetadata?.picture || null;
-    const bio = profileMetadata?.about || null;
-    const lightningAddress =
-      profileMetadata?.lud16 || profileMetadata?.lud06 || null;
+    // Profile + relay list are NOT fetched here — the round-trip to Nostr relays
+    // was ~21s on the login critical path. The client fetches NIP-65 itself
+    // after redirect (see NostrContext / nip65.ts), and profile metadata is
+    // backfilled lazily when needed. New users land with null profile fields
+    // until the first background refresh.
+    const profileMetadata: any = null;
+    const relayList: string[] | null = null;
+    const displayName = null;
+    const avatar = null;
+    const bio = null;
+    const lightningAddress = null;
 
     let user: {
       id: string;
@@ -146,11 +139,14 @@ export async function POST(request: NextRequest) {
       };
     } else {
       const { prisma } = await import('@/lib/prisma');
+      const tFind = Date.now();
       const existing = await prisma.user.findUnique({
         where: { nostrPubkey: hexPubkey },
       });
+      console.log(`⏱️  [login] user.findUnique: ${Date.now() - tFind}ms (existed=${!!existing})`);
 
       if (!existing) {
+        const tCreate = Date.now();
         user = await prisma.user.create({
           data: {
             id: hexPubkey, // Use pubkey as ID since it's unique
@@ -164,20 +160,22 @@ export async function POST(request: NextRequest) {
             updatedAt: new Date(),
           },
         });
+        console.log(`⏱️  [login] user.create: ${Date.now() - tCreate}ms`);
       } else {
+        // Only refresh npub here. Profile fields (displayName/avatar/bio/
+        // lightningAddress/relays) are backfilled by a separate path so login
+        // stays fast and we don't overwrite good cached data with nulls.
+        const tUpdate = Date.now();
         user = await prisma.user.update({
           where: { id: existing.id },
           data: {
             nostrNpub: calculatedNpub,
-            displayName,
-            avatar,
-            bio,
-            lightningAddress,
-            ...(relayList ? { relays: relayList } : {}),
           },
         });
+        console.log(`⏱️  [login] user.update: ${Date.now() - tUpdate}ms`);
       }
     }
+    mark('user row resolved');
 
     const sessionId = getSessionIdFromRequest(request);
 
@@ -258,8 +256,10 @@ export async function POST(request: NextRequest) {
       } catch (err) {
         console.error('Favorite migration failed:', err);
       }
+      mark('session favorites migrated');
     }
 
+    mark('TOTAL');
     return NextResponse.json({
       success: true,
       message: 'Login successful',
