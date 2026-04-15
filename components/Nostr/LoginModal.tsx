@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { NIP46Client } from '@/lib/nostr/nip46-client';
 import { getUnifiedSigner } from '@/lib/nostr/signer';
@@ -13,6 +13,12 @@ import {
   prepareLoginEvent,
   processSignedLogin,
 } from '@/lib/nostr/auth-utils';
+import {
+  installConsoleCapture,
+  uninstallConsoleCapture,
+  clearLogs,
+  buildDiagnosticsReport,
+} from '@/lib/nostr/login-diagnostics';
 
 interface LoginModalProps {
   onClose: () => void;
@@ -46,9 +52,32 @@ export default function LoginModal({ onClose }: LoginModalProps) {
     nip46ClientRef,
   } = useNip46Connection({ loginMethod, isSubmitting });
 
+  // Diagnostics capture — active for the lifetime of the modal so users
+  // hitting login problems (especially on mobile where DevTools isn't
+  // reachable) can dump a full report to clipboard via the footer button.
+  const modalOpenedAtRef = useRef<number>(0);
+  const prevNip46DebugRef = useRef<string | null>(null);
+  const [diagnosticsCopyState, setDiagnosticsCopyState] =
+    useState<'idle' | 'copied' | 'failed'>('idle');
+  const [diagnosticsFallback, setDiagnosticsFallback] = useState<string | null>(null);
+
   // Ensure we're mounted before rendering portal
   useEffect(() => {
     setMounted(true);
+    modalOpenedAtRef.current = Date.now();
+
+    // Enable nip46_debug so NIP46Client.debugLog actually prints during
+    // the capture window, and install the console tee. Save the previous
+    // value of the flag so we don't leave it flipped when the modal closes.
+    try {
+      prevNip46DebugRef.current = localStorage.getItem('nip46_debug');
+      localStorage.setItem('nip46_debug', 'true');
+    } catch {
+      // ignore storage failures (e.g., Safari private mode)
+    }
+    clearLogs();
+    installConsoleCapture();
+
     // Close any open dropdowns when modal opens
     const closeDropdowns = () => {
       document.body.click();
@@ -58,8 +87,50 @@ export default function LoginModal({ onClose }: LoginModalProps) {
     if (typeof window !== 'undefined' && (window as any).nostr) {
       setHasExtension(true);
     }
-    return () => setMounted(false);
+    return () => {
+      setMounted(false);
+      uninstallConsoleCapture();
+      try {
+        if (prevNip46DebugRef.current === null) {
+          localStorage.removeItem('nip46_debug');
+        } else {
+          localStorage.setItem('nip46_debug', prevNip46DebugRef.current);
+        }
+      } catch {
+        // ignore
+      }
+    };
   }, []);
+
+  const handleCopyDiagnostics = async () => {
+    const report = buildDiagnosticsReport({
+      error,
+      view,
+      loginMethod,
+      isSubmitting,
+      hasExtension,
+      showNip46Connect,
+      isInitializingAmber,
+      amberConnectionError,
+      nip46Client: nip46ClientRef.current || nip46Client,
+      modalOpenedAt: modalOpenedAtRef.current,
+    });
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(report);
+        setDiagnosticsCopyState('copied');
+        setTimeout(() => setDiagnosticsCopyState('idle'), 2500);
+      } else {
+        // Clipboard API unavailable (older Safari, non-secure context).
+        // Fall back to showing the report in a textarea the user can copy.
+        setDiagnosticsFallback(report);
+      }
+    } catch {
+      // Some mobile browsers reject clipboard.writeText without a user
+      // gesture heuristic they accept — fall back to the textarea path.
+      setDiagnosticsFallback(report);
+    }
+  };
 
 
 
@@ -967,7 +1038,42 @@ export default function LoginModal({ onClose }: LoginModalProps) {
           >
             Cancel
           </button>
+          <button
+            type="button"
+            onClick={handleCopyDiagnostics}
+            className="px-3 py-2 text-xs text-gray-600 hover:text-gray-900 border border-gray-300 rounded-md hover:bg-gray-50"
+            title="Copy a diagnostic log (environment, modal state, recent console output) so the issue can be triaged. Secrets are redacted."
+          >
+            {diagnosticsCopyState === 'copied'
+              ? '✓ Copied'
+              : diagnosticsCopyState === 'failed'
+              ? 'Copy failed'
+              : 'Copy diagnostics'}
+          </button>
         </div>
+
+        {diagnosticsFallback !== null && (
+          <div className="mt-4 border-t border-gray-200 pt-4">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs text-gray-700 font-medium">
+                Clipboard unavailable — long-press the text below to select and copy.
+              </p>
+              <button
+                type="button"
+                onClick={() => setDiagnosticsFallback(null)}
+                className="text-xs text-gray-500 hover:text-gray-700"
+              >
+                Close
+              </button>
+            </div>
+            <textarea
+              readOnly
+              value={diagnosticsFallback}
+              onFocus={(e) => e.currentTarget.select()}
+              className="w-full h-48 text-[10px] font-mono border border-gray-300 rounded-md p-2 bg-gray-50"
+            />
+          </div>
+        )}
       </div>
     </div>
   );

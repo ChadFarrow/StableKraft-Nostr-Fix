@@ -95,9 +95,18 @@ export interface NIP46Response {
 export class NIP46Client {
   // Debug logging - only active when localStorage flag is set
   // Enable with: localStorage.setItem('nip46_debug', 'true')
-  private static DEBUG = typeof window !== 'undefined' && localStorage.getItem('nip46_debug') === 'true';
+  //
+  // Read dynamically on every call so flipping the flag at runtime (e.g.,
+  // LoginModal auto-enabling it for a diagnostics capture) takes effect
+  // without a page reload. localStorage access is cheap; the branch is
+  // dominated by the method-call overhead anyway.
   private debugLog(...args: any[]) {
-    if (NIP46Client.DEBUG) console.log(...args);
+    if (
+      typeof window !== 'undefined' &&
+      localStorage.getItem('nip46_debug') === 'true'
+    ) {
+      console.log(...args);
+    }
   }
 
   // iOS Safari kills WebSocket connections after ~30 seconds when backgrounded
