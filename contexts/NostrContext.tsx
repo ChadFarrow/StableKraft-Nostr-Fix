@@ -109,6 +109,48 @@ export function NostrProvider({ children }: { children: React.ReactNode }) {
               console.warn('⚠️ NostrContext: Failed to fetch user relays:', err);
             });
           }
+
+          // Backfill profile metadata (displayName/avatar/bio/lightningAddress)
+          // from kind-0 if the stored record has it missing. The login route
+          // returns null profile fields so login can complete in ~20ms; we
+          // populate them here post-reload instead of on the critical path.
+          if (userData.nostrPubkey && !userData.displayName) {
+            import('@/lib/nostr/profile')
+              .then(({ fetchUserProfile }) => fetchUserProfile(userData.nostrPubkey))
+              .then((profile) => {
+                if (!profile) return;
+                const displayName = profile.display_name || profile.name || null;
+                const avatar = profile.picture || null;
+                const bio = profile.about || null;
+                const lightningAddress = profile.lud16 || profile.lud06 || null;
+                if (!displayName && !avatar && !bio && !lightningAddress) return;
+
+                setUser((prev) => {
+                  if (!prev || prev.nostrPubkey !== userData.nostrPubkey) return prev;
+                  const merged: NostrUser = {
+                    ...prev,
+                    displayName: prev.displayName || displayName || undefined,
+                    avatar: prev.avatar || avatar || undefined,
+                    bio: prev.bio || bio || undefined,
+                    lightningAddress: prev.lightningAddress || lightningAddress || undefined,
+                  };
+                  try {
+                    localStorage.setItem(NOSTR_USER_KEY, JSON.stringify(merged));
+                  } catch {}
+                  return merged;
+                });
+
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('✅ NostrContext: Backfilled profile from Nostr', {
+                    displayName,
+                    hasAvatar: !!avatar,
+                  });
+                }
+              })
+              .catch((err) => {
+                console.warn('⚠️ NostrContext: Failed to backfill profile:', err);
+              });
+          }
         } catch (parseError) {
           console.error('❌ NostrContext: Failed to parse user data:', parseError);
         }
