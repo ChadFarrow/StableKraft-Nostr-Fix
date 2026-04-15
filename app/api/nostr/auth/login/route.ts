@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
 import { verifyEvent, getEventHash } from 'nostr-tools';
 import { NostrClient } from '@/lib/nostr/client';
 import { getDefaultRelays } from '@/lib/nostr/relay';
 import { getSessionIdFromRequest } from '@/lib/session-utils';
 import { normalizePubkey } from '@/lib/nostr/normalize';
 import { publicKeyToNpub } from '@/lib/nostr/keys';
+
+/**
+ * Dev/Vercel test mode: when DATABASE_URL is unset we skip every Prisma call
+ * and synthesize the user record from the signed event + Nostr profile. This
+ * lets standalone deployments (e.g., a Vercel preview used solely to test
+ * Nostr sign-in) work without provisioning a Postgres instance. Production on
+ * Railway always has DATABASE_URL set, so the real DB-backed path runs there.
+ */
+const DB_DISABLED = !process.env.DATABASE_URL;
 
 /**
  * POST /api/nostr/auth/login
@@ -111,41 +119,70 @@ export async function POST(request: NextRequest) {
     const lightningAddress =
       profileMetadata?.lud16 || profileMetadata?.lud06 || null;
 
-    let user = await prisma.user.findUnique({
-      where: { nostrPubkey: hexPubkey },
-    });
+    let user: {
+      id: string;
+      nostrPubkey: string;
+      nostrNpub: string;
+      displayName: string | null;
+      avatar: string | null;
+      bio: string | null;
+      lightningAddress: string | null;
+      relays: string[];
+    };
 
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          id: hexPubkey, // Use pubkey as ID since it's unique
-          nostrPubkey: hexPubkey,
-          nostrNpub: calculatedNpub,
-          displayName,
-          avatar,
-          bio,
-          lightningAddress,
-          relays: relayList || [],
-          updatedAt: new Date(),
-        },
-      });
+    if (DB_DISABLED) {
+      // No DB (e.g., Vercel test preview) — synthesize a user from the signed
+      // event + fetched profile. Client-side favorites sync still works
+      // because it only talks to Nostr relays, not our DB.
+      user = {
+        id: hexPubkey,
+        nostrPubkey: hexPubkey,
+        nostrNpub: calculatedNpub,
+        displayName,
+        avatar,
+        bio,
+        lightningAddress,
+        relays: relayList || [],
+      };
     } else {
-      user = await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          nostrNpub: calculatedNpub,
-          displayName,
-          avatar,
-          bio,
-          lightningAddress,
-          ...(relayList ? { relays: relayList } : {}),
-        },
+      const { prisma } = await import('@/lib/prisma');
+      const existing = await prisma.user.findUnique({
+        where: { nostrPubkey: hexPubkey },
       });
+
+      if (!existing) {
+        user = await prisma.user.create({
+          data: {
+            id: hexPubkey, // Use pubkey as ID since it's unique
+            nostrPubkey: hexPubkey,
+            nostrNpub: calculatedNpub,
+            displayName,
+            avatar,
+            bio,
+            lightningAddress,
+            relays: relayList || [],
+            updatedAt: new Date(),
+          },
+        });
+      } else {
+        user = await prisma.user.update({
+          where: { id: existing.id },
+          data: {
+            nostrNpub: calculatedNpub,
+            displayName,
+            avatar,
+            bio,
+            lightningAddress,
+            ...(relayList ? { relays: relayList } : {}),
+          },
+        });
+      }
     }
 
     const sessionId = getSessionIdFromRequest(request);
 
-    if (sessionId) {
+    if (sessionId && !DB_DISABLED) {
+      const { prisma } = await import('@/lib/prisma');
       try {
         // Migrate session tracks to user (batch operations to fix N+1)
         const sessionTracks = await prisma.favoriteTrack.findMany({
