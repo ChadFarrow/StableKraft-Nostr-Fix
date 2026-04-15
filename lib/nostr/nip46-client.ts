@@ -757,37 +757,35 @@ export class NIP46Client {
       });
     }
     
-    // CRITICAL: Verify primary relay is connected before subscribing
-    // If this relay fails, connection will not work because Amber/Aegis publishes to this relay
-    this.debugLog(`🔌 NIP-46: Connecting to relays:`, subscribeRelays);
+    // Only AWAIT the primary relay — that's what the QR points at and what
+    // Amber/Primal will publish to. Backup relays connect in the background
+    // so we don't block QR display on slow backup handshakes.
+    this.debugLog(`🔌 NIP-46: Connecting to PRIMARY relay (awaited):`, relayUrl);
     try {
-      await this.relayClient.connectToRelays(subscribeRelays);
+      await this.relayClient.connectToRelays([relayUrl]);
       const connectedRelays = this.relayClient.getConnectedRelays();
-      this.debugLog('✅ NIP-46: Connected to relay(s):', connectedRelays);
-
-      // Verify the primary relay is actually connected
       if (!connectedRelays.includes(relayUrl)) {
         const helpMessage = `Try regenerating your bunker:// URI in your signer app with a different relay like wss://relay.nsec.app or wss://relay.damus.io`;
-        const errorMsg = `Primary relay ${relayUrl} failed to connect. ${helpMessage}`;
-        console.error(`❌ NIP-46: ${errorMsg}`);
-        throw new Error(errorMsg);
+        throw new Error(`Primary relay ${relayUrl} failed to connect. ${helpMessage}`);
       }
-
       this.debugLog(`✅ NIP-46: Primary relay ${relayUrl} is connected and ready`);
-      if (backupRelays.length > 0) {
-        const connectedBackups = backupRelays.filter(url => connectedRelays.includes(url));
-        if (connectedBackups.length > 0) {
-          this.debugLog(`✅ NIP-46: Also connected to ${connectedBackups.length} backup relay(s):`, connectedBackups);
-        } else {
-          console.warn(`⚠️ NIP-46: No backup relays connected, but primary relay is ready`);
-        }
-      }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       console.error(`❌ NIP-46: Failed to connect to primary relay ${relayUrl}:`, errorMsg);
-      // Provide a helpful error message with suggestions
       const helpMessage = `The relay "${relayUrl}" may be offline or unreachable. Try regenerating your bunker:// URI in your signer app (Aegis/Amber) with a different relay like wss://relay.nsec.app or wss://relay.damus.io`;
       throw new Error(`Failed to connect to relay ${relayUrl}. ${helpMessage}`);
+    }
+
+    // Fire-and-forget backup relay connects — improves event delivery
+    // robustness without blocking QR display.
+    if (backupRelays.length > 0) {
+      this.relayClient.connectToRelays(backupRelays).then(() => {
+        const connected = this.relayClient?.getConnectedRelays() || [];
+        const connectedBackups = backupRelays.filter(url => connected.includes(url));
+        this.debugLog(`✅ NIP-46: Backup relays connected (background):`, connectedBackups);
+      }).catch((err) => {
+        console.warn('⚠️ NIP-46: Backup relay connect failed (non-fatal):', err);
+      });
     }
     
     // Track subscription start time for debugging
@@ -805,11 +803,8 @@ export class NIP46Client {
       note: 'Relay must be configured with read: true for subscriptions to work',
     });
     
-    // Wait for relay to be fully ready before subscribing
-    // Relay is already verified connected by connectToRelays() above, so 500ms is sufficient
-    const subscriptionDelay = isBunkerConnection ? 1000 : 500;
-    this.debugLog(`⏳ NIP-46: Waiting ${subscriptionDelay}ms for relay(s) to be fully ready...`);
-    await new Promise(resolve => setTimeout(resolve, subscriptionDelay));
+    // No arbitrary sleep — connectToRelays already confirmed the primary
+    // relay is connected. The subscription below will attach immediately.
     
     
     this.subscriptionSetupTime = Date.now();
