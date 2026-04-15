@@ -737,12 +737,26 @@ export class NIP46Client {
 
     let subscribeRelays: string[];
     if (isBunkerConnection) {
-      // For bunker connections, ONLY subscribe to the primary relay
-      // Local relay bridges (Aegis, etc) only work with their specific relay
-      subscribeRelays = [relayUrl];
-      this.debugLog(`✅ NIP-46: Bunker connection - subscribing ONLY to primary relay:`, {
+      // Subscribe to all relays listed in the bunker URI. Amber-style signers
+      // publish responses on whichever relay they picked; if we only listen
+      // to the first one we miss the reply and the login hangs.
+      // Aegis-style local-bridge signers still work because their single
+      // relay is present in the list.
+      let uriRelays: string[] = [relayUrl];
+      try {
+        const bunkerInfo = parseBunkerUri(this.connection.signerUrl);
+        if (bunkerInfo.relays && bunkerInfo.relays.length > 0) {
+          uriRelays = bunkerInfo.relays;
+        }
+      } catch {
+        // Fall back to primary relay only
+      }
+      subscribeRelays = uriRelays;
+      this.debugLog(`✅ NIP-46: Bunker connection - subscribing to ALL URI relays:`, {
         primary: relayUrl,
-        note: 'Bunker signers (Aegis) use local relay bridges. Backup relays would not work.',
+        relays: subscribeRelays,
+        total: subscribeRelays.length,
+        note: 'Amber and similar signers may publish on any of these. Listening to all.',
       });
     } else {
       // For other connections (nostrconnect://), subscribe to primary relay AND backup relays
@@ -757,28 +771,47 @@ export class NIP46Client {
       });
     }
     
-    // Only AWAIT the primary relay — that's what the QR points at and what
-    // Amber/Primal will publish to. Backup relays connect in the background
-    // so we don't block QR display on slow backup handshakes.
-    this.debugLog(`🔌 NIP-46: Connecting to PRIMARY relay (awaited):`, relayUrl);
-    try {
-      await this.relayClient.connectToRelays([relayUrl]);
-      const connectedRelays = this.relayClient.getConnectedRelays();
-      if (!connectedRelays.includes(relayUrl)) {
-        const helpMessage = `Try regenerating your bunker:// URI in your signer app with a different relay like wss://relay.nsec.app or wss://relay.damus.io`;
-        throw new Error(`Primary relay ${relayUrl} failed to connect. ${helpMessage}`);
+    // For bunker:// URIs we connect to all listed relays in parallel and
+    // succeed as long as at least one opens. Amber lists 5 relays; if the
+    // first is blocked by the browser (seen with relay.primal.net under
+    // Firefox), any of the others will do. For nostrconnect:// we still
+    // only await the primary — that's the one in the QR code.
+    if (isBunkerConnection) {
+      this.debugLog(`🔌 NIP-46: Connecting to bunker URI relays in parallel:`, subscribeRelays);
+      try {
+        await this.relayClient.connectToRelays(subscribeRelays);
+      } catch (err) {
+        // connectToRelays may resolve partially — surface only if nothing connected
+        this.debugLog('⚠️ NIP-46: connectToRelays threw, checking if any relays opened anyway:', err);
       }
-      this.debugLog(`✅ NIP-46: Primary relay ${relayUrl} is connected and ready`);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      console.error(`❌ NIP-46: Failed to connect to primary relay ${relayUrl}:`, errorMsg);
-      const helpMessage = `The relay "${relayUrl}" may be offline or unreachable. Try regenerating your bunker:// URI in your signer app (Aegis/Amber) with a different relay like wss://relay.nsec.app or wss://relay.damus.io`;
-      throw new Error(`Failed to connect to relay ${relayUrl}. ${helpMessage}`);
+      const connectedRelays = this.relayClient.getConnectedRelays();
+      const matchingRelays = subscribeRelays.filter(url => connectedRelays.includes(url));
+      if (matchingRelays.length === 0) {
+        throw new Error(`Failed to connect to any bunker URI relay. Tried: ${subscribeRelays.join(', ')}. Your browser/network may be blocking them; try a signer URI with different relays.`);
+      }
+      this.debugLog(`✅ NIP-46: Connected to ${matchingRelays.length}/${subscribeRelays.length} bunker relay(s):`, matchingRelays);
+    } else {
+      this.debugLog(`🔌 NIP-46: Connecting to PRIMARY relay (awaited):`, relayUrl);
+      try {
+        await this.relayClient.connectToRelays([relayUrl]);
+        const connectedRelays = this.relayClient.getConnectedRelays();
+        if (!connectedRelays.includes(relayUrl)) {
+          const helpMessage = `Try regenerating your bunker:// URI in your signer app with a different relay like wss://relay.nsec.app or wss://relay.damus.io`;
+          throw new Error(`Primary relay ${relayUrl} failed to connect. ${helpMessage}`);
+        }
+        this.debugLog(`✅ NIP-46: Primary relay ${relayUrl} is connected and ready`);
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error(`❌ NIP-46: Failed to connect to primary relay ${relayUrl}:`, errorMsg);
+        const helpMessage = `The relay "${relayUrl}" may be offline or unreachable. Try regenerating your bunker:// URI in your signer app (Aegis/Amber) with a different relay like wss://relay.nsec.app or wss://relay.damus.io`;
+        throw new Error(`Failed to connect to relay ${relayUrl}. ${helpMessage}`);
+      }
     }
 
-    // Fire-and-forget backup relay connects — improves event delivery
-    // robustness without blocking QR display.
-    if (backupRelays.length > 0) {
+    // Non-bunker: fire-and-forget backup relay connects for delivery
+    // robustness without blocking QR display. Bunker connections already
+    // awaited all URI relays above, so nothing else to do here.
+    if (!isBunkerConnection && backupRelays.length > 0) {
       this.relayClient.connectToRelays(backupRelays).then(() => {
         const connected = this.relayClient?.getConnectedRelays() || [];
         const connectedBackups = backupRelays.filter(url => connected.includes(url));
@@ -3339,15 +3372,31 @@ export class NIP46Client {
           const isBunkerConnection = !!(this.connection as any).signerPubkey;
 
           let publishRelays: string[];
-          if (method === 'connect' || isBunkerConnection) {
-            // Connect requests OR bunker connections: ONLY primary relay
-            // Bunker signers (Aegis, etc) only listen to their specific relay, not backup relays
-            publishRelays = [primaryRelay];
-            if (isBunkerConnection) {
-              this.debugLog('📤 NIP-46: Bunker connection - publishing ONLY to primary relay (signer only listens here):', primaryRelay);
-            } else {
-              this.debugLog('📤 NIP-46: Connect request - publishing ONLY to primary relay to avoid rate limits:', primaryRelay);
+          if (isBunkerConnection) {
+            // Bunker URIs carry a list of relays the signer is listening on
+            // (Amber embeds 5). Publishing only to the first relay fails when
+            // the signer has chosen one of the others. Publish to all URI
+            // relays; Aegis-style local-bridge setups will still work because
+            // their single relay is in the list.
+            let bunkerRelays: string[] = [primaryRelay];
+            try {
+              const bunkerInfo = parseBunkerUri(this.connection.signerUrl);
+              if (bunkerInfo.relays && bunkerInfo.relays.length > 0) {
+                bunkerRelays = bunkerInfo.relays;
+              }
+            } catch {
+              // Fall back to primary relay only
             }
+            publishRelays = bunkerRelays;
+            this.debugLog('📤 NIP-46: Bunker connection - publishing to ALL URI relays (signer may be on any of them):', {
+              primary: primaryRelay,
+              relays: publishRelays,
+              total: publishRelays.length,
+            });
+          } else if (method === 'connect') {
+            // Non-bunker connect requests: primary relay only (avoid rate limits)
+            publishRelays = [primaryRelay];
+            this.debugLog('📤 NIP-46: Connect request - publishing ONLY to primary relay to avoid rate limits:', primaryRelay);
           } else {
             // Other requests (nostrconnect://): primary + backups for redundancy
             publishRelays = [primaryRelay, ...backupRelays];

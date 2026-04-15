@@ -150,7 +150,17 @@ export default function LoginModal({ onClose }: LoginModalProps) {
   // Bunker URI card — lets users paste a URI from nsec.app, Alby.to, Keycast,
   // Amber, etc. Bypasses nostr-login; talks directly to NIP46Client.
   const handlePastedUriConnect = async () => {
+    const t0 = performance.now();
+    const mark = (label: string) => console.log(`⏱️  [BunkerLogin] ${label}: ${Math.round(performance.now() - t0)}ms`);
+
     const uri = bunkerUri.trim();
+    console.log('🔑 [BunkerLogin] Connect clicked', {
+      hasUri: !!uri,
+      scheme: uri.startsWith('bunker://') ? 'bunker' : uri.startsWith('nostrconnect://') ? 'nostrconnect' : 'invalid',
+      uriLength: uri.length,
+      uriPreview: uri.slice(0, 60) + (uri.length > 60 ? '…' : ''),
+    });
+
     if (!uri) {
       setError('Please paste a bunker:// or nostrconnect:// URI');
       return;
@@ -169,28 +179,55 @@ export default function LoginModal({ onClose }: LoginModalProps) {
 
       // Extract token from the URI's `secret` query param.
       let token = '';
+      let parsedRelay: string | null = null;
+      let parsedPubkey: string | null = null;
       try {
         const url = new URL(uri.replace(/^(bunker|nostrconnect):\/\//, 'http://'));
         const secret = url.searchParams.get('secret');
         if (secret) token = decodeURIComponent(secret);
+        parsedRelay = url.searchParams.get('relay');
+        parsedPubkey = url.hostname || null;
       } catch {
         // Ignore — some URIs don't have a parseable secret param.
       }
+      console.log('🔑 [BunkerLogin] Parsed URI', {
+        isBunker,
+        hasToken: !!token,
+        tokenLength: token.length,
+        relay: parsedRelay,
+        remoteSignerPubkeyPrefix: parsedPubkey ? parsedPubkey.slice(0, 16) + '…' : null,
+      });
 
       const client = new NIP46Client();
+      mark('NIP46Client constructed');
+
+      const connectStart = performance.now();
       await client.connect(uri, token, true);
+      console.log(`⏱️  [BunkerLogin] client.connect: ${Math.round(performance.now() - connectStart)}ms`);
       nip46ClientRef.current = client;
 
       const { getUnifiedSigner } = await import('@/lib/nostr/signer');
       const signer = getUnifiedSigner();
       await signer.setNIP46Signer(client);
+      mark('UnifiedSigner wired');
 
       // For bunker:// URIs, give the remote signer a moment to be ready
       // before we request a signature.
-      if (isBunker) await new Promise((r) => setTimeout(r, 1500));
+      if (isBunker) {
+        console.log('⏳ [BunkerLogin] bunker:// URI — waiting 1500ms before first signer call');
+        await new Promise((r) => setTimeout(r, 1500));
+      }
 
+      console.log('➡️  [BunkerLogin] Handing off to handleNip46ConnectedWithClient');
       await handleNip46ConnectedWithClient(client);
+      mark('TOTAL success');
     } catch (err) {
+      console.error('❌ [BunkerLogin] Failed', {
+        message: err instanceof Error ? err.message : String(err),
+        name: err instanceof Error ? err.name : undefined,
+        stack: err instanceof Error ? err.stack : undefined,
+        totalElapsedMs: Math.round(performance.now() - t0),
+      });
       const message = err instanceof Error ? err.message : 'Failed to connect';
       setError(message);
       setIsSubmitting(false);
@@ -891,7 +928,7 @@ export default function LoginModal({ onClose }: LoginModalProps) {
                 <span className="font-semibold text-gray-900">Bunker URI</span>
               </div>
               <p className="text-xs text-gray-600 ml-9">
-                Paste a <code>bunker://</code> URI from nsec.app, Alby.to, Keycast, Amber, etc.
+                Paste a <code>bunker://</code> URI from a NIP-46 bunker signer.
               </p>
             </button>
             )}
@@ -985,7 +1022,10 @@ export default function LoginModal({ onClose }: LoginModalProps) {
               {isSubmitting ? 'Connecting…' : 'Connect'}
             </button>
             <p className="mt-3 text-xs text-gray-600">
-              Get a URI from your signer app: open nsec.app, Alby.to, Keycast, or Amber → export/share connection.
+              Paste a URI from any NIP-46 bunker signer.
+            </p>
+            <p className="mt-2 text-xs text-amber-700">
+              <strong>Using Amber?</strong> Use the Amber card instead — Amber&apos;s pasted-<code>bunker://</code> flow is unreliable (<a href="https://github.com/greenart7c3/Amber/issues/251" target="_blank" rel="noreferrer" className="underline">known issue #251</a>).
             </p>
           </div>
         )}

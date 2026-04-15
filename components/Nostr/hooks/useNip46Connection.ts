@@ -84,6 +84,12 @@ export function useNip46Connection(options: UseNip46ConnectionOptions): Nip46Con
 
   // Initialize Amber connection - extracted from handleNip46Connect for auto-init
   const initializeAmberConnection = useCallback(async () => {
+    const t0 = performance.now();
+    const mark = (label: string) => console.log(`⏱️  [Nip46Init] ${label}: ${Math.round(performance.now() - t0)}ms`);
+    console.log('🚀 [Nip46Init] initializeAmberConnection start', {
+      loginMethod,
+      timestamp: new Date().toISOString(),
+    });
     // Check if localStorage is available and persistent
     try {
       const testKey = '_nip46_storage_test';
@@ -102,8 +108,12 @@ export function useNip46Connection(options: UseNip46ConnectionOptions): Nip46Con
     const { hasValidConnection, loadNIP46Connection, clearNIP46Connection } = await import('@/lib/nostr/nip46-storage');
     const { getUnifiedSigner } = await import('@/lib/nostr/signer');
 
-    if (hasValidConnection()) {
-      console.log('🔄 NIP-46: Found existing connection, attempting auto-reconnect...');
+    mark('storage modules imported');
+    const hasExisting = hasValidConnection();
+    mark(`hasValidConnection=${hasExisting}`);
+
+    if (hasExisting) {
+      console.log('🔄 [Nip46Init] Found existing connection, attempting auto-reconnect...');
 
       // Get current user pubkey for validation
       let currentUserPubkey: string | undefined;
@@ -206,15 +216,17 @@ export function useNip46Connection(options: UseNip46ConnectionOptions): Nip46Con
 
     // Set up connection callback
     client.setOnConnection((signerPubkey: string) => {
-      console.log('✅ NIP-46: Connection established with signer:', signerPubkey);
+      console.log(`✅ [Nip46Init] Connection established with signer after ${Math.round(performance.now() - t0)}ms:`, signerPubkey.slice(0, 16) + '…');
     });
 
     // Start listening on relay for connection
+    const tConnect = performance.now();
     try {
       await client.connect(relayUrl, token, true);
+      console.log(`⏱️  [Nip46Init] client.connect(relayUrl): ${Math.round(performance.now() - tConnect)}ms`);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
-      console.error('❌ initializeAmberConnection: Failed to start relay connection:', errorMessage);
+      console.error('❌ [Nip46Init] Failed to start relay connection:', errorMessage);
       throw new Error(`Failed to connect to relay: ${errorMessage}`);
     }
 
@@ -233,7 +245,8 @@ export function useNip46Connection(options: UseNip46ConnectionOptions): Nip46Con
     setNip46ConnectionToken(nostrconnectUri);
     setNip46SignerUrl(relayUrl);
     setShowNip46Connect(true);
-  }, []);
+    mark('QR/URI shown — waiting on signer to connect');
+  }, [loginMethod]);
 
   // Auto-initialize Amber connection when tab is selected
   useEffect(() => {
