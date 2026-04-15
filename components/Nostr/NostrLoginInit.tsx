@@ -34,8 +34,11 @@ export function ensureNostrLoginInitialized(): Promise<void> {
         noBanner: true,
         // Dark theme to match stablekraft aesthetic
         theme: 'default',
-        // Only allow existing key import and bunker — no local key creation
-        methods: ['connect', 'extension'] as any,
+        // Include enough methods that the welcome screen always has something
+        // to render. `connect` alone relies on nsec.app which is currently
+        // down; `extension` requires a NIP-07 extension. Add `readOnly`
+        // (paste npub), and `local` (import nsec) so users see options.
+        methods: ['connect', 'extension', 'readOnly', 'local'] as any,
       });
       console.log('✅ nostr-login initialized');
     })

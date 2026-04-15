@@ -8,7 +8,6 @@ import { saveNIP46Connection } from '@/lib/nostr/nip46-storage';
 import { isIOS } from '@/lib/utils/device';
 import Nip46Connect from './Nip46Connect';
 import { useNip46Connection } from './hooks';
-import { ensureNostrLoginInitialized } from './NostrLoginInit';
 import {
   preserveWalletConnection,
   prepareLoginEvent,
@@ -29,7 +28,6 @@ const ENABLED_SIGNIN_OPTIONS = {
   bunker: true,
   amber: true,
   primal: true,
-  more: true,
 };
 
 interface LoginModalProps {
@@ -794,77 +792,6 @@ export default function LoginModal({ onClose }: LoginModalProps) {
     }
   };
 
-  // nostr-login handler — launches nostr-login's auth UI, then uses polyfilled window.nostr
-  const handleNostrLogin = async () => {
-    try {
-      setIsSubmitting(true);
-      setError(null);
-
-      console.log('🔐 LoginModal: Launching nostr-login auth flow...');
-
-      // Lazy-load nostr-login on first use (avoids slowing every page load
-      // for users who sign in with an extension and never touch this path).
-      await ensureNostrLoginInitialized();
-
-      // Launch nostr-login's auth modal
-      document.dispatchEvent(
-        new CustomEvent('nlLaunch', { detail: 'welcome' })
-      );
-
-      // Wait for nostr-login to complete auth (fires nlAuth event)
-      await new Promise<void>((resolve, reject) => {
-        const timeoutId = setTimeout(() => {
-          document.removeEventListener('nlAuth', handler);
-          reject(new Error('Login timed out. Please try again.'));
-        }, 120000); // 2 minute timeout
-
-        const handler = async (e: Event) => {
-          const detail = (e as CustomEvent).detail;
-          document.removeEventListener('nlAuth', handler);
-          clearTimeout(timeoutId);
-
-          if (detail?.type === 'logout' || !detail) {
-            reject(new Error('Login was cancelled'));
-            return;
-          }
-
-          console.log('✅ nostr-login auth complete, window.nostr is ready');
-
-          try {
-            // window.nostr is now polyfilled by nostr-login
-            // Run the standard challenge/sign/verify flow
-            const { challenge, eventTemplate } = await prepareLoginEvent();
-
-            // Reinitialize the unified signer so it picks up the new window.nostr
-            const signer = getUnifiedSigner();
-            await signer.reinitialize();
-
-            const signedEvent = await signer.signEvent(eventTemplate as any);
-            console.log('✅ LoginModal: Got signed event from nostr-login signer');
-
-            const result = await processSignedLogin(
-              signedEvent, challenge, 'extension', onClose
-            );
-            if (!result.success) {
-              throw new Error(result.error || 'Login failed');
-            }
-            resolve();
-          } catch (signErr) {
-            reject(signErr);
-          }
-        };
-
-        document.addEventListener('nlAuth', handler);
-      });
-    } catch (err) {
-      if (err instanceof Error && err.message !== 'Login was cancelled') {
-        setError(err.message);
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   const modalContent = (
     <div 
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center" 
@@ -966,26 +893,10 @@ export default function LoginModal({ onClose }: LoginModalProps) {
               </p>
             </button>
             )}
-            {ENABLED_SIGNIN_OPTIONS.more && (
-            <button
-              onClick={handleNostrLogin}
-              disabled={isSubmitting}
-              className="text-left p-4 rounded-lg border border-gray-200 hover:border-gray-400 hover:shadow-sm transition-all disabled:opacity-50"
-            >
-              <div className="flex items-center gap-3 mb-1">
-                <span className="text-2xl" aria-hidden>⚙️</span>
-                <span className="font-semibold text-gray-900">More options</span>
-              </div>
-              <p className="text-xs text-gray-600 ml-9">
-                Other bunker providers and advanced settings.
-              </p>
-            </button>
-            )}
             {!ENABLED_SIGNIN_OPTIONS.extension &&
               !ENABLED_SIGNIN_OPTIONS.bunker &&
               !ENABLED_SIGNIN_OPTIONS.amber &&
-              !ENABLED_SIGNIN_OPTIONS.primal &&
-              !ENABLED_SIGNIN_OPTIONS.more && (
+              !ENABLED_SIGNIN_OPTIONS.primal && (
               <p className="text-sm text-gray-600 text-center py-4">
                 All sign-in options are disabled. Enable one in <code>ENABLED_SIGNIN_OPTIONS</code> (top of <code>LoginModal.tsx</code>) to test.
               </p>
