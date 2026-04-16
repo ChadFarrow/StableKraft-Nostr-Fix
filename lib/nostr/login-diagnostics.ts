@@ -72,6 +72,37 @@ export function pushLog(level: LogLevel, args: unknown[]): void {
   }
 }
 
+/**
+ * Write a checkpoint directly to the diagnostics buffer, bypassing
+ * console.log patching. Use this for "must-not-be-lost" events (e.g., login
+ * flow step markers, signer request/response milestones) where the console
+ * tee may miss entries due to remounts, fast-refresh patch replacement, or
+ * capture timing.
+ *
+ * Prefix is forced so these show up clearly in the dumped report.
+ */
+export function pushCheckpoint(label: string, data?: Record<string, unknown>): void {
+  try {
+    const payload = data ? ` ${safeStringify(data)}` : '';
+    const msg = `[CHECKPOINT] ${label}${payload}`.slice(0, MAX_MSG_LENGTH);
+    buffer.push({ t: Date.now(), level: 'log', msg });
+    if (buffer.length > MAX_LOG_ENTRIES) {
+      buffer.splice(0, buffer.length - MAX_LOG_ENTRIES);
+    }
+    // Also tee to real console for users watching DevTools, but use the
+    // *original* console.log that was saved before patching (if any). This
+    // makes sure DevTools sees the line even if capture-uninstall already ran.
+    const logFn = original?.log ?? console.log;
+    try {
+      logFn('[CHECKPOINT]', label, data ?? '');
+    } catch {
+      // ignore — DevTools is a convenience, not required
+    }
+  } catch {
+    // Never let diagnostics break the app.
+  }
+}
+
 export function clearLogs(): void {
   buffer.length = 0;
 }

@@ -18,6 +18,7 @@ import {
   uninstallConsoleCapture,
   clearLogs,
   buildDiagnosticsReport,
+  pushCheckpoint,
 } from '@/lib/nostr/login-diagnostics';
 
 interface LoginModalProps {
@@ -165,9 +166,20 @@ export default function LoginModal({ onClose }: LoginModalProps) {
         // Ignore — some URIs don't have a parseable secret param.
       }
 
+      pushCheckpoint('bunker.connect.start', {
+        isBunker,
+        hasSecret: !!token,
+        uriScheme: uri.split(':')[0],
+      });
+
       const client = new NIP46Client();
       await client.connect(uri, token, true);
       nip46ClientRef.current = client;
+
+      pushCheckpoint('bunker.connect.complete', {
+        isConnected: client.isConnected?.() ?? false,
+        hasPubkey: !!client.getPubkey?.(),
+      });
 
       const { getUnifiedSigner } = await import('@/lib/nostr/signer');
       const signer = getUnifiedSigner();
@@ -177,6 +189,7 @@ export default function LoginModal({ onClose }: LoginModalProps) {
       // before we request a signature.
       if (isBunker) await new Promise((r) => setTimeout(r, 1500));
 
+      pushCheckpoint('bunker.handoff.login', { isBunker });
       await handleNip46ConnectedWithClient(client);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to connect';
@@ -197,6 +210,7 @@ export default function LoginModal({ onClose }: LoginModalProps) {
   };
 
   const handleNip46ConnectedWithClient = async (client: NIP46Client) => {
+    pushCheckpoint('login.nip46.enter');
     try {
       setIsSubmitting(true);
       setError(null);
@@ -316,6 +330,7 @@ export default function LoginModal({ onClose }: LoginModalProps) {
       
       // Verify connection is ready before signing
       console.log('✅ LoginModal: Connection verified, proceeding with challenge signing');
+      pushCheckpoint('login.challenge.fetch.start');
 
       // Request signature for challenge
       const challengeResponse = await fetch('/api/nostr/auth/challenge', {
@@ -323,6 +338,11 @@ export default function LoginModal({ onClose }: LoginModalProps) {
         headers: {
           'Content-Type': 'application/json',
         },
+      });
+
+      pushCheckpoint('login.challenge.fetch.end', {
+        ok: challengeResponse.ok,
+        status: challengeResponse.status,
       });
 
       if (!challengeResponse.ok) {
@@ -364,14 +384,57 @@ export default function LoginModal({ onClose }: LoginModalProps) {
       let signedEvent: any;
       try {
         const { withSignerNudge } = await import('@/lib/nostr/signer-nudge');
-        const signerLabel = (client.getConnection()?.signerUrl || '').includes('primal') ? 'Primal'
-          : (client.getConnection()?.signerUrl || '').includes('nsec.app') ? 'nsec.app'
+        const connectionForLabel = client.getConnection();
+        const signerUrl = connectionForLabel?.signerUrl || '';
+        const signerLabel = signerUrl.includes('primal') ? 'Primal'
+          : signerUrl.includes('nsec.app') ? 'nsec.app'
           : 'your signer';
-        signedEvent = await withSignerNudge(() => client.signEvent(event as any), {
+
+        // Fast-fail for bunker:// without a secret — many self-hosted signers
+        // (Aegis, nsecBunker) silently drop sign_event when the client can't
+        // prove authorization. Without this race, withSignerNudge waits 125s
+        // before failing and users give up.
+        const isBunkerNoSecret =
+          signerUrl.startsWith('bunker://') &&
+          !(connectionForLabel as any)?.token;
+        const BUNKER_FAIL_FAST_MS = 25_000;
+
+        pushCheckpoint('login.signEvent.start', {
+          signerLabel,
+          isBunkerNoSecret,
+          failFastMs: isBunkerNoSecret ? BUNKER_FAIL_FAST_MS : null,
+        });
+
+        const signPromise = withSignerNudge(() => client.signEvent(event as any), {
           signerLabel,
           op: 'sign',
         });
+
+        if (isBunkerNoSecret) {
+          const failFast = new Promise<never>((_, reject) =>
+            setTimeout(
+              () =>
+                reject(
+                  new Error(
+                    'Signer did not approve the signing request. Your bunker:// URI has no secret, so some signers (e.g. Aegis) silently drop sign_event. Re-export the URI with a secret, or try the Primal card instead.',
+                  ),
+                ),
+              BUNKER_FAIL_FAST_MS,
+            ),
+          );
+          signedEvent = await Promise.race([signPromise, failFast]);
+        } else {
+          signedEvent = await signPromise;
+        }
+
+        pushCheckpoint('login.signEvent.end', {
+          hasId: !!signedEvent?.id,
+          hasSig: !!signedEvent?.sig,
+        });
       } catch (signError) {
+        pushCheckpoint('login.signEvent.error', {
+          message: signError instanceof Error ? signError.message : String(signError),
+        });
         const errorMessage = signError instanceof Error ? signError.message : String(signError);
         const errorDetails = signError instanceof Error ? {
           name: signError.name,
@@ -810,6 +873,30 @@ export default function LoginModal({ onClose }: LoginModalProps) {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent disabled:opacity-50 font-mono text-xs mb-2"
               autoFocus
             />
+            {(() => {
+              // Detect bunker:// URIs with no `secret=` param and warn —
+              // many self-hosted signers (Aegis, nsecBunker) silently drop
+              // sign_event when no secret is provided, even though they accept
+              // connect/get_public_key. See login-diagnostics work on this.
+              const trimmed = bunkerUri.trim();
+              if (!trimmed.startsWith('bunker://')) return null;
+              let hasSecret = false;
+              try {
+                const u = new URL(trimmed.replace(/^bunker:\/\//, 'http://'));
+                hasSecret = !!u.searchParams.get('secret');
+              } catch {
+                // Ignore parse errors — fall through to generic warning.
+              }
+              if (hasSecret) return null;
+              return (
+                <div className="mb-2 p-2 rounded border border-amber-300 bg-amber-50 text-xs text-amber-900">
+                  <strong>No <code>secret=</code> in URI.</strong> Some signers
+                  (Aegis, nsecBunker) will silently drop the login signature.
+                  Re-export the URI from your signer with a secret, or use the
+                  <strong> Primal </strong> card instead (known-good on iOS).
+                </div>
+              );
+            })()}
             <button
               onClick={handlePastedUriConnect}
               disabled={isSubmitting || !bunkerUri.trim()}
