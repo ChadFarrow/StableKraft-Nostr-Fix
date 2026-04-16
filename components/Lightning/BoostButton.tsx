@@ -409,6 +409,12 @@ export function BoostButton({
         if (LIGHTNING_CONFIG.features.nostrIntegration && (trackId || feedId) && isNostrAuthenticated && nostrUser) {
           console.log('✅ Boost: All conditions met, proceeding to post to Nostr...');
           setNostrStatus('connecting');
+          const { pushCheckpoint } = await import('@/lib/nostr/login-diagnostics');
+          pushCheckpoint('boost.nostr.start', {
+            loginType: localStorage.getItem('nostr_login_type'),
+            hasTrackId: !!trackId,
+            hasFeedId: !!feedId,
+          });
           try {
             // Check if unified signer is available (supports NIP-07, NIP-46, and NIP-55)
             const { getUnifiedSigner } = await import('@/lib/nostr/signer');
@@ -422,7 +428,13 @@ export function BoostButton({
             
             // Ensure signer is available, attempting reconnection if needed
             const { ensureSignerAvailable, verifyNIP46Connection } = await import('@/lib/nostr/signer-reconnect');
+            pushCheckpoint('boost.signer.ensure.start');
             const reconnectResult = await ensureSignerAvailable();
+            pushCheckpoint('boost.signer.ensure.end', {
+              success: reconnectResult.success,
+              signerType: reconnectResult.signerType,
+              error: reconnectResult.error,
+            });
 
             if (!reconnectResult.success) {
               console.error('❌ Boost: Signer not available:', reconnectResult.error);
@@ -648,15 +660,31 @@ export function BoostButton({
             setNostrStatus('signing');
             let signedEvent;
             try {
+              const eventJson = JSON.stringify(noteTemplate);
+              pushCheckpoint('boost.sign.start', {
+                signerType: signer.getSignerType(),
+                kind: (noteTemplate as any).kind,
+                tagCount: tags.length,
+                contentBytes: content.length,
+                eventBytes: eventJson.length,
+              });
               // Timeout must match NIP-46 relay-based timeout (120s) — Primal and other
               // remote signers route through Nostr relays which can take 40-80+ seconds
               const signPromise = signer.signEvent(noteTemplate as any);
               const timeoutPromise = new Promise((_, reject) =>
                 setTimeout(() => reject(new Error('Signing timeout after 120 seconds')), 120000)
               );
-              
+
               signedEvent = await Promise.race([signPromise, timeoutPromise]) as any;
+              pushCheckpoint('boost.sign.end', {
+                eventId: signedEvent?.id?.slice(0, 16),
+                hasSig: !!signedEvent?.sig,
+              });
             } catch (signError) {
+              pushCheckpoint('boost.sign.error', {
+                message: signError instanceof Error ? signError.message : String(signError),
+                name: signError instanceof Error ? signError.name : undefined,
+              });
               console.error('❌ Boost: Failed to sign event:', signError);
               const errorMessage = signError instanceof Error ? signError.message : String(signError);
               console.error('❌ Sign error details:', {
