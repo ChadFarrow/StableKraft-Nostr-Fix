@@ -52,6 +52,16 @@ After change #5 the LoginModal has **4** cards: Browser Extension, Bunker URI, A
 ### Android recommendation
 Direct Android users to the **Amber card** (`nostrconnect://` deep-link, works reliably end-to-end). The Bunker URI card now displays a note warning Android users away because Amber's `bunker://` export is unreliable upstream — per issue #251, Amber's NIP-46 subscription silently stops responding for later `sign_event` requests even though initial `connect` and `get_public_key` work. This is not fixable from our side.
 
+### Aegis (iOS self-hosted signer) limitation
+Aegis (`ZharlieW/Aegis`) runs a local relay on the device (`localrelay.link:28443` → TLS proxy to `ws://127.0.0.1:8081`). Its `bunker://` URIs do **not** include a `secret=` parameter. Our bunker path correctly publishes `connect`, `get_public_key`, and `sign_event` to the Aegis relay — all three are accepted (relay ACKs `fulfilled:1`). However, **Aegis silently drops `sign_event` requests from clients that haven't proved authorization via a secret**, even though it happily signs `connect` and `get_public_key`. This was confirmed via checkpoint diagnostics (April 2026): the relay receives the event, Aegis processes connect/get_public_key, but never responds to sign_event.
+
+**Mitigations shipped:**
+- Bunker URI card shows an amber warning when no `secret=` is detected in the pasted URI, directing users to Primal.
+- `LoginModal` applies a 25s fail-fast (`Promise.race`) for bunker URIs without a secret, instead of the normal 125s `withSignerNudge` hard-timeout.
+- `pushCheckpoint()` instrumentation logs every login step directly to the diagnostics ring buffer (bypasses `console.log` patching that was losing entries on iOS remounts).
+
+**Recommendation for Aegis users:** use the **Primal card** instead — it's the known-good iOS signer (auto-signs, sub-second). If Aegis ever adds `secret=` to its bunker URI export, the Bunker URI card will work without changes on our side.
+
 ## Commands
 ```
 npm run dev              # Start dev server
@@ -85,7 +95,7 @@ Key files: `lib/nostr/nip46-client.ts`, `lib/nostr/signer.ts` (NIP46Signer wrapp
 - `nip46_perf_smart_filters` — adds a tight `authors:[knownSignerPubkey]` subscription filter once the signer pubkey is known. When OFF we use only the broad `{ kinds: [24133] }` / `#p` filters.
 - `nip46_perf_keypair_cache` — short-circuit the historical-keypair linear search via `lastSuccessfulKeyPairIndex`.
 
-**Signer nudge toast** (`lib/nostr/signer-nudge.ts`): `withSignerNudge()` wraps `signEvent`/`getPublicKey`, shows dismissable toast after **4s** ("Waiting on Primal to approve…"), hard-fails at **45s**. `NIP46Signer.signEvent`/`getPublicKey` in `signer.ts` route through it automatically; direct `client.signEvent` callers in `LoginModal` also wrap manually. Throttled to 8s so bursts don't spam toasts. Pattern adapted from `soapbox-pub/ditto`.
+**Signer nudge toast** (`lib/nostr/signer-nudge.ts`): `withSignerNudge()` wraps `signEvent`/`getPublicKey`, shows dismissable toast after **4s** ("Waiting on Primal to approve…"), hard-fails at **125s** (set slightly above the client's 120s request timeout so the underlying timeout fires first with troubleshooting tips). `NIP46Signer.signEvent`/`getPublicKey` in `signer.ts` route through it automatically; direct `client.signEvent` callers in `LoginModal` also wrap manually. Throttled to 8s so bursts don't spam toasts. Pattern adapted from `soapbox-pub/ditto`. For bunker URIs without a `secret=` param, `LoginModal` applies a tighter **25s** fail-fast via `Promise.race` (see Aegis limitation above).
 
 **iOS PWA reconnect feedback**: `useNip46Connection`'s `visibilitychange` handler emits `toast.success('Signer reconnected')` on successful reconnect, or an actionable red toast with Retry on failure. No more silent hangs.
 
@@ -101,6 +111,12 @@ Key files: `lib/nostr/nip46-client.ts`, `lib/nostr/signer.ts` (NIP46Signer wrapp
 **Android recommendation**: direct Android users at the Amber card (`nostrconnect://` flow, works end-to-end). The Bunker URI card shows an in-UI warning pointing Android users away from pasted-`bunker://` because Amber's bunker hosting is unreliable upstream (greenart7c3/Amber#251).
 
 **nostr-login is session-restore only**: `components/Nostr/NostrLoginInit.tsx` exports `ensureNostrLoginInitialized()` and `<NostrLoginAutoInit />` (mounts in `layout.tsx`, only runs `init()` if user is logged in AND `window.nostr` is absent — i.e., session-restore for nostr-login-polyfilled legacy users). **There is no longer a "More options" card** — nostr-login's auth UI isn't reachable from LoginModal for new logins because with `noBanner: true` the library never mounts `<nl-auth>`. Do **not** reintroduce the More options card or a `handleNostrLogin` function. Extension users and logged-out users pay zero cost.
+
+## Profile Backfill (`lib/nostr/profile.ts`, `contexts/NostrContext.tsx`)
+The server login route (`/api/nostr/auth/login`) intentionally returns `displayName: null`, `avatar: null`, etc. — skipping the kind-0 relay fetch keeps login at ~20ms (was ~21s). `NostrContext`'s mount effect backfills the profile client-side: when the stored user has no `displayName`, it calls `fetchUserProfile(pubkey)` (a lightweight `SimplePool.querySync` for kind-0, same pattern as `nip65.ts`). The result merges into state + localStorage without overwriting already-populated fields. Without this, `UserMenu.tsx` shows "User" as the display name until the user manually visits Settings.
+
+## Login Diagnostics (`lib/nostr/login-diagnostics.ts`)
+Mobile-friendly capture for Nostr sign-in failures. `installConsoleCapture()` patches `console.log/warn/error` to feed a ring buffer (200 entries). `pushCheckpoint(label, data?)` writes **directly** to the buffer, bypassing the console patch — use this for must-not-be-lost events (the console patch can be lost to remounts / fast-refresh). Checkpoints are emitted at key login milestones: `bunker.connect.{start,complete}`, `login.challenge.fetch.{start,end}`, `login.signEvent.{start,end,error}`, `nip46.signEvent.enter`, `nip46.publish.{start,end}`. The report is built by `buildDiagnosticsReport()` and copied to clipboard via the footer button in LoginModal.
 
 ## Post-Login Flow (`lib/nostr/auth-utils.ts`)
 Login flows save user data, set `localStorage['nostr_pending_favorites_sync'] = user.id`, close the modal, and reload — **no delay**. `NostrContext`'s mount effect picks up the flag, runs `syncFavoritesToNostr`, and clears it. Running sync pre-reload aborted the in-flight fetches when reload fired; deferring is cleaner and has no warning noise.
