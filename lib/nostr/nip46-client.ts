@@ -12,6 +12,7 @@ import { RelayManager } from './relay';
 import { saveNIP46Connection, loadNIP46Connection, getOrCreateAppKeyPair, clearNIP46Connection, NIP46Connection, getAppKeyPairHistory, AppKeyPair } from './nip46-storage';
 import { npubToPublicKey, publicKeyToNpub, hexToBytes } from './keys';
 import { isIOS } from '@/lib/utils/device';
+import { pushCheckpoint } from './login-diagnostics';
 
 /**
  * Parse bunker:// URI to extract connection information
@@ -3496,10 +3497,25 @@ export class NIP46Client {
             note: `Primary relay (${primaryRelay}) is the one in the QR code - Amber will listen here. Backup relays are for redundancy.`,
           });
           
+          pushCheckpoint('nip46.publish.start', {
+            method,
+            requestId: id,
+            relayCount: publishRelays.length,
+            relays: publishRelays,
+            attempt,
+          });
+
           const results = await this.relayClient!.publish(requestEvent, {
             relays: publishRelays,
             waitForRelay: true, // Wait for relay confirmation to ensure it's published
             timeout: 15000, // 15 second timeout for publish confirmation (increased from 10s)
+          });
+
+          pushCheckpoint('nip46.publish.end', {
+            method,
+            requestId: id,
+            fulfilled: results.filter((r) => r.status === 'fulfilled').length,
+            rejected: results.filter((r) => r.status === 'rejected').length,
           });
           
           // Log which relays successfully received the event
@@ -3979,6 +3995,15 @@ export class NIP46Client {
    */
   async signEvent(event: Event): Promise<Event> {
     this.debugLog('🔵 [NIP46-SIGN] signEvent called - starting signature request');
+    // Bypass console-patch so this survives modal remounts.
+    pushCheckpoint('nip46.signEvent.enter', {
+      kind: event.kind,
+      hasConnection: !!this.connection,
+      connected: this.connection?.connected ?? false,
+      relayUrl: (this.connection as any)?.relayUrl,
+      isBunker: !!(this.connection as any)?.signerPubkey,
+      hasToken: !!this.connection?.token,
+    });
 
     if (!this.connection?.connected) {
       this.debugLog('⚠️ [NIP46-SIGN] Connection not marked as connected, calling authenticate()');
