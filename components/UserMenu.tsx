@@ -9,7 +9,8 @@ import { useAudio } from '@/contexts/AudioContext';
 import Link from 'next/link';
 import { Menu, Zap, Settings, LogOut, User, Wallet, Info, ClipboardCopy } from 'lucide-react';
 import { WalletInfoDisplay } from '@/components/Lightning/WalletInfoDisplay';
-import { buildDiagnosticsReport } from '@/lib/nostr/login-diagnostics';
+import { useCopyDiagnostics } from '@/lib/nostr/use-copy-diagnostics';
+import DiagnosticsFallback from '@/components/Nostr/DiagnosticsFallback';
 import { getUnifiedSigner } from '@/lib/nostr/signer';
 
 // Lazy load LoginModal
@@ -34,8 +35,12 @@ export default function UserMenu({ className = '' }: UserMenuProps) {
   const { setFullscreenMode } = useAudio();
   const [showDropdown, setShowDropdown] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [diagnosticsCopyState, setDiagnosticsCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
-  const [diagnosticsFallback, setDiagnosticsFallback] = useState<string | null>(null);
+  const {
+    copyState: diagnosticsCopyState,
+    fallback: diagnosticsFallback,
+    setFallback: setDiagnosticsFallback,
+    copy: copyDiagnostics,
+  } = useCopyDiagnostics();
 
   // Determine icon color based on connection status
   const getIconColor = () => {
@@ -101,9 +106,9 @@ export default function UserMenu({ className = '' }: UserMenuProps) {
     setShowLoginModal(true);
   };
 
-  const handleCopyDiagnostics = async () => {
+  const handleCopyDiagnostics = () => {
     const nip46Client = getUnifiedSigner().getNIP46Client();
-    const report = buildDiagnosticsReport({
+    return copyDiagnostics({
       error: null,
       view: 'post-login',
       loginMethod:
@@ -113,19 +118,13 @@ export default function UserMenu({ className = '' }: UserMenuProps) {
       isSubmitting: false,
       hasExtension:
         typeof window !== 'undefined' && !!(window as any).nostr,
-      nip46Client: nip46Client as any,
+      nip46Client: nip46Client
+        ? {
+            isConnected: () => nip46Client.isConnected(),
+            getConnection: () => nip46Client.getConnection(),
+          }
+        : null,
     });
-    try {
-      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(report);
-        setDiagnosticsCopyState('copied');
-        setTimeout(() => setDiagnosticsCopyState('idle'), 2500);
-      } else {
-        setDiagnosticsFallback(report);
-      }
-    } catch {
-      setDiagnosticsFallback(report);
-    }
   };
 
   return (
@@ -301,27 +300,11 @@ export default function UserMenu({ className = '' }: UserMenuProps) {
                   )}
                 </div>
 
-                {diagnosticsFallback !== null && (
-                  <div className="mt-3 pt-3 border-t border-gray-700">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-xs text-gray-400">
-                        Clipboard unavailable — long-press to select &amp; copy.
-                      </p>
-                      <button
-                        onClick={() => setDiagnosticsFallback(null)}
-                        className="text-xs text-gray-500 hover:text-gray-300"
-                      >
-                        Close
-                      </button>
-                    </div>
-                    <textarea
-                      readOnly
-                      value={diagnosticsFallback}
-                      onFocus={(e) => e.currentTarget.select()}
-                      className="w-full h-48 text-[10px] font-mono border border-gray-700 rounded-md p-2 bg-gray-800 text-gray-300"
-                    />
-                  </div>
-                )}
+                <DiagnosticsFallback
+                  value={diagnosticsFallback}
+                  onClose={() => setDiagnosticsFallback(null)}
+                  theme="dark"
+                />
               </div>
             </div>
           </>,

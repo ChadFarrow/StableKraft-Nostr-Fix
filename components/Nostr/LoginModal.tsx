@@ -17,9 +17,10 @@ import {
   installConsoleCapture,
   uninstallConsoleCapture,
   clearLogs,
-  buildDiagnosticsReport,
   pushCheckpoint,
 } from '@/lib/nostr/login-diagnostics';
+import { useCopyDiagnostics } from '@/lib/nostr/use-copy-diagnostics';
+import DiagnosticsFallback from './DiagnosticsFallback';
 
 interface LoginModalProps {
   onClose: () => void;
@@ -58,9 +59,12 @@ export default function LoginModal({ onClose }: LoginModalProps) {
   // reachable) can dump a full report to clipboard via the footer button.
   const modalOpenedAtRef = useRef<number>(0);
   const prevNip46DebugRef = useRef<string | null>(null);
-  const [diagnosticsCopyState, setDiagnosticsCopyState] =
-    useState<'idle' | 'copied' | 'failed'>('idle');
-  const [diagnosticsFallback, setDiagnosticsFallback] = useState<string | null>(null);
+  const {
+    copyState: diagnosticsCopyState,
+    fallback: diagnosticsFallback,
+    setFallback: setDiagnosticsFallback,
+    copy: copyDiagnostics,
+  } = useCopyDiagnostics();
 
   // Ensure we're mounted before rendering portal
   useEffect(() => {
@@ -103,8 +107,8 @@ export default function LoginModal({ onClose }: LoginModalProps) {
     };
   }, []);
 
-  const handleCopyDiagnostics = async () => {
-    const report = buildDiagnosticsReport({
+  const handleCopyDiagnostics = () =>
+    copyDiagnostics({
       error,
       view,
       loginMethod,
@@ -116,22 +120,6 @@ export default function LoginModal({ onClose }: LoginModalProps) {
       nip46Client: nip46ClientRef.current || nip46Client,
       modalOpenedAt: modalOpenedAtRef.current,
     });
-    try {
-      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(report);
-        setDiagnosticsCopyState('copied');
-        setTimeout(() => setDiagnosticsCopyState('idle'), 2500);
-      } else {
-        // Clipboard API unavailable (older Safari, non-secure context).
-        // Fall back to showing the report in a textarea the user can copy.
-        setDiagnosticsFallback(report);
-      }
-    } catch {
-      // Some mobile browsers reject clipboard.writeText without a user
-      // gesture heuristic they accept — fall back to the textarea path.
-      setDiagnosticsFallback(report);
-    }
-  };
 
 
 
@@ -1069,28 +1057,11 @@ export default function LoginModal({ onClose }: LoginModalProps) {
           </button>
         </div>
 
-        {diagnosticsFallback !== null && (
-          <div className="mt-4 border-t border-gray-200 pt-4">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs text-gray-700 font-medium">
-                Clipboard unavailable — long-press the text below to select and copy.
-              </p>
-              <button
-                type="button"
-                onClick={() => setDiagnosticsFallback(null)}
-                className="text-xs text-gray-500 hover:text-gray-700"
-              >
-                Close
-              </button>
-            </div>
-            <textarea
-              readOnly
-              value={diagnosticsFallback}
-              onFocus={(e) => e.currentTarget.select()}
-              className="w-full h-48 text-[10px] font-mono border border-gray-300 rounded-md p-2 bg-gray-50"
-            />
-          </div>
-        )}
+        <DiagnosticsFallback
+          value={diagnosticsFallback}
+          onClose={() => setDiagnosticsFallback(null)}
+          theme="light"
+        />
       </div>
     </div>
   );
