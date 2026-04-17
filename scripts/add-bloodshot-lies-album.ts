@@ -89,6 +89,16 @@ function durationToSeconds(raw: unknown): number {
   return Number.isFinite(parts[0]) ? parts[0] : 0;
 }
 
+function pickImageUrl(maybe: unknown, fallback: string): string {
+  if (!maybe) return fallback;
+  if (typeof maybe === 'string') return maybe;
+  if (typeof maybe === 'object') {
+    const m = maybe as any;
+    return m.url || m.href || m.$?.href || m.$?.url || fallback;
+  }
+  return fallback;
+}
+
 async function main() {
   console.log('Adding Bloodshot Lies - The Album (The Doerfels)');
   console.log('='.repeat(70));
@@ -123,7 +133,7 @@ async function main() {
   const albumTitle = feed.title || 'Bloodshot Lies - The Album';
   const artist = feed.itunes?.author || 'The Doerfels';
   const description = feed.description || '';
-  const coverArt = feed.itunes?.image || feed.image?.url || '';
+  const coverArt = pickImageUrl(feed.itunes?.image, '') || pickImageUrl(feed.image, '') || '';
 
   console.log(`Parsed "${albumTitle}" by ${artist} — ${feed.items.length} tracks`);
   console.log(`V4V recipients: ${v4v?.recipients.length ?? 0}, primary: ${primaryRecipient ?? '(none)'}`);
@@ -137,7 +147,7 @@ async function main() {
       description: item.contentEncoded || item.description || '',
       audioUrl: item.enclosure?.url || '',
       duration: durationToSeconds(item.duration || item.itunes?.duration),
-      image: item.image || coverArt,
+      image: pickImageUrl(item.image, coverArt),
       explicit: item.explicit === 'yes' || item.itunes?.explicit === 'yes',
       artist,
       album: albumTitle,

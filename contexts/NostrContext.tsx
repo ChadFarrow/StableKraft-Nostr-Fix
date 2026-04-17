@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 // Note: nostr-tools functions are imported via @/lib/nostr/keys when needed (lazy-loaded)
 import { fetchAndStoreUserRelays, clearStoredUserRelays } from '@/lib/nostr/nip65';
 import { normalizePubkey } from '@/lib/nostr/normalize';
+import { installConsoleCapture, uninstallConsoleCapture } from '@/lib/nostr/login-diagnostics';
 
 export interface NostrUser {
   id: string;
@@ -41,6 +42,19 @@ const NOSTR_USER_KEY = 'nostr_user';
 export function NostrProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<NostrUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Keep the diagnostics console tee installed for the lifetime of a logged-in
+  // session so post-login console.log calls from nip46-client / publish-queue
+  // land in the ring buffer the UserMenu "Copy diagnostics" button reads.
+  // installConsoleCapture is ref-counted, so it composes safely with the
+  // separate install/uninstall LoginModal does on its own mount/unmount.
+  useEffect(() => {
+    if (!user) return;
+    installConsoleCapture();
+    return () => {
+      uninstallConsoleCapture();
+    };
+  }, [user]);
 
   // Run any favorites sync that was deferred from a login flow. The previous
   // pattern fired sync before window.location.reload(), which aborted the

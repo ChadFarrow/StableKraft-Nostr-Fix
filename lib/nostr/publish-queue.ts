@@ -6,6 +6,7 @@
 
 import { createFavoriteEventTemplate } from './events';
 import { RelayManager, getDefaultRelays } from './relay';
+import { pushCheckpoint } from './login-diagnostics';
 
 interface QueuedPublish {
   type: 'favorite';
@@ -53,6 +54,12 @@ export function queueFavoritePublish(
       return;
     }
     queue.push({ type: 'favorite', favoriteType: type, itemId, title, artist, relays, resolve });
+    pushCheckpoint('publish-queue.queue', {
+      type: 'favorite',
+      favoriteType: type,
+      hasItemId: !!itemId,
+      queueLength: queue.length,
+    });
     scheduleFlush();
   });
 }
@@ -70,6 +77,11 @@ export function queueFavoriteDeletion(
       return;
     }
     queue.push({ type: 'deletion', eventId, relays, resolve });
+    pushCheckpoint('publish-queue.queue', {
+      type: 'deletion',
+      hasEventId: !!eventId,
+      queueLength: queue.length,
+    });
     scheduleFlush();
   });
 }
@@ -99,29 +111,32 @@ async function flushQueue() {
     }
 
     const { getUnifiedSigner } = await import('./signer');
+    const { ensureSignerAvailable } = await import('./signer-reconnect');
     const signer = getUnifiedSigner();
-    await signer.ensureInitialized();
 
-    if (!signer.isAvailable()) {
-      // Try NIP-55 reconnection
-      const loginType = localStorage.getItem('nostr_login_type');
-      if (loginType === 'nip55') {
-        try {
-          const { NIP55Client } = await import('./nip55-client');
-          const nip55Client = new NIP55Client();
-          await nip55Client.connect();
-          await signer.setNIP55Signer(nip55Client);
-        } catch {
-          console.warn('⚠️ Publish queue: NIP-55 reconnection failed');
-          items.forEach(item => item.resolve(null));
-          flushing = false;
-          return;
-        }
-      } else {
-        items.forEach(item => item.resolve(null));
-        flushing = false;
-        return;
-      }
+    // Use the same recovery path BoostButton uses (ensureSignerAvailable wraps
+    // ensureInitialized + reinitialize + per-loginType restore for NIP-46/55/07).
+    // Without this, a stale singleton (iOS WebSocket killed, page just mounted,
+    // or first-flush race) silently dropped the favorite.
+    const reconnect = await ensureSignerAvailable();
+
+    pushCheckpoint('publish-queue.flush.start', {
+      itemCount: items.length,
+      signerAvailable: reconnect.success,
+      signerType: reconnect.signerType ?? signer.getSignerType(),
+      loginType: localStorage.getItem('nostr_login_type'),
+    });
+
+    if (!reconnect.success) {
+      pushCheckpoint('publish-queue.signer.unavailable', {
+        loginType: localStorage.getItem('nostr_login_type'),
+        reconnectError: reconnect.error,
+        droppedItemCount: items.length,
+      });
+      console.warn('⚠️ Publish queue: ensureSignerAvailable failed:', reconnect.error);
+      items.forEach(item => item.resolve(null));
+      flushing = false;
+      return;
     }
 
     // Collect all relay URLs from queued items
@@ -169,9 +184,42 @@ async function flushQueue() {
           };
         }
 
-        const signedEvent = await signer.signEvent(event);
+        pushCheckpoint('publish-queue.sign.start', {
+          itemIndex: i,
+          itemType: item.type,
+          kind: event.kind,
+          tagCount: event.tags?.length ?? 0,
+          signerType: signer.getSignerType(),
+        });
+        let signedEvent;
+        try {
+          signedEvent = await signer.signEvent(event);
+          pushCheckpoint('publish-queue.sign.end', {
+            itemIndex: i,
+            itemType: item.type,
+            eventId: signedEvent?.id?.slice(0, 16),
+            hasSig: !!signedEvent?.sig,
+          });
+        } catch (signError) {
+          pushCheckpoint('publish-queue.sign.error', {
+            itemIndex: i,
+            itemType: item.type,
+            message: signError instanceof Error ? signError.message : String(signError),
+            name: signError instanceof Error ? signError.name : undefined,
+          });
+          throw signError;
+        }
         const results = await relayManager!.publish(signedEvent);
-        const hasSuccess = results.some(r => r.status === 'fulfilled');
+        const fulfilled = results.filter(r => r.status === 'fulfilled').length;
+        const rejected = results.filter(r => r.status === 'rejected').length;
+        pushCheckpoint('publish-queue.publish.end', {
+          itemIndex: i,
+          itemType: item.type,
+          eventId: signedEvent?.id?.slice(0, 16),
+          fulfilled,
+          rejected,
+        });
+        const hasSuccess = fulfilled > 0;
 
         if (hasSuccess) {
           console.log(`✅ Publish queue: published ${item.type} event:`, signedEvent.id);

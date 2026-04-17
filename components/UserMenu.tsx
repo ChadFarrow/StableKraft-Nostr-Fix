@@ -7,8 +7,10 @@ import { useNostr } from '@/contexts/NostrContext';
 import { useBitcoinConnect } from '@/components/Lightning/BitcoinConnectProvider';
 import { useAudio } from '@/contexts/AudioContext';
 import Link from 'next/link';
-import { Menu, Zap, Settings, LogOut, User, Wallet, Info } from 'lucide-react';
+import { Menu, Zap, Settings, LogOut, User, Wallet, Info, ClipboardCopy } from 'lucide-react';
 import { WalletInfoDisplay } from '@/components/Lightning/WalletInfoDisplay';
+import { buildDiagnosticsReport } from '@/lib/nostr/login-diagnostics';
+import { getUnifiedSigner } from '@/lib/nostr/signer';
 
 // Lazy load LoginModal
 const LoginModal = dynamic(() => import('./Nostr/LoginModal'), {
@@ -32,6 +34,8 @@ export default function UserMenu({ className = '' }: UserMenuProps) {
   const { setFullscreenMode } = useAudio();
   const [showDropdown, setShowDropdown] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [diagnosticsCopyState, setDiagnosticsCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [diagnosticsFallback, setDiagnosticsFallback] = useState<string | null>(null);
 
   // Determine icon color based on connection status
   const getIconColor = () => {
@@ -95,6 +99,33 @@ export default function UserMenu({ className = '' }: UserMenuProps) {
   const handleSignIn = () => {
     setShowDropdown(false);
     setShowLoginModal(true);
+  };
+
+  const handleCopyDiagnostics = async () => {
+    const nip46Client = getUnifiedSigner().getNIP46Client();
+    const report = buildDiagnosticsReport({
+      error: null,
+      view: 'post-login',
+      loginMethod:
+        typeof window !== 'undefined'
+          ? localStorage.getItem('nostr_login_type') ?? undefined
+          : undefined,
+      isSubmitting: false,
+      hasExtension:
+        typeof window !== 'undefined' && !!(window as any).nostr,
+      nip46Client: nip46Client as any,
+    });
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(report);
+        setDiagnosticsCopyState('copied');
+        setTimeout(() => setDiagnosticsCopyState('idle'), 2500);
+      } else {
+        setDiagnosticsFallback(report);
+      }
+    } catch {
+      setDiagnosticsFallback(report);
+    }
   };
 
   return (
@@ -236,6 +267,21 @@ export default function UserMenu({ className = '' }: UserMenuProps) {
                     About & Support
                   </Link>
 
+                  {isAuthenticated && (
+                    <button
+                      onClick={handleCopyDiagnostics}
+                      className="w-full flex items-center gap-3 px-3 py-2 text-left text-gray-300 hover:bg-gray-800 rounded-lg transition-colors"
+                      title="Copy a redacted diagnostic log (signer state, recent checkpoints) for triaging boost/favorite signing issues."
+                    >
+                      <ClipboardCopy className="w-4 h-4" />
+                      {diagnosticsCopyState === 'copied'
+                        ? '✓ Copied diagnostics'
+                        : diagnosticsCopyState === 'failed'
+                        ? 'Copy failed'
+                        : 'Copy diagnostics'}
+                    </button>
+                  )}
+
                   {isAuthenticated ? (
                     <button
                       onClick={handleLogout}
@@ -254,6 +300,28 @@ export default function UserMenu({ className = '' }: UserMenuProps) {
                     </button>
                   )}
                 </div>
+
+                {diagnosticsFallback !== null && (
+                  <div className="mt-3 pt-3 border-t border-gray-700">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs text-gray-400">
+                        Clipboard unavailable — long-press to select &amp; copy.
+                      </p>
+                      <button
+                        onClick={() => setDiagnosticsFallback(null)}
+                        className="text-xs text-gray-500 hover:text-gray-300"
+                      >
+                        Close
+                      </button>
+                    </div>
+                    <textarea
+                      readOnly
+                      value={diagnosticsFallback}
+                      onFocus={(e) => e.currentTarget.select()}
+                      className="w-full h-48 text-[10px] font-mono border border-gray-700 rounded-md p-2 bg-gray-800 text-gray-300"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </>,
