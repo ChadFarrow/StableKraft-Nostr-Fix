@@ -8,6 +8,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Major changes from Nostr-Fix fork (port to prod)
 
+> **Status (2026-04-16):** PR [#103](https://github.com/ChadFarrow/stablekraft-app/pull/103) ports the **signing fix only** — the signerAppPubkey persistence fallback (from later fork commit `73ddd097`, into `lib/nostr/nip46-storage.ts`) and favorites→`ensureSignerAvailable` recovery (from `cbd261e6`, into `lib/nostr/publish-queue.ts`). ~35 LOC across two existing prod files, no new files, no UI changes. Verified end-to-end on Primal mobile (desktop Firefox + iOS Safari + Vercel deploy) before opening. PR also adds anti-regression notes to prod's `CLAUDE.md` next to the existing NIP-46 + Publish Queue sections.
+>
+> **Intentionally not in #103** (debugging machinery, not user-facing): `lib/nostr/login-diagnostics.ts` (pushCheckpoint ring buffer + buildDiagnosticsReport), `lib/nostr/use-copy-diagnostics.ts` + `components/Nostr/DiagnosticsFallback.tsx`, the UserMenu "Copy diagnostics" button, the `NostrContext` console-capture lifetime, all `pushCheckpoint` call sites in BoostButton/publish-queue, and `scripts/add-bloodshot-lies-album.ts`. Each can be a follow-up PR if wanted.
+>
+> **Still un-ported** (in addition to the 5 below): `13fc6079` (kind-0 profile backfill, `lib/nostr/profile.ts`), `0bf019d3` (login instrumentation + Aegis-style bunker-no-secret fail-fast).
+
 All five commits below fix real bugs or regressions discovered while testing each LoginModal sign-in card one at a time against live signers. Port in order — they layer on the same files. Apply cleanly via `git cherry-pick <hash>` from this fork if the production branch hasn't drifted.
 
 ### 1. `7f77d812` — perf: skip server-side profile/relay fetch during login
